@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Plateforme ElodiaTech de pilotage des projets de santé pour maisons de santé pluriprofessionnelles et centres de santé.">
+  <meta name="color-scheme" content="dark light">
+  <title>ElodiaTech — Plateforme Projets de Santé</title>
+
+  <link rel="icon" type="image/png" href="assets/img/marque.png">
+  <link rel="apple-touch-icon" href="assets/img/marque.png">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="assets/css/app.css">
+</head>
+
+<body>
+  <a class="skip-link" href="#view-root">Aller au contenu principal</a>
+
+  <!-- ================= BARRE SUPÉRIEURE ================= -->
+  <header class="topbar">
+    <button class="icon-btn only-mobile" data-action="toggle-sidebar" aria-label="Ouvrir le menu">
+      <i class="fa-solid fa-bars"></i>
+    </button>
+
+    <div class="topbar__brand">
+      <img class="brand-logo hide-sm" src="assets/img/logo.png" alt="ElodiaTech" width="640" height="289">
+      <img class="brand-mark only-sm" src="assets/img/marque.png" alt="ElodiaTech" width="512" height="512">
+      <span class="brand-tag hide-md">Plateforme Projets de Santé</span>
+    </div>
+
+    <div class="topbar__search">
+      <i class="fa-solid fa-magnifying-glass"></i>
+      <input type="search" id="global-search" placeholder="Rechercher un module, une prestation, un document…"
+             autocomplete="off" aria-label="Recherche globale">
+      <div class="search-results" id="search-results" role="listbox" hidden></div>
+    </div>
+
+    <div class="topbar__actions">
+      <div id="project-selector-wrap" class="hide-md" hidden>
+        <select id="project-selector" aria-label="Projet en cours de pilotage" style="min-width:230px"></select>
+      </div>
+
+      <div class="row-tight hide-lg" style="gap:8px;padding:0 10px">
+        <span class="text-xs text-muted">Avancement</span>
+        <strong class="text-xs" id="topbar-progress-value">0 %</strong>
+        <span class="progress" style="width:64px">
+          <span class="progress__fill" id="topbar-progress-fill" style="width:0%;display:block"></span>
+        </span>
+      </div>
+
+      <button class="btn btn--sm" id="role-badge" data-action="changer-role" aria-label="Changer d'espace"></button>
+
+      <button class="icon-btn" id="btn-theme" data-action="toggle-theme" aria-label="Changer de thème">
+        <i class="fa-solid fa-sun"></i>
+      </button>
+
+      <button class="icon-btn" data-action="toggle-drawer" aria-label="Ouvrir les notifications">
+        <i class="fa-solid fa-bell"></i>
+        <span class="icon-btn__badge" id="notif-count" hidden>0</span>
+      </button>
+
+      <button class="user-chip" data-action="changer-role">
+        <span class="avatar" id="user-avatar">?</span>
+        <span class="hide-md" id="user-name">—</span>
+        <i class="fa-solid fa-chevron-down text-xs text-muted" aria-hidden="true"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- ================= CORPS ================= -->
+  <div class="layout">
+
+    <aside class="sidebar" id="sidebar" aria-label="Navigation principale">
+      <div class="sidebar__profile">
+        <span class="avatar avatar--lg" id="sidebar-avatar">?</span>
+        <span class="grow" style="min-width:0">
+          <span class="sidebar__profile-name truncate" id="sidebar-user-name">—</span>
+          <span class="sidebar__profile-role truncate" id="sidebar-user-role">—</span>
+        </span>
+      </div>
+
+      <nav id="sidebar-nav"></nav>
+
+      <div class="sidebar__footer" id="sidebar-footer"></div>
+    </aside>
+
+    <div class="sidebar-backdrop" id="sidebar-backdrop" data-action="fermer-sidebar"></div>
+
+    <main class="content">
+      <div class="content__inner">
+        <nav class="breadcrumb" id="breadcrumb" aria-label="Fil d'Ariane"></nav>
+        <div id="view-root"></div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ================= TIROIR NOTIFICATIONS ================= -->
+  <aside class="drawer" id="drawer" aria-label="Notifications" aria-hidden="true">
+    <div class="drawer__head">
+      <h3 class="card__title"><i class="fa-solid fa-bell"></i> Notifications</h3>
+      <button class="icon-btn" data-action="toggle-drawer" aria-label="Fermer les notifications">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+    <div class="drawer__body" id="drawer-body"></div>
+  </aside>
+
+  <!-- ================= MODALES & TOASTS ================= -->
+  <div id="modal-root"></div>
+  <div class="toast-root" id="toast-root" aria-live="polite"></div>
+
+  <!-- ================= SCRIPTS ================= -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="assets/js/config.js"></script>
+  <script src="assets/js/store.js"></script>
+  <script src="assets/js/views.js"></script>
+  <script src="assets/js/app.js"></script>
+</body>
+</html>
