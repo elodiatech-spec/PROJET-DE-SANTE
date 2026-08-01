@@ -48,7 +48,8 @@ var ONGLETS = {
     "surface",
     "gdoc_projet_sante",
     "drive_url",
-    "site_url"
+    "site_url",
+    "notes"
   ],
   "Prestations": [
     "projet_id",
@@ -106,16 +107,20 @@ var ONGLETS = {
     "type",
     "date",
     "heure",
-    "lieu"
+    "lieu",
+    "lien"
   ],
   "ComptesRendus": [
     "projet_id",
     "id",
     "date",
     "objet",
+    "type",
     "participants",
     "decisions",
-    "statut"
+    "statut",
+    "lien_meet",
+    "lien_doc"
   ],
   "Financements": [
     "projet_id",
@@ -138,10 +143,15 @@ var ENTITES_PAR_PROJET = {
   documents:     { onglet: 'Documents',     champs: ['id', 'nom', 'cat', 'type', 'taille', 'date', 'auteur', 'url'] },
   signatures:    { onglet: 'Signatures',    champs: ['id', 'titre', 'desc', 'statut', 'date', 'url'] },
   messages:      { onglet: 'Messages',      champs: ['id', 'auteur', 'role', 'texte', 'date'] },
-  evenements:    { onglet: 'Evenements',    champs: ['id', 'titre', 'type', 'date', 'heure', 'lieu'] },
-  comptesRendus: { onglet: 'ComptesRendus', champs: ['id', 'date', 'objet', 'participants', 'decisions', 'statut'] },
+  evenements:    { onglet: 'Evenements',    champs: ['id', 'titre', 'type', 'date', 'heure', 'lieu', 'lien'] },
+  comptesRendus: { onglet: 'ComptesRendus', champs: ['id', 'date', 'objet', 'type', 'participants', 'decisions', 'statut', 'lien_meet', 'lien_doc'] },
   financements:  { onglet: 'Financements',  champs: ['id', 'source', 'montant', 'statut', 'echeance'] },
   partenaires:   { onglet: 'Partenaires',   champs: ['id', 'nom', 'type', 'statut'] }
+};
+
+/** Colonnes de la feuille exposées à l'application sous un autre nom. */
+var ALIAS_LECTURE = {
+  comptesRendus: { lien_meet: 'lienMeet', lien_doc: 'lienDoc' }
 };
 
 /* ==========================================================================
@@ -200,7 +210,7 @@ var AMORCE = {
    "F3",
    "OUI",
    "sisa",
-   "2025-10-31",
+   "2025-11-01",
    "Dr Marc Dubois",
    "Médecin généraliste · porteur du projet",
    "m.dubois@msp-caraibes.fr",
@@ -211,6 +221,7 @@ var AMORCE = {
    280,
    "https://docs.google.com/document/d/EXEMPLE_MSP_CARAIBES/edit",
    "https://drive.google.com/drive/folders/EXEMPLE_MSP_CARAIBES",
+   "",
    ""
   ],
   [
@@ -226,7 +237,7 @@ var AMORCE = {
    "F2",
    "OUI",
    "sisa",
-   "2026-03-03",
+   "2026-03-01",
    "Dr Aline Mercier",
    "Médecin généraliste · coordinatrice",
    "a.mercier@msp-archipel.fr",
@@ -237,6 +248,7 @@ var AMORCE = {
    195,
    "https://docs.google.com/document/d/EXEMPLE_MSP_ARCHIPEL/edit",
    "https://drive.google.com/drive/folders/EXEMPLE_MSP_ARCHIPEL",
+   "",
    ""
   ],
   [
@@ -252,7 +264,7 @@ var AMORCE = {
    "F1",
    "NON",
    "assoc",
-   "2026-05-31",
+   "2026-06-01",
    "Mme Sophie Rivière",
    "Directrice · structure gestionnaire",
    "s.riviere@cds-nord.fr",
@@ -263,6 +275,7 @@ var AMORCE = {
    240,
    "https://docs.google.com/document/d/EXEMPLE_CDS_NORD/edit",
    "https://drive.google.com/drive/folders/EXEMPLE_CDS_NORD",
+   "",
    ""
   ],
   [
@@ -289,6 +302,7 @@ var AMORCE = {
    310,
    "",
    "",
+   "",
    ""
   ]
  ],
@@ -297,7 +311,7 @@ var AMORCE = {
    "msp-fort-de-france",
    "P01",
    "valide",
-   "2025-11-03",
+   "2025-11-04",
    "",
    ""
   ],
@@ -305,7 +319,7 @@ var AMORCE = {
    "msp-fort-de-france",
    "P02",
    "valide",
-   "2025-11-05",
+   "2025-11-06",
    "",
    ""
   ],
@@ -313,21 +327,13 @@ var AMORCE = {
    "msp-fort-de-france",
    "P03",
    "valide",
-   "2025-11-07",
+   "2025-11-08",
    "",
    ""
   ],
   [
    "msp-fort-de-france",
    "P04",
-   "valide",
-   "2025-11-10",
-   "",
-   ""
-  ],
-  [
-   "msp-fort-de-france",
-   "P05",
    "valide",
    "2025-11-11",
    "",
@@ -335,9 +341,17 @@ var AMORCE = {
   ],
   [
    "msp-fort-de-france",
+   "P05",
+   "valide",
+   "2025-11-12",
+   "",
+   ""
+  ],
+  [
+   "msp-fort-de-france",
    "P06",
    "valide",
-   "2025-11-21",
+   "2025-11-22",
    "",
    ""
   ],
@@ -345,7 +359,7 @@ var AMORCE = {
    "msp-fort-de-france",
    "P07",
    "valide",
-   "2025-11-29",
+   "2025-11-30",
    "",
    ""
   ],
@@ -353,7 +367,7 @@ var AMORCE = {
    "msp-fort-de-france",
    "P08",
    "valide",
-   "2025-12-14",
+   "2025-12-15",
    "",
    ""
   ],
@@ -361,7 +375,7 @@ var AMORCE = {
    "msp-fort-de-france",
    "P09",
    "valide",
-   "2025-12-20",
+   "2025-12-21",
    "",
    ""
   ],
@@ -369,7 +383,7 @@ var AMORCE = {
    "msp-fort-de-france",
    "P10",
    "valide",
-   "2025-12-25",
+   "2025-12-26",
    "",
    ""
   ],
@@ -377,7 +391,7 @@ var AMORCE = {
    "msp-fort-de-france",
    "P11",
    "valide",
-   "2025-12-29",
+   "2025-12-30",
    "",
    ""
   ],
@@ -385,7 +399,7 @@ var AMORCE = {
    "msp-fort-de-france",
    "P12",
    "valide",
-   "2026-01-02",
+   "2026-01-03",
    "",
    ""
   ],
@@ -393,7 +407,7 @@ var AMORCE = {
    "msp-fort-de-france",
    "P13",
    "valide",
-   "2026-01-06",
+   "2026-01-07",
    "",
    ""
   ],
@@ -401,7 +415,7 @@ var AMORCE = {
    "msp-fort-de-france",
    "P14",
    "valide",
-   "2026-01-10",
+   "2026-01-11",
    "",
    ""
   ],
@@ -409,7 +423,7 @@ var AMORCE = {
    "msp-fort-de-france",
    "P15",
    "valide",
-   "2026-01-15",
+   "2026-01-16",
    "",
    ""
   ],
@@ -417,7 +431,7 @@ var AMORCE = {
    "msp-fort-de-france",
    "P16",
    "valide",
-   "2026-01-20",
+   "2026-01-21",
    "",
    ""
   ],
@@ -425,7 +439,7 @@ var AMORCE = {
    "msp-fort-de-france",
    "P17",
    "valide",
-   "2026-01-30",
+   "2026-01-31",
    "",
    ""
   ],
@@ -433,7 +447,7 @@ var AMORCE = {
    "msp-fort-de-france",
    "P18",
    "valide",
-   "2026-02-07",
+   "2026-02-08",
    "",
    ""
   ],
@@ -441,7 +455,7 @@ var AMORCE = {
    "msp-fort-de-france",
    "P19",
    "valide",
-   "2026-02-11",
+   "2026-02-12",
    "",
    ""
   ],
@@ -449,7 +463,7 @@ var AMORCE = {
    "msp-fort-de-france",
    "P20",
    "valide",
-   "2026-02-17",
+   "2026-02-18",
    "",
    ""
   ],
@@ -457,7 +471,7 @@ var AMORCE = {
    "msp-fort-de-france",
    "P21",
    "valide",
-   "2026-02-22",
+   "2026-02-23",
    "",
    ""
   ],
@@ -465,7 +479,7 @@ var AMORCE = {
    "msp-fort-de-france",
    "P22",
    "valide",
-   "2026-03-02",
+   "2026-03-03",
    "",
    ""
   ],
@@ -473,7 +487,7 @@ var AMORCE = {
    "msp-fort-de-france",
    "P23",
    "valide",
-   "2026-03-06",
+   "2026-03-07",
    "",
    ""
   ],
@@ -481,7 +495,7 @@ var AMORCE = {
    "msp-fort-de-france",
    "P24",
    "valide",
-   "2026-03-11",
+   "2026-03-12",
    "",
    ""
   ],
@@ -489,7 +503,7 @@ var AMORCE = {
    "msp-fort-de-france",
    "P25",
    "a_valider",
-   "2026-08-04",
+   "2026-08-05",
    "",
    ""
   ],
@@ -497,7 +511,7 @@ var AMORCE = {
    "msp-fort-de-france",
    "P26",
    "en_cours",
-   "2026-08-06",
+   "2026-08-07",
    "",
    ""
   ],
@@ -505,7 +519,7 @@ var AMORCE = {
    "msp-fort-de-france",
    "P27",
    "bloque",
-   "2026-07-26",
+   "2026-07-27",
    "",
    ""
   ],
@@ -513,7 +527,7 @@ var AMORCE = {
    "msp-fort-de-france",
    "P28",
    "a_faire",
-   "2026-08-09",
+   "2026-08-10",
    "",
    ""
   ],
@@ -521,7 +535,7 @@ var AMORCE = {
    "msp-fort-de-france",
    "P29",
    "a_faire",
-   "2026-08-15",
+   "2026-08-16",
    "",
    ""
   ],
@@ -529,7 +543,7 @@ var AMORCE = {
    "msp-fort-de-france",
    "P30",
    "a_faire",
-   "2026-08-20",
+   "2026-08-21",
    "",
    ""
   ],
@@ -537,7 +551,7 @@ var AMORCE = {
    "msp-fort-de-france",
    "P31",
    "a_faire",
-   "2026-08-25",
+   "2026-08-26",
    "",
    ""
   ],
@@ -545,7 +559,7 @@ var AMORCE = {
    "msp-fort-de-france",
    "P32",
    "en_cours",
-   "2026-09-09",
+   "2026-09-10",
    "",
    ""
   ],
@@ -553,7 +567,7 @@ var AMORCE = {
    "msp-fort-de-france",
    "P33",
    "a_faire",
-   "2026-09-21",
+   "2026-09-22",
    "",
    ""
   ],
@@ -561,13 +575,21 @@ var AMORCE = {
    "msp-fort-de-france",
    "P34",
    "a_faire",
-   "2026-10-11",
+   "2026-10-12",
    "",
    ""
   ],
   [
    "msp-pointe-a-pitre",
    "P01",
+   "valide",
+   "2026-03-04",
+   "",
+   ""
+  ],
+  [
+   "msp-pointe-a-pitre",
+   "P02",
    "valide",
    "2026-03-06",
    "",
@@ -575,7 +597,7 @@ var AMORCE = {
   ],
   [
    "msp-pointe-a-pitre",
-   "P02",
+   "P03",
    "valide",
    "2026-03-08",
    "",
@@ -583,17 +605,9 @@ var AMORCE = {
   ],
   [
    "msp-pointe-a-pitre",
-   "P03",
-   "valide",
-   "2026-03-10",
-   "",
-   ""
-  ],
-  [
-   "msp-pointe-a-pitre",
    "P04",
    "valide",
-   "2026-03-13",
+   "2026-03-11",
    "",
    ""
   ],
@@ -601,7 +615,7 @@ var AMORCE = {
    "msp-pointe-a-pitre",
    "P05",
    "valide",
-   "2026-03-14",
+   "2026-03-12",
    "",
    ""
   ],
@@ -609,7 +623,7 @@ var AMORCE = {
    "msp-pointe-a-pitre",
    "P06",
    "valide",
-   "2026-03-24",
+   "2026-03-22",
    "",
    ""
   ],
@@ -617,7 +631,7 @@ var AMORCE = {
    "msp-pointe-a-pitre",
    "P07",
    "valide",
-   "2026-04-01",
+   "2026-03-30",
    "",
    ""
   ],
@@ -625,7 +639,7 @@ var AMORCE = {
    "msp-pointe-a-pitre",
    "P08",
    "valide",
-   "2026-04-16",
+   "2026-04-14",
    "",
    ""
   ],
@@ -633,7 +647,7 @@ var AMORCE = {
    "msp-pointe-a-pitre",
    "P09",
    "valide",
-   "2026-04-22",
+   "2026-04-20",
    "",
    ""
   ],
@@ -641,7 +655,7 @@ var AMORCE = {
    "msp-pointe-a-pitre",
    "P10",
    "valide",
-   "2026-04-27",
+   "2026-04-25",
    "",
    ""
   ],
@@ -649,7 +663,7 @@ var AMORCE = {
    "msp-pointe-a-pitre",
    "P11",
    "valide",
-   "2026-05-01",
+   "2026-04-29",
    "",
    ""
   ],
@@ -657,7 +671,7 @@ var AMORCE = {
    "msp-pointe-a-pitre",
    "P12",
    "valide",
-   "2026-05-05",
+   "2026-05-03",
    "",
    ""
   ],
@@ -665,7 +679,7 @@ var AMORCE = {
    "msp-pointe-a-pitre",
    "P13",
    "valide",
-   "2026-05-09",
+   "2026-05-07",
    "",
    ""
   ],
@@ -673,7 +687,7 @@ var AMORCE = {
    "msp-pointe-a-pitre",
    "P14",
    "valide",
-   "2026-05-13",
+   "2026-05-11",
    "",
    ""
   ],
@@ -681,7 +695,7 @@ var AMORCE = {
    "msp-pointe-a-pitre",
    "P15",
    "valide",
-   "2026-05-18",
+   "2026-05-16",
    "",
    ""
   ],
@@ -689,7 +703,7 @@ var AMORCE = {
    "msp-pointe-a-pitre",
    "P16",
    "a_valider",
-   "2026-08-05",
+   "2026-08-06",
    "",
    ""
   ],
@@ -697,7 +711,7 @@ var AMORCE = {
    "msp-pointe-a-pitre",
    "P17",
    "en_cours",
-   "2026-08-15",
+   "2026-08-16",
    "",
    ""
   ],
@@ -705,7 +719,7 @@ var AMORCE = {
    "msp-pointe-a-pitre",
    "P18",
    "en_cours",
-   "2026-08-23",
+   "2026-08-24",
    "",
    ""
   ],
@@ -713,7 +727,7 @@ var AMORCE = {
    "msp-pointe-a-pitre",
    "P19",
    "a_faire",
-   "2026-08-27",
+   "2026-08-28",
    "",
    ""
   ],
@@ -721,7 +735,7 @@ var AMORCE = {
    "msp-pointe-a-pitre",
    "P20",
    "a_faire",
-   "2026-09-02",
+   "2026-09-03",
    "",
    ""
   ],
@@ -729,7 +743,7 @@ var AMORCE = {
    "msp-pointe-a-pitre",
    "P21",
    "a_faire",
-   "2026-07-26",
+   "2026-07-27",
    "",
    ""
   ],
@@ -737,7 +751,7 @@ var AMORCE = {
    "msp-pointe-a-pitre",
    "P22",
    "a_faire",
-   "2026-09-10",
+   "2026-09-11",
    "",
    ""
   ],
@@ -745,7 +759,7 @@ var AMORCE = {
    "msp-pointe-a-pitre",
    "P23",
    "a_faire",
-   "2026-09-14",
+   "2026-09-15",
    "",
    ""
   ],
@@ -753,7 +767,7 @@ var AMORCE = {
    "msp-pointe-a-pitre",
    "P24",
    "a_faire",
-   "2026-09-19",
+   "2026-09-20",
    "",
    ""
   ],
@@ -761,7 +775,7 @@ var AMORCE = {
    "msp-pointe-a-pitre",
    "P25",
    "a_faire",
-   "2026-09-23",
+   "2026-09-24",
    "",
    ""
   ],
@@ -769,7 +783,7 @@ var AMORCE = {
    "msp-pointe-a-pitre",
    "P26",
    "a_faire",
-   "2026-09-25",
+   "2026-09-26",
    "",
    ""
   ],
@@ -777,7 +791,7 @@ var AMORCE = {
    "msp-pointe-a-pitre",
    "P27",
    "a_faire",
-   "2026-09-29",
+   "2026-09-30",
    "",
    ""
   ],
@@ -785,7 +799,7 @@ var AMORCE = {
    "msp-pointe-a-pitre",
    "P28",
    "a_faire",
-   "2026-10-02",
+   "2026-10-03",
    "",
    ""
   ],
@@ -793,7 +807,7 @@ var AMORCE = {
    "cds-gros-morne",
    "P01",
    "valide",
-   "2026-06-03",
+   "2026-06-04",
    "",
    ""
   ],
@@ -801,7 +815,7 @@ var AMORCE = {
    "cds-gros-morne",
    "P02",
    "valide",
-   "2026-06-05",
+   "2026-06-06",
    "",
    ""
   ],
@@ -809,7 +823,7 @@ var AMORCE = {
    "cds-gros-morne",
    "P03",
    "valide",
-   "2026-06-07",
+   "2026-06-08",
    "",
    ""
   ],
@@ -817,7 +831,7 @@ var AMORCE = {
    "cds-gros-morne",
    "P04",
    "valide",
-   "2026-06-10",
+   "2026-06-11",
    "",
    ""
   ],
@@ -825,7 +839,7 @@ var AMORCE = {
    "cds-gros-morne",
    "P05",
    "valide",
-   "2026-06-11",
+   "2026-06-12",
    "",
    ""
   ],
@@ -833,7 +847,7 @@ var AMORCE = {
    "cds-gros-morne",
    "P06",
    "valide",
-   "2026-06-21",
+   "2026-06-22",
    "",
    ""
   ],
@@ -841,7 +855,7 @@ var AMORCE = {
    "cds-gros-morne",
    "P07",
    "valide",
-   "2026-06-29",
+   "2026-06-30",
    "",
    ""
   ],
@@ -849,7 +863,7 @@ var AMORCE = {
    "cds-gros-morne",
    "P08",
    "a_valider",
-   "2026-08-15",
+   "2026-08-16",
    "",
    ""
   ],
@@ -857,7 +871,7 @@ var AMORCE = {
    "cds-gros-morne",
    "P09",
    "en_cours",
-   "2026-08-21",
+   "2026-08-22",
    "",
    ""
   ],
@@ -865,7 +879,7 @@ var AMORCE = {
    "cds-gros-morne",
    "P10",
    "en_cours",
-   "2026-08-26",
+   "2026-08-27",
    "",
    ""
   ],
@@ -873,7 +887,7 @@ var AMORCE = {
    "cds-gros-morne",
    "P11",
    "a_faire",
-   "2026-08-30",
+   "2026-08-31",
    "",
    ""
   ],
@@ -881,7 +895,7 @@ var AMORCE = {
    "cds-gros-morne",
    "P12",
    "a_faire",
-   "2026-09-03",
+   "2026-09-04",
    "",
    ""
   ],
@@ -889,7 +903,7 @@ var AMORCE = {
    "cds-gros-morne",
    "P13",
    "a_faire",
-   "2026-09-07",
+   "2026-09-08",
    "",
    ""
   ],
@@ -897,7 +911,7 @@ var AMORCE = {
    "cds-gros-morne",
    "P14",
    "a_faire",
-   "2026-09-11",
+   "2026-09-12",
    "",
    ""
   ],
@@ -905,7 +919,7 @@ var AMORCE = {
    "cds-gros-morne",
    "P15",
    "a_faire",
-   "2026-09-16",
+   "2026-09-17",
    "",
    ""
   ],
@@ -913,7 +927,7 @@ var AMORCE = {
    "cds-gros-morne",
    "P16",
    "a_faire",
-   "2026-09-21",
+   "2026-09-22",
    "",
    ""
   ],
@@ -953,7 +967,7 @@ var AMORCE = {
    "cds-cayenne",
    "P05",
    "a_valider",
-   "2026-08-01",
+   "2026-08-02",
    "",
    ""
   ],
@@ -961,7 +975,7 @@ var AMORCE = {
    "cds-cayenne",
    "P06",
    "en_cours",
-   "2026-08-11",
+   "2026-08-12",
    "",
    ""
   ],
@@ -969,7 +983,7 @@ var AMORCE = {
    "cds-cayenne",
    "P07",
    "en_cours",
-   "2026-08-19",
+   "2026-08-20",
    "",
    ""
   ],
@@ -977,7 +991,7 @@ var AMORCE = {
    "cds-cayenne",
    "P08",
    "a_faire",
-   "2026-09-03",
+   "2026-09-04",
    "",
    ""
   ],
@@ -985,7 +999,7 @@ var AMORCE = {
    "cds-cayenne",
    "P09",
    "a_faire",
-   "2026-09-09",
+   "2026-09-10",
    "",
    ""
   ],
@@ -993,7 +1007,7 @@ var AMORCE = {
    "cds-cayenne",
    "P10",
    "a_faire",
-   "2026-09-14",
+   "2026-09-15",
    "",
    ""
   ],
@@ -1001,7 +1015,7 @@ var AMORCE = {
    "cds-cayenne",
    "P11",
    "a_faire",
-   "2026-09-18",
+   "2026-09-19",
    "",
    ""
   ],
@@ -1009,7 +1023,7 @@ var AMORCE = {
    "cds-cayenne",
    "P12",
    "a_faire",
-   "2026-09-22",
+   "2026-09-23",
    "",
    ""
   ],
@@ -1017,7 +1031,7 @@ var AMORCE = {
    "cds-cayenne",
    "P13",
    "a_faire",
-   "2026-09-26",
+   "2026-09-27",
    "",
    ""
   ],
@@ -1025,7 +1039,7 @@ var AMORCE = {
    "cds-cayenne",
    "P14",
    "a_faire",
-   "2026-09-30",
+   "2026-10-01",
    "",
    ""
   ],
@@ -1033,7 +1047,7 @@ var AMORCE = {
    "cds-cayenne",
    "P15",
    "a_faire",
-   "2026-10-05",
+   "2026-10-06",
    "",
    ""
   ],
@@ -1041,7 +1055,7 @@ var AMORCE = {
    "cds-cayenne",
    "P16",
    "a_faire",
-   "2026-10-10",
+   "2026-10-11",
    "",
    ""
   ],
@@ -1049,7 +1063,7 @@ var AMORCE = {
    "cds-cayenne",
    "P17",
    "a_faire",
-   "2026-10-20",
+   "2026-10-21",
    "",
    ""
   ],
@@ -1057,7 +1071,7 @@ var AMORCE = {
    "cds-cayenne",
    "P18",
    "a_faire",
-   "2026-10-28",
+   "2026-10-29",
    "",
    ""
   ],
@@ -1065,7 +1079,7 @@ var AMORCE = {
    "cds-cayenne",
    "P19",
    "a_faire",
-   "2026-11-01",
+   "2026-11-02",
    "",
    ""
   ],
@@ -1073,7 +1087,7 @@ var AMORCE = {
    "cds-cayenne",
    "P20",
    "a_faire",
-   "2026-11-07",
+   "2026-11-08",
    "",
    ""
   ],
@@ -1081,7 +1095,7 @@ var AMORCE = {
    "cds-cayenne",
    "P21",
    "a_faire",
-   "2026-11-12",
+   "2026-11-13",
    "",
    ""
   ],
@@ -1089,7 +1103,7 @@ var AMORCE = {
    "cds-cayenne",
    "P22",
    "a_faire",
-   "2026-11-20",
+   "2026-11-21",
    "",
    ""
   ],
@@ -1097,7 +1111,7 @@ var AMORCE = {
    "cds-cayenne",
    "P23",
    "a_faire",
-   "2026-11-24",
+   "2026-11-25",
    "",
    ""
   ],
@@ -1105,7 +1119,7 @@ var AMORCE = {
    "cds-cayenne",
    "P24",
    "a_faire",
-   "2026-11-29",
+   "2026-11-30",
    "",
    ""
   ],
@@ -1113,7 +1127,7 @@ var AMORCE = {
    "cds-cayenne",
    "P25",
    "a_faire",
-   "2026-12-03",
+   "2026-12-04",
    "",
    ""
   ],
@@ -1121,7 +1135,7 @@ var AMORCE = {
    "cds-cayenne",
    "P26",
    "a_faire",
-   "2026-12-05",
+   "2026-12-06",
    "",
    ""
   ],
@@ -1129,7 +1143,7 @@ var AMORCE = {
    "cds-cayenne",
    "P27",
    "a_faire",
-   "2026-12-09",
+   "2026-12-10",
    "",
    ""
   ],
@@ -1137,7 +1151,7 @@ var AMORCE = {
    "cds-cayenne",
    "P28",
    "a_faire",
-   "2026-12-12",
+   "2026-12-13",
    "",
    ""
   ]
@@ -1594,7 +1608,7 @@ var AMORCE = {
    "Projet",
    "pdf",
    "4,2 Mo",
-   "2026-07-05",
+   "2026-07-06",
    "Jean-Philippe B.",
    ""
   ],
@@ -1605,7 +1619,7 @@ var AMORCE = {
    "Juridique",
    "pdf",
    "1,1 Mo",
-   "2026-05-31",
+   "2026-06-01",
    "Jean-Philippe B.",
    ""
   ],
@@ -1616,7 +1630,7 @@ var AMORCE = {
    "ARS",
    "zip",
    "18,4 Mo",
-   "2026-06-21",
+   "2026-06-22",
    "Jean-Philippe B.",
    ""
   ],
@@ -1627,7 +1641,7 @@ var AMORCE = {
    "Finances",
    "xls",
    "286 Ko",
-   "2026-07-13",
+   "2026-07-14",
    "Jean-Philippe B.",
    ""
   ],
@@ -1638,7 +1652,7 @@ var AMORCE = {
    "Immobilier",
    "pdf",
    "12,7 Mo",
-   "2026-06-28",
+   "2026-06-29",
    "ArchiSanté Caraïbes",
    ""
   ],
@@ -1649,7 +1663,7 @@ var AMORCE = {
    "Identité",
    "pdf",
    "6,8 Mo",
-   "2026-07-22",
+   "2026-07-23",
    "Studio ElodiaTech",
    ""
   ],
@@ -1660,7 +1674,7 @@ var AMORCE = {
    "Projet",
    "pdf",
    "3,4 Mo",
-   "2026-06-09",
+   "2026-06-10",
    "Jean-Philippe B.",
    ""
   ],
@@ -1671,7 +1685,7 @@ var AMORCE = {
    "Projet",
    "doc",
    "780 Ko",
-   "2026-07-25",
+   "2026-07-26",
    "Jean-Philippe B.",
    ""
   ],
@@ -1682,7 +1696,7 @@ var AMORCE = {
    "Projet",
    "pdf",
    "520 Ko",
-   "2026-06-13",
+   "2026-06-14",
    "Sophie Rivière",
    ""
   ],
@@ -1693,7 +1707,7 @@ var AMORCE = {
    "Projet",
    "pdf",
    "2,9 Mo",
-   "2026-07-20",
+   "2026-07-21",
    "Camille R.",
    ""
   ],
@@ -1704,7 +1718,7 @@ var AMORCE = {
    "Projet",
    "pdf",
    "410 Ko",
-   "2026-07-17",
+   "2026-07-18",
    "Camille R.",
    ""
   ]
@@ -1716,7 +1730,7 @@ var AMORCE = {
    "Mandat d'accompagnement ElodiaTech",
    "Devis et mandat d'accompagnement Formule 3.",
    "signe",
-   "2025-11-18",
+   "2025-11-19",
    ""
   ],
   [
@@ -1725,7 +1739,7 @@ var AMORCE = {
    "Statuts constitutifs SISA",
    "Acte constitutif à déposer au greffe du tribunal de commerce.",
    "signe",
-   "2026-01-22",
+   "2026-01-23",
    ""
   ],
   [
@@ -1734,7 +1748,7 @@ var AMORCE = {
    "Projet de santé — validation équipe",
    "Validation collégiale du projet de santé avant transmission à l'ARS.",
    "signe",
-   "2026-07-01",
+   "2026-07-02",
    ""
   ],
   [
@@ -1761,7 +1775,7 @@ var AMORCE = {
    "Mandat d'accompagnement ElodiaTech",
    "Devis et mandat Formule 2.",
    "signe",
-   "2026-03-03",
+   "2026-03-04",
    ""
   ],
   [
@@ -1779,7 +1793,7 @@ var AMORCE = {
    "Mandat d'accompagnement ElodiaTech",
    "Devis et mandat Formule 1.",
    "signe",
-   "2026-06-01",
+   "2026-06-02",
    ""
   ],
   [
@@ -1788,7 +1802,7 @@ var AMORCE = {
    "Mandat d'accompagnement ElodiaTech",
    "Devis et mandat Formule 2.",
    "signe",
-   "2026-07-03",
+   "2026-07-04",
    ""
   ]
  ],
@@ -1799,7 +1813,7 @@ var AMORCE = {
    "Jean-Philippe B.",
    "expert",
    "Bonjour Docteur, le dossier ARS a bien été déposé. Nous sommes en attente de l'accusé de réception.",
-   "2026-07-19"
+   "2026-07-20"
   ],
   [
    "msp-fort-de-france",
@@ -1807,7 +1821,7 @@ var AMORCE = {
    "Dr Marc Dubois",
    "client",
    "Parfait, merci. Où en est le contrat ACI ?",
-   "2026-07-20"
+   "2026-07-21"
   ],
   [
    "msp-fort-de-france",
@@ -1815,7 +1829,7 @@ var AMORCE = {
    "Jean-Philippe B.",
    "expert",
    "Le contrat ACI est prêt et déposé sur le parapheur électronique. Il attend votre signature.",
-   "2026-07-21"
+   "2026-07-22"
   ],
   [
    "msp-pointe-a-pitre",
@@ -1823,7 +1837,7 @@ var AMORCE = {
    "Jean-Philippe B.",
    "expert",
    "Le diagnostic territorial est finalisé, vous pouvez le consulter dans le coffre-fort documentaire.",
-   "2026-07-23"
+   "2026-07-24"
   ],
   [
    "cds-gros-morne",
@@ -1831,7 +1845,7 @@ var AMORCE = {
    "Camille R.",
    "expert",
    "Bonjour, l'analyse des besoins de santé est terminée. Je vous propose une visio la semaine prochaine.",
-   "2026-07-26"
+   "2026-07-27"
   ],
   [
    "cds-cayenne",
@@ -1839,7 +1853,7 @@ var AMORCE = {
    "Camille R.",
    "expert",
    "Bienvenue sur votre espace de suivi. Le questionnaire de faisabilité est disponible.",
-   "2026-07-17"
+   "2026-07-18"
   ]
  ],
  "Evenements": [
@@ -1848,25 +1862,28 @@ var AMORCE = {
    "e1",
    "Comité de pilotage mensuel",
    "reunion",
-   "2026-08-04",
+   "2026-08-05",
    "14:30",
-   "Visioconférence"
+   "Visioconférence",
+   "https://meet.google.com/exemple-copil"
   ],
   [
    "msp-fort-de-france",
    "e2",
    "Commission ARS — instruction du dossier",
    "jalon",
-   "2026-08-21",
+   "2026-08-22",
    "09:00",
-   "ARS Martinique"
+   "ARS Martinique",
+   ""
   ],
   [
    "msp-fort-de-france",
    "e3",
    "Livraison de la maquette du site internet",
    "livrable",
-   "2026-08-12",
+   "2026-08-13",
+   "",
    "",
    ""
   ],
@@ -1875,83 +1892,100 @@ var AMORCE = {
    "e4",
    "Formation équipe — logiciel métier",
    "formation",
-   "2026-09-04",
+   "2026-09-05",
    "09:00",
-   "Sur site"
+   "Sur site",
+   ""
   ],
   [
    "msp-pointe-a-pitre",
    "e5",
    "Atelier rédaction — exercice coordonné",
    "reunion",
-   "2026-08-06",
+   "2026-08-07",
    "18:00",
-   "Visioconférence"
+   "Visioconférence",
+   "https://meet.google.com/exemple-atelier"
   ],
   [
    "msp-pointe-a-pitre",
    "e6",
    "Clôture du dépôt FEDER",
    "jalon",
-   "2026-08-18",
+   "2026-08-19",
    "23:59",
-   "Portail e-Synergie"
+   "Portail e-Synergie",
+   ""
   ],
   [
    "cds-gros-morne",
    "e7",
    "Restitution du diagnostic territorial",
    "reunion",
-   "2026-08-09",
+   "2026-08-10",
    "10:00",
-   "Sur site"
+   "Sur site",
+   ""
   ],
   [
    "cds-cayenne",
    "e8",
    "Rendez-vous découverte",
    "reunion",
-   "2026-08-03",
+   "2026-08-04",
    "15:00",
-   "Visioconférence"
+   "Visioconférence",
+   "https://meet.google.com/exemple-decouverte"
   ]
  ],
  "ComptesRendus": [
   [
    "msp-fort-de-france",
    "cr1",
-   "2026-07-19",
+   "2026-07-20",
    "Comité de pilotage — juillet",
+   "visio",
    "Dr Dubois, Jean-Philippe B., ArchiSanté",
    "Validation des plans d'exécution. Lancement de la charte graphique.",
-   "valide"
+   "valide",
+   "https://meet.google.com/exemple-copil",
+   "https://docs.google.com/document/d/EXEMPLE_CR_JUILLET/edit"
   ],
   [
    "msp-fort-de-france",
    "cr2",
-   "2026-06-21",
+   "2026-06-22",
    "Cadrage des statuts SISA",
+   "presentiel",
    "Associés, Jean-Philippe B., cabinet comptable",
    "Modèle SISA approuvé à l'unanimité des associés.",
-   "valide"
+   "valide",
+   "",
+   ""
   ],
   [
    "msp-pointe-a-pitre",
    "cr3",
-   "2026-07-11",
+   "2026-07-12",
    "Restitution du diagnostic territorial",
+   "visio",
    "Dr Mercier, équipe, Jean-Philippe B.",
    "Priorisation de trois axes : diabète, santé mentale, prévention.",
-   "valide"
+   "valide",
+   "",
+   ""
   ],
   [
    "cds-cayenne",
    "cr4",
-   "2026-07-17",
-   "Réunion de lancement",
+   "2026-07-18",
+   "Point téléphonique de lancement",
+   "telephone",
    "Dr Anselme, Camille R.",
    "Calendrier validé, démarrage du diagnostic territorial.",
-   "valide"
+   "valide",
+   "",
+   ""
   ]
  ],
  "Financements": [
@@ -1961,7 +1995,7 @@ var AMORCE = {
    "FIR — ARS Martinique",
    120000,
    "accorde",
-   "2026-06-01"
+   "2026-06-02"
   ],
   [
    "msp-fort-de-france",
@@ -1969,7 +2003,7 @@ var AMORCE = {
    "FEDER — programme régional",
    240000,
    "instruction",
-   "2026-09-14"
+   "2026-09-15"
   ],
   [
    "msp-fort-de-france",
@@ -1977,7 +2011,7 @@ var AMORCE = {
    "ACI — CPAM",
    68000,
    "depose",
-   "2026-08-30"
+   "2026-08-31"
   ],
   [
    "msp-fort-de-france",
@@ -1985,7 +2019,7 @@ var AMORCE = {
    "Collectivité territoriale",
    45000,
    "instruction",
-   "2026-09-29"
+   "2026-09-30"
   ],
   [
    "msp-pointe-a-pitre",
@@ -1993,7 +2027,7 @@ var AMORCE = {
    "FIR — ARS Guadeloupe",
    85000,
    "depose",
-   "2026-08-25"
+   "2026-08-26"
   ],
   [
    "msp-pointe-a-pitre",
@@ -2001,7 +2035,7 @@ var AMORCE = {
    "FEDER — programme régional",
    150000,
    "etude",
-   "2026-10-29"
+   "2026-10-30"
   ],
   [
    "cds-cayenne",
@@ -2009,7 +2043,7 @@ var AMORCE = {
    "FIR — ARS Guyane",
    95000,
    "etude",
-   "2026-10-14"
+   "2026-10-15"
   ]
  ],
  "Partenaires": [
@@ -2060,6 +2094,7 @@ function onOpen() {
     .addItem('Initialiser la base (onglets + données de démonstration)', 'initialiserBase')
     .addItem('Créer les onglets vides seulement', 'initialiserBaseVide')
     .addItem('Vérifier la base', 'verifierBase')
+    .addItem('Mettre à jour la structure (sans perte de données)', 'mettreAJourStructure')
     .addSeparator()
     .addItem('Créer les dossiers Drive manquants', 'creerTousLesDossiers')
     .addToUi();
@@ -2127,6 +2162,49 @@ function construire(avecDonnees) {
   classeur.setActiveSheet(classeur.getSheetByName('Lisez-moi'));
   ui.alert('Base initialisée',
     'Les ' + noms.length + ' onglets sont prêts : ' + noms.join(', ') + '.',
+    ui.ButtonSet.OK);
+}
+
+/**
+ * Ajoute les colonnes et les onglets apparus depuis l'installation, sans
+ * toucher aux données existantes. À lancer après toute mise à jour du script.
+ */
+function mettreAJourStructure() {
+  var classeur = SpreadsheetApp.getActive();
+  var ui = SpreadsheetApp.getUi();
+  var ajouts = [];
+
+  Object.keys(ONGLETS).forEach(function (nom) {
+    var attendues = ONGLETS[nom];
+    var feuille = classeur.getSheetByName(nom);
+
+    if (!feuille) {
+      feuille = classeur.insertSheet(nom);
+      feuille.getRange(1, 1, 1, attendues.length).setValues([attendues])
+        .setFontWeight('bold').setFontColor('#ffffff').setBackground('#1e95cb');
+      feuille.setFrozenRows(1);
+      ajouts.push('onglet « ' + nom +' » créé');
+      return;
+    }
+
+    var existantes = feuille.getRange(1, 1, 1, Math.max(1, feuille.getLastColumn()))
+      .getValues()[0].map(function (h) { return String(h).trim(); });
+
+    attendues.forEach(function (colonne) {
+      if (existantes.indexOf(colonne) !== -1) return;
+      var position = feuille.getLastColumn() + 1;
+      feuille.getRange(1, position).setValue(colonne)
+        .setFontWeight('bold').setFontColor('#ffffff').setBackground('#1e95cb');
+      if (colonne === 'date' || colonne === 'echeance' || colonne === 'date_debut') {
+        feuille.getRange(1, position, feuille.getMaxRows()).setNumberFormat('@');
+      }
+      existantes.push(colonne);
+      ajouts.push(nom + ' : colonne « ' + colonne + ' » ajoutée');
+    });
+  });
+
+  ui.alert('Mise à jour de la structure',
+    ajouts.length ? ajouts.join('\n') : 'La structure était déjà à jour, rien à faire.',
     ui.ButtonSet.OK);
 }
 
@@ -2216,17 +2294,23 @@ function construireDonnees() {
 
   Object.keys(ENTITES_PAR_PROJET).forEach(function (cle) {
     var conf = ENTITES_PAR_PROJET[cle];
+    var alias = ALIAS_LECTURE[cle] || {};
     var groupe = {};
     projets.forEach(function (p) { groupe[p.id] = []; });
+
     lireOnglet(conf.onglet).forEach(function (r) {
       if (!groupe[r.projet_id]) return;
       var item = {};
-      conf.champs.forEach(function (c) {
-        item[c] = (c === 'date' || c === 'echeance') ? iso(r[c]) : r[c];
+      conf.champs.forEach(function (colonne) {
+        var clef = alias[colonne] || colonne;
+        var valeur = r[colonne];
+        item[clef] = (colonne === 'date' || colonne === 'echeance') ? iso(valeur)
+                   : (valeur === undefined || valeur === null) ? '' : valeur;
       });
       if (conf.champs.indexOf('montant') >= 0) item.montant = Number(r.montant) || 0;
       groupe[r.projet_id].push(item);
     });
+
     donnees[cle] = groupe;
   });
 
@@ -2260,7 +2344,8 @@ var ECRITURE = {
       clientEmail: 'client_email', clientTel: 'client_tel',
       consultantNom: 'consultant_nom', consultantEmail: 'consultant_email',
       equipe: 'equipe', surface: 'surface',
-      gdocProjetSante: 'gdoc_projet_sante', driveUrl: 'drive_url', siteUrl: 'site_url'
+      gdocProjetSante: 'gdoc_projet_sante', driveUrl: 'drive_url', siteUrl: 'site_url',
+      notes: 'notes'
     }
   },
   prestations: {
@@ -2281,11 +2366,14 @@ var ECRITURE = {
   },
   evenements: {
     onglet: 'Evenements', cles: ['projet_id', 'id'],
-    champs: { titre: 'titre', type: 'type', date: 'date', heure: 'heure', lieu: 'lieu' }
+    champs: { titre: 'titre', type: 'type', date: 'date', heure: 'heure', lieu: 'lieu', lien: 'lien' }
   },
   comptesRendus: {
     onglet: 'ComptesRendus', cles: ['projet_id', 'id'],
-    champs: { date: 'date', objet: 'objet', participants: 'participants', decisions: 'decisions', statut: 'statut' }
+    champs: {
+      date: 'date', objet: 'objet', type: 'type', participants: 'participants',
+      decisions: 'decisions', statut: 'statut', lienMeet: 'lien_meet', lienDoc: 'lien_doc'
+    }
   },
   financements: {
     onglet: 'Financements', cles: ['projet_id', 'id'],

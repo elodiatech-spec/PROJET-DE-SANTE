@@ -133,6 +133,29 @@ Store.ajouterPartenaire({ nom: 'CCAS Gros-Morne', type: 'Collectivité', statut:
 Store.majSignature('sig8', { statut: 'signe', date: '2026-08-01' });
 Store.ajouterCompteRendu({ date: '2026-08-01', objet: 'Point mensuel', participants: 'Équipe', decisions: 'RAS' });
 Store.ajouterMessage('Bonjour', 'Camille R.', 'expert');
+
+// Fiche client : correction d'informations après création
+Store.majFicheClient('cds-gros-morne', {
+  'client.nom': 'Mme Sophie Rivière-Martin',
+  'client.tel': '0596 11 22 33',
+  ville: 'Gros-Morne',
+  notes: 'Reprise du dossier en août.',
+  formule: 'F3',
+});
+
+// Réunion Meet : compte rendu portant les deux liens
+Store.ajouterCompteRendu({
+  date: '2026-08-10', type: 'visio', objet: 'Comité de pilotage — août',
+  lienMeet: 'https://meet.google.com/test-copil',
+  lienDoc: 'https://docs.google.com/document/d/TEST_CR/edit',
+});
+
+// Événement porteur d'un lien de visioconférence
+Store.ajouterEvenement({
+  titre: 'Point hebdomadaire', date: '2026-08-20', heure: '09:00',
+  type: 'reunion', lieu: 'Visioconférence', lien: 'https://meet.google.com/test-hebdo',
+});
+
 Store.supprimerDocument(Store.liste('documents').find((d) => d.nom === 'Test.pdf').id);
 Store.supprimerProjet('cds-cayenne');
 
@@ -164,10 +187,20 @@ const p08 = sesPrestations.find((p) => p.prestation_id === 'P08');
 const relu = script.construireDonnees();
 const projetRelu = relu.projets.find((p) => p.id === 'cds-gros-morne');
 
+const crMeet = lire('ComptesRendus').find((c) => c.objet === 'Comité de pilotage — août');
+const evtMeet = lire('Evenements').find((e) => e.titre === 'Point hebdomadaire');
+
 const controles = [
   ['le script ne renvoie aucune erreur', erreurs.length === 0, erreurs.join(' | ')],
-  ['12 requêtes émises par l\'application', requetes.length === 12, requetes.length],
+  ['15 requêtes émises par l\'application', requetes.length === 15, requetes.length],
   ['la formule est passée en F3', projet.formule === 'F3', projet.formule],
+  ['fiche client : nom du porteur corrigé', projet.client_nom === 'Mme Sophie Rivière-Martin', projet.client_nom],
+  ['fiche client : téléphone enregistré', projet.client_tel === '0596 11 22 33', projet.client_tel],
+  ['fiche client : notes internes enregistrées', projet.notes === 'Reprise du dossier en août.', projet.notes],
+  ['compte rendu : lien Meet enregistré', crMeet && crMeet.lien_meet === 'https://meet.google.com/test-copil', crMeet && crMeet.lien_meet],
+  ['compte rendu : Google Doc enregistré', crMeet && crMeet.lien_doc === 'https://docs.google.com/document/d/TEST_CR/edit', crMeet && crMeet.lien_doc],
+  ['compte rendu : nature « visio »', crMeet && crMeet.type === 'visio', crMeet && crMeet.type],
+  ['événement : lien de visioconférence enregistré', evtMeet && evtMeet.lien === 'https://meet.google.com/test-hebdo', evtMeet && evtMeet.lien],
   ['l\'option immobilier vaut OUI', projet.option_immobilier === 'OUI', projet.option_immobilier],
   ['le projet compte 34 prestations', sesPrestations.length === 34, sesPrestations.length],
   ['P34 a été créée par la montée de formule', !!sesPrestations.find((p) => p.prestation_id === 'P34'), 'absente'],
@@ -190,6 +223,13 @@ const controles = [
   ['relecture : 34 prestations', Object.keys(projetRelu.prestations).length === 34, Object.keys(projetRelu.prestations).length],
   ['relecture : P08 validée', projetRelu.prestations.P08.statut === 'valide', projetRelu.prestations.P08.statut],
   ['relecture : projet supprimé absent', !relu.projets.find((p) => p.id === 'cds-cayenne'), 'présent'],
+  ['relecture : nom du porteur corrigé', projetRelu.client.nom === 'Mme Sophie Rivière-Martin', projetRelu.client.nom],
+  ['relecture : lien Meet exposé en lienMeet',
+    relu.comptesRendus['cds-gros-morne'].some((c) => c.lienMeet === 'https://meet.google.com/test-copil'), 'absent'],
+  ['relecture : Google Doc exposé en lienDoc',
+    relu.comptesRendus['cds-gros-morne'].some((c) => c.lienDoc === 'https://docs.google.com/document/d/TEST_CR/edit'), 'absent'],
+  ['relecture : lien de l\'événement',
+    relu.evenements['cds-gros-morne'].some((e) => e.lien === 'https://meet.google.com/test-hebdo'), 'absent'],
 ];
 
 let echecs = 0;

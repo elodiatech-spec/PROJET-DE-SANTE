@@ -1276,8 +1276,12 @@ const Views = {
   },
 
   /* ====================== PLANNING ====================== */
-  planning() {
+  planning(filtres = {}) {
     const expert = Store.estExpert();
+
+    // Vue consolidée du portefeuille, réservée à l'expert.
+    if (expert && filtres.portee === 'tous') return Views._planningGlobal(filtres);
+
     const evts = Store.liste('evenements').slice().sort((a, b) => a.date.localeCompare(b.date));
     const prestas = Store.prestations()
       .filter((p) => p.etat.statut !== 'valide' && p.etat.echeance)
@@ -1300,7 +1304,10 @@ const Views = {
             <h2 class="card__title"><i class="fa-solid fa-calendar-days"></i> Planning & échéances</h2>
             <p class="card__subtitle">Rendez-vous, jalons réglementaires et dates de livraison.</p>
           </div>
-          ${expert ? `<button class="btn btn--primary btn--sm" data-action="ajouter-evenement"><i class="fa-solid fa-plus"></i> Ajouter un événement</button>` : ''}
+          <div class="row-tight">
+            ${expert ? Views._basculePortee('projet') : ''}
+            ${expert ? `<button class="btn btn--primary btn--sm" data-action="ajouter-evenement"><i class="fa-solid fa-plus"></i> Ajouter un événement</button>` : ''}
+          </div>
         </div>
 
         ${Object.keys(parMois).length ? Object.keys(parMois).sort().map((mois) => `
@@ -1313,13 +1320,16 @@ const Views = {
               ${parMois[mois].map((e) => {
                 const j = Dates.daysUntil(e.date);
                 const passe = j !== null && j < 0;
+                const meet = urlSure(e.lien);
                 return `<div class="file-row" ${passe ? 'style="opacity:.55"' : ''}>
                     <div class="file-icon" style="color:var(--brand-500)"><i class="fa-solid ${icones[e.type] || 'fa-circle'}"></i></div>
                     <div class="grow">
                       <div class="text-sm fw-800">${esc(e.titre)}</div>
                       <div class="text-xs text-muted">${esc(Dates.formatLong(e.date))}${e.heure ? ' · ' + esc(e.heure) : ''}${e.lieu ? ' · ' + esc(e.lieu) : ''}</div>
                     </div>
+                    ${meet ? `<a class="btn btn--sm btn--primary" href="${esc(meet)}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-video"></i> Rejoindre</a>` : ''}
                     ${passe ? badge('Passé', 'neutre') : badge(j === 0 ? "Aujourd'hui" : `J-${j}`, j <= 7 ? 'warn' : 'brand')}
+                    ${expert ? `<button class="btn btn--ghost btn--sm" data-action="supprimer-evenement" data-id="${esc(e.id)}" aria-label="Supprimer ${esc(e.titre)}"><i class="fa-solid fa-trash"></i></button>` : ''}
                   </div>`;
               }).join('')}
             </div>
@@ -1348,38 +1358,248 @@ const Views = {
     </section>`;
   },
 
-  /* ====================== COMPTES RENDUS ====================== */
-  'comptes-rendus'() {
-    const expert = Store.estExpert();
-    const liste = Store.liste('comptesRendus');
+  /** Bascule « ce projet » / « tous les projets » du planning. */
+  _basculePortee(active) {
+    return `
+      <div class="segmented" role="group" aria-label="Portée du planning">
+        <button class="${active === 'projet' ? 'is-active' : ''}" data-action="portee-planning" data-portee="projet">
+          <i class="fa-solid fa-folder-open"></i> Ce projet
+        </button>
+        <button class="${active === 'tous' ? 'is-active' : ''}" data-action="portee-planning" data-portee="tous">
+          <i class="fa-solid fa-layer-group"></i> Tous les projets
+        </button>
+      </div>`;
+  },
+
+  /** Planning consolidé du portefeuille. */
+  _planningGlobal(filtres = {}) {
+    let entrees = Store.planningGlobal();
+
+    if (filtres.projet) entrees = entrees.filter((e) => e.projetId === filtres.projet);
+    if (filtres.masquerPasse !== false) {
+      const aujourdhui = Dates.today();
+      entrees = entrees.filter((e) => e.date >= aujourdhui);
+    }
+
+    const parMois = {};
+    entrees.forEach((e) => { (parMois[e.date.slice(0, 7)] = parMois[e.date.slice(0, 7)] || []).push(e); });
+
+    const couleurProjet = {};
+    Store.state.projets.forEach((p) => { couleurProjet[p.id] = FORMULES[p.formule].couleur; });
+
+    const icones = { reunion: 'fa-video', jalon: 'fa-flag', livrable: 'fa-box',
+                     formation: 'fa-chalkboard-user', prestation: 'fa-list-check' };
+
+    const sept = Dates.addDays(Dates.today(), 7);
+    const trente = Dates.addDays(Dates.today(), 30);
 
     return `
     <section class="view stack">
       <div class="card">
         <div class="card__head">
           <div>
-            <h2 class="card__title"><i class="fa-solid fa-clipboard-check"></i> Comptes rendus & relevés de décisions</h2>
-            <p class="card__subtitle">Traçabilité des réunions et des décisions prises tout au long du projet.</p>
+            <h2 class="card__title"><i class="fa-solid fa-calendar-days"></i> Planning général du portefeuille</h2>
+            <p class="card__subtitle">
+              Rendez-vous, jalons et échéances de prestations de l'ensemble de vos clients,
+              sur une seule frise.
+            </p>
           </div>
-          ${expert ? `<button class="btn btn--primary btn--sm" data-action="ajouter-cr"><i class="fa-solid fa-plus"></i> Nouveau compte rendu</button>` : ''}
+          <div class="row-tight">
+            ${Views._basculePortee('tous')}
+            <button class="btn btn--primary btn--sm" data-action="ajouter-evenement"><i class="fa-solid fa-plus"></i> Ajouter un événement</button>
+          </div>
+        </div>
+
+        <div class="grid grid-3" style="margin-bottom:var(--sp-4)">
+          <div class="card card--flat"><div class="kpi">
+            <span class="kpi__label">Dans les 7 jours</span>
+            <span class="kpi__value">${entrees.filter((e) => e.date <= sept).length}</span>
+          </div></div>
+          <div class="card card--flat"><div class="kpi">
+            <span class="kpi__label">Dans les 30 jours</span>
+            <span class="kpi__value">${entrees.filter((e) => e.date <= trente).length}</span>
+          </div></div>
+          <div class="card card--flat"><div class="kpi">
+            <span class="kpi__label">Clients concernés</span>
+            <span class="kpi__value">${new Set(entrees.map((e) => e.projetId)).size} / ${Store.state.projets.length}</span>
+          </div></div>
+        </div>
+
+        <div class="row" style="margin-bottom:var(--sp-4)">
+          <select id="planning-projet" style="max-width:280px" aria-label="Filtrer par client">
+            <option value="">Tous les clients</option>
+            ${Store.state.projets.map((p) => `<option value="${esc(p.id)}" ${filtres.projet === p.id ? 'selected' : ''}>${esc(p.nom)} — ${esc(p.ville)}</option>`).join('')}
+          </select>
+          ${filtres.projet ? `<button class="btn btn--ghost btn--sm" data-action="reset-filtres"><i class="fa-solid fa-xmark"></i> Tout afficher</button>` : ''}
+        </div>
+
+        ${Object.keys(parMois).length ? Object.keys(parMois).sort().map((mois) => `
+          <div style="margin-bottom:var(--sp-5)">
+            <h3 class="section-title">
+              <i class="fa-solid fa-calendar"></i>
+              ${esc(new Date(mois + '-01T00:00:00').toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }))}
+              <span class="text-xs text-muted" style="font-weight:600;text-transform:none;letter-spacing:0">
+                — ${parMois[mois].length} échéance${parMois[mois].length > 1 ? 's' : ''}
+              </span>
+            </h3>
+            <div class="stack-xs">
+              ${parMois[mois].map((e) => {
+                const j = Dates.daysUntil(e.date);
+                const meet = urlSure(e.lien);
+                return `
+                <div class="file-row" style="border-left:3px solid ${esc(couleurProjet[e.projetId] || 'var(--border)')}">
+                  <div class="file-icon" style="color:${esc(couleurProjet[e.projetId] || 'var(--brand-500)')}">
+                    <i class="fa-solid ${icones[e.type] || 'fa-circle'}"></i>
+                  </div>
+                  <div class="grow" style="min-width:0">
+                    <div class="text-sm fw-800 truncate">${esc(e.titre)}</div>
+                    <div class="text-xs text-muted">
+                      ${esc(Dates.format(e.date))}${e.heure ? ' · ' + esc(e.heure) : ''}${e.lieu ? ' · ' + esc(e.lieu) : ''}
+                    </div>
+                  </div>
+                  <button class="badge badge--neutre" data-action="ouvrir-projet" data-id="${esc(e.projetId)}"
+                          title="Ouvrir ${esc(e.projetNom)}" style="cursor:pointer;max-width:180px">
+                    <i class="fa-solid fa-hospital"></i> <span class="truncate">${esc(e.projetNom)}</span>
+                  </button>
+                  ${meet ? `<a class="btn btn--sm btn--primary" href="${esc(meet)}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-video"></i> Rejoindre</a>` : ''}
+                  ${badge(j === 0 ? "Aujourd'hui" : `J-${j}`, j <= 7 ? 'warn' : 'brand')}
+                </div>`;
+              }).join('')}
+            </div>
+          </div>`).join('')
+          : empty('Aucune échéance à venir', 'Le portefeuille n\'a pas d\'échéance planifiée.', 'fa-solid fa-calendar-check')}
+      </div>
+    </section>`;
+  },
+
+  /* ====================== COMPTES RENDUS ====================== */
+  'comptes-rendus'() {
+    const expert = Store.estExpert();
+    const liste = Store.liste('comptesRendus');
+    const projet = Store.projet();
+
+    // Réunions à venir dépourvues de compte rendu : l'expert les traite d'un clic.
+    const aVenir = Store.liste('evenements')
+      .filter((e) => e.type === 'reunion')
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .slice(0, 4);
+
+    return `
+    <section class="view stack">
+      ${expert ? `
+      <div class="card">
+        <div class="card__head">
+          <div>
+            <h3 class="card__title"><i class="fa-solid fa-video"></i> Réunion Google Meet</h3>
+            <p class="card__subtitle">
+              Collez le lien de la réunion : un compte rendu est créé, prêt à recevoir
+              le Google Doc de notes. Le lien reste accessible au client depuis son planning.
+            </p>
+          </div>
+        </div>
+
+        <div class="grid grid-sidebar">
+          <div class="field">
+            <label class="field__label" for="meet-lien">Lien de la réunion Google Meet</label>
+            <input type="url" id="meet-lien" class="input--mono" placeholder="https://meet.google.com/abc-defg-hij">
+            <span class="field__hint">Depuis Google Agenda ou Meet : « Copier le lien de la visioconférence ».</span>
+          </div>
+          <div class="field">
+            <label class="field__label" for="meet-objet">Objet de la réunion</label>
+            <input type="text" id="meet-objet" placeholder="Comité de pilotage — septembre">
+          </div>
+        </div>
+
+        <div class="grid grid-sidebar" style="margin-top:var(--sp-3)">
+          <div class="field">
+            <label class="field__label" for="meet-doc">Google Doc du compte rendu <span class="text-muted">(facultatif)</span></label>
+            <input type="url" id="meet-doc" class="input--mono" placeholder="https://docs.google.com/document/d/…">
+            <span class="field__hint">Le document de notes produit pendant la réunion, ou un document que vous créez ensuite.</span>
+          </div>
+          <div class="field">
+            <label class="field__label" for="meet-date">Date</label>
+            <input type="date" id="meet-date" value="${esc(Dates.today())}">
+          </div>
+        </div>
+
+        <div class="row-tight" style="margin-top:var(--sp-4)">
+          <button class="btn btn--primary" data-action="enregistrer-meet">
+            <i class="fa-solid fa-link"></i> Créer le compte rendu de réunion
+          </button>
+          <button class="btn" data-action="ajouter-cr">
+            <i class="fa-solid fa-pen"></i> Compte rendu manuel
+          </button>
+          <span class="text-xs text-muted">Entretien téléphonique, échange écrit, réunion sur site…</span>
+        </div>
+
+        ${aVenir.length ? `
+          <div style="margin-top:var(--sp-4);padding-top:var(--sp-4);border-top:1px solid var(--border)">
+            <div class="text-xs text-muted fw-800" style="text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">
+              Réunions du planning
+            </div>
+            <div class="stack-xs">
+              ${aVenir.map((e) => {
+                const traite = liste.some((cr) => cr.objet === e.titre);
+                const meet = urlSure(e.lien);
+                return `<div class="file-row">
+                    <div class="file-icon" style="color:var(--info-500)"><i class="fa-solid fa-video"></i></div>
+                    <div class="grow">
+                      <div class="text-sm fw-800">${esc(e.titre)}</div>
+                      <div class="text-xs text-muted">${esc(Dates.format(e.date))}${e.heure ? ' · ' + esc(e.heure) : ''}</div>
+                    </div>
+                    ${meet ? `<a class="btn btn--sm" href="${esc(meet)}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-video"></i> Rejoindre</a>` : ''}
+                    ${traite
+                      ? badge('Compte rendu fait', 'ok', 'fa-solid fa-circle-check')
+                      : `<button class="btn btn--sm btn--primary" data-action="cr-depuis-evenement" data-id="${esc(e.id)}">
+                           <i class="fa-solid fa-plus"></i> Compte rendu
+                         </button>`}
+                  </div>`;
+              }).join('')}
+            </div>
+          </div>` : ''}
+      </div>` : ''}
+
+      <div class="card">
+        <div class="card__head">
+          <div>
+            <h2 class="card__title"><i class="fa-solid fa-clipboard-check"></i> Comptes rendus & relevés de décisions</h2>
+            <p class="card__subtitle">Traçabilité des échanges et des décisions prises tout au long du projet.</p>
+          </div>
+          <span class="badge badge--neutre">${liste.length} compte${liste.length > 1 ? 's' : ''} rendu${liste.length > 1 ? 's' : ''}</span>
         </div>
 
         ${liste.length ? `
-        <div class="table-wrap">
-          <table class="table">
-            <thead><tr><th>Date</th><th>Objet</th><th>Participants</th><th>Décisions</th><th>Statut</th></tr></thead>
-            <tbody>
-              ${liste.map((cr) => `
-                <tr>
-                  <td class="nowrap table__muted">${esc(Dates.format(cr.date))}</td>
-                  <td class="table__strong">${esc(cr.objet)}</td>
-                  <td class="table__muted">${esc(cr.participants)}</td>
-                  <td>${esc(cr.decisions)}</td>
-                  <td>${badge('Validé', 'ok', 'fa-solid fa-circle-check')}</td>
-                </tr>`).join('')}
-            </tbody>
-          </table>
-        </div>` : empty('Aucun compte rendu', 'Les relevés de décisions apparaîtront ici.', 'fa-solid fa-clipboard')}
+          <div class="stack-sm">
+            ${liste.map((cr) => {
+              const t = TYPES_ECHANGE[cr.type] || TYPES_ECHANGE.visio;
+              const meet = urlSure(cr.lienMeet);
+              const doc = urlSure(cr.lienDoc);
+              return `
+              <article class="card card--flat">
+                <div class="spread" style="margin-bottom:8px">
+                  <div class="row-tight">
+                    ${badge(t.label, t.couleur, t.icone)}
+                    <span class="text-xs text-muted">${esc(Dates.formatLong(cr.date))}</span>
+                  </div>
+                  <div class="row-tight">
+                    ${doc ? `<a class="btn btn--sm" href="${esc(doc)}" target="_blank" rel="noopener noreferrer"><i class="fa-brands fa-google-drive"></i> Google Doc</a>` : ''}
+                    ${meet ? `<a class="btn btn--sm" href="${esc(meet)}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-video"></i> Lien Meet</a>` : ''}
+                    ${expert ? `
+                      <button class="btn btn--ghost btn--sm" data-action="modifier-cr" data-id="${esc(cr.id)}" title="Modifier"><i class="fa-solid fa-pen"></i></button>
+                      <button class="btn btn--ghost btn--sm" data-action="supprimer-cr" data-id="${esc(cr.id)}" title="Supprimer"><i class="fa-solid fa-trash"></i></button>` : ''}
+                  </div>
+                </div>
+                <h4>${esc(cr.objet)}</h4>
+                ${cr.participants ? `<p class="text-xs text-muted" style="margin-top:3px"><i class="fa-solid fa-users"></i> ${esc(cr.participants)}</p>` : ''}
+                ${cr.decisions
+                  ? `<p class="text-sm text-soft" style="margin-top:10px">${esc(cr.decisions)}</p>`
+                  : `<p class="text-sm text-muted" style="margin-top:10px"><em>Décisions non encore saisies${doc ? ' — voir le Google Doc' : ''}.</em></p>`}
+              </article>`;
+            }).join('')}
+          </div>`
+          : empty('Aucun compte rendu',
+                  expert ? 'Collez un lien Meet ci-dessus, ou créez un compte rendu manuel.' : 'Les relevés de décisions apparaîtront ici.',
+                  'fa-solid fa-clipboard')}
       </div>
     </section>`;
   },
@@ -1424,10 +1644,13 @@ const Views = {
       <div class="card">
         <div class="card__head">
           <div>
-            <h2 class="card__title"><i class="fa-solid fa-diagram-project"></i> Portefeuille de projets</h2>
-            <p class="card__subtitle">Vue consolidée de tous les accompagnements en cours. Cliquez sur une ligne pour piloter le projet.</p>
+            <h2 class="card__title"><i class="fa-solid fa-diagram-project"></i> Portefeuille clients</h2>
+            <p class="card__subtitle">Vue consolidée de tous les accompagnements en cours.</p>
           </div>
-          <button class="btn btn--primary btn--sm" data-action="nouveau-projet"><i class="fa-solid fa-plus"></i> Nouveau projet</button>
+          <div class="row-tight">
+            <button class="btn btn--sm" data-action="aller" data-route="planning"><i class="fa-solid fa-calendar-days"></i> Planning général</button>
+            <button class="btn btn--primary btn--sm" data-action="fiche-client"><i class="fa-solid fa-plus"></i> Nouveau client</button>
+          </div>
         </div>
 
         <div class="grid grid-4" style="margin-bottom:var(--sp-5)">
@@ -1450,51 +1673,72 @@ const Views = {
           </div></div>
         </div>
 
-        <div class="table-wrap">
-          <table class="table table--wide">
-            <thead>
-              <tr><th>Projet</th><th>Territoire</th><th>Formule</th><th>Avancement</th><th>En attente</th><th>Référent</th><th></th></tr>
-            </thead>
-            <tbody>
-              ${projets.map((p) => {
-                const f = FORMULES[p.formule];
-                const pct = Store.avancement(p.id);
-                const attente = Store.actionsClient(p.id).length + Store.signaturesEnAttente(p.id).length;
-                const actif = p.id === Store.state.projetActifId;
-                return `<tr ${actif ? 'style="background:color-mix(in srgb, var(--brand-500) 8%, transparent)"' : ''}>
-                    <td>
-                      <div class="table__strong">${esc(p.nom)} ${actif ? badge('Actif', 'brand') : ''}</div>
-                      <div class="table__muted">${esc(p.type)} · ${esc(p.reference)}</div>
-                    </td>
-                    <td class="table__muted">${esc(p.ville)}<br><span class="text-xs">${esc(p.departement)}</span></td>
-                    <td>
-                      <div class="offre-pills" role="group" aria-label="Formule de ${esc(p.nom)}">
-                        ${Object.values(FORMULES).map((x) => `
-                          <button type="button" class="offre-pill ${x.code === p.formule ? 'is-active' : ''}"
-                                  style="--teinte:${esc(x.couleur)}"
-                                  data-action="appliquer-formule" data-formule="${esc(x.code)}" data-projet="${esc(p.id)}"
-                                  aria-pressed="${x.code === p.formule}"
-                                  title="${esc(x.nom)} — ${esc(x.prixLabel)}">${esc(x.code)}</button>`).join('')}
-                      </div>
-                      <div class="table__muted" style="margin-top:5px">${esc(f.nom)}</div>
-                    </td>
-                    <td style="min-width:130px">
-                      <div class="row-tight" style="justify-content:space-between;margin-bottom:4px">
-                        <span class="text-xs fw-800">${pct} %</span>
-                        <span class="text-xs text-muted">${Store.prestations(p.id).length} prest.</span>
-                      </div>
-                      ${progressBar(pct, 'sm')}
-                    </td>
-                    <td>${attente ? badge(String(attente), 'warn', 'fa-solid fa-hourglass-half') : badge('—', 'neutre')}</td>
-                    <td class="table__muted">${esc(p.consultant.nom)}</td>
-                    <td class="nowrap">
-                      <button class="btn btn--sm" data-action="ouvrir-projet" data-id="${esc(p.id)}"><i class="fa-solid fa-arrow-right"></i> Piloter</button>
-                      ${projets.length > 1 ? `<button class="btn btn--ghost btn--sm" data-action="supprimer-projet" data-id="${esc(p.id)}" aria-label="Supprimer ${esc(p.nom)}"><i class="fa-solid fa-trash"></i></button>` : ''}
-                    </td>
-                  </tr>`;
-              }).join('')}
-            </tbody>
-          </table>
+        <h3 class="section-title"><i class="fa-solid fa-address-card"></i> Clients accompagnés</h3>
+        <p class="text-xs text-muted" style="margin:-6px 0 14px">
+          Cliquez sur une étiquette pour ouvrir la vue d'ensemble du projet et le piloter.
+        </p>
+
+        <div class="grid grid-3">
+          ${projets.map((p) => {
+            const f = FORMULES[p.formule];
+            const pct = Store.avancement(p.id);
+            const attente = Store.actionsClient(p.id).length + Store.signaturesEnAttente(p.id).length;
+            const retard = Store.enRetard(p.id).length;
+            const actif = p.id === Store.state.projetActifId;
+
+            return `
+            <article class="etiquette ${actif ? 'is-active' : ''}" style="--teinte:${esc(f.couleur)}">
+              <button class="etiquette__zone" data-action="ouvrir-projet" data-id="${esc(p.id)}"
+                      aria-label="Ouvrir le projet ${esc(p.nom)}">
+                <span class="etiquette__entete">
+                  <span class="etiquette__pastille"><i class="fa-solid fa-${p.type === 'MSP' ? 'house-medical' : 'hospital'}"></i></span>
+                  <span class="grow" style="min-width:0">
+                    <span class="etiquette__nom">${esc(p.nom)}</span>
+                    <span class="etiquette__lieu">${esc(p.ville)} · ${esc(p.departement)}</span>
+                  </span>
+                  ${actif ? badge('En cours', 'brand') : ''}
+                </span>
+
+                <span class="etiquette__client">
+                  <i class="fa-solid fa-user"></i> ${esc(p.client?.nom || 'Porteur non renseigné')}
+                  ${p.client?.fonction ? `<span class="text-muted"> · ${esc(p.client.fonction)}</span>` : ''}
+                </span>
+
+                <span class="etiquette__offre">
+                  <span class="badge badge--accent"><i class="fa-solid fa-tag"></i> ${esc(f.code)} — ${esc(f.nom)}</span>
+                  ${attente ? badge(`${attente} en attente`, 'warn', 'fa-solid fa-hourglass-half') : ''}
+                  ${retard ? badge(`${retard} en retard`, 'danger', 'fa-solid fa-triangle-exclamation') : ''}
+                </span>
+
+                <span class="etiquette__avancement">
+                  <span class="row-tight" style="justify-content:space-between;margin-bottom:4px">
+                    <span class="text-xs text-muted">${Store.prestations(p.id).filter((x) => x.etat.statut === 'valide').length} / ${Store.prestations(p.id).length} prestations</span>
+                    <span class="text-xs fw-800">${pct} %</span>
+                  </span>
+                  ${progressBar(pct, 'sm')}
+                </span>
+              </button>
+
+              <div class="etiquette__pied">
+                <div class="offre-pills" role="group" aria-label="Formule de ${esc(p.nom)}">
+                  ${Object.values(FORMULES).map((x) => `
+                    <button type="button" class="offre-pill ${x.code === p.formule ? 'is-active' : ''}"
+                            style="--teinte:${esc(x.couleur)}"
+                            data-action="appliquer-formule" data-formule="${esc(x.code)}" data-projet="${esc(p.id)}"
+                            aria-pressed="${x.code === p.formule}"
+                            title="${esc(x.nom)} — ${esc(x.prixLabel)}">${esc(x.code)}</button>`).join('')}
+                </div>
+                <div class="row-tight">
+                  <button class="btn btn--ghost btn--sm" data-action="fiche-client" data-id="${esc(p.id)}" title="Modifier la fiche client">
+                    <i class="fa-solid fa-address-card"></i> Fiche
+                  </button>
+                  ${projets.length > 1
+                    ? `<button class="btn btn--ghost btn--sm" data-action="supprimer-projet" data-id="${esc(p.id)}" aria-label="Supprimer ${esc(p.nom)}"><i class="fa-solid fa-trash"></i></button>`
+                    : ''}
+                </div>
+              </div>
+            </article>`;
+          }).join('')}
         </div>
       </div>
     </section>`;

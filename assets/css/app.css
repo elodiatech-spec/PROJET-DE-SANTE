@@ -700,6 +700,53 @@ select { cursor: pointer; }
   background: var(--teinte); border-color: var(--teinte); color: #fff;
 }
 
+/* Étiquette client : carte cliquable du portefeuille.
+   `--teinte` reprend la couleur de la formule souscrite. */
+.etiquette {
+  display: flex; flex-direction: column;
+  border-radius: var(--r-lg); overflow: hidden;
+  background: var(--surface); border: 1px solid var(--border);
+  border-top: 3px solid var(--teinte, var(--brand-500));
+  transition: all .18s var(--ease);
+}
+.etiquette:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); border-color: var(--border-strong); }
+.etiquette.is-active {
+  border-color: var(--teinte);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--teinte) 20%, transparent);
+}
+
+.etiquette__zone {
+  display: flex; flex-direction: column; gap: 10px;
+  padding: var(--sp-4); text-align: left; width: 100%;
+}
+.etiquette__entete { display: flex; align-items: flex-start; gap: 10px; }
+.etiquette__pastille {
+  width: 34px; height: 34px; border-radius: var(--r-sm); flex: none;
+  display: flex; align-items: center; justify-content: center; font-size: .85rem;
+  background: color-mix(in srgb, var(--teinte) 16%, transparent); color: var(--teinte);
+}
+.etiquette__nom {
+  display: block; font-size: .92rem; font-weight: 800; line-height: 1.25;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.etiquette__lieu {
+  display: block; font-size: .72rem; color: var(--text-muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.etiquette__client {
+  display: block; font-size: .76rem; color: var(--text-soft);
+  padding: 7px 10px; border-radius: var(--r-sm); background: var(--surface-2);
+}
+.etiquette__client i { color: var(--text-muted); margin-right: 4px; }
+.etiquette__offre { display: flex; flex-wrap: wrap; gap: 5px; }
+.etiquette__avancement { display: block; }
+
+.etiquette__pied {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2);
+  padding: 10px var(--sp-4); flex-wrap: wrap;
+  background: var(--surface-2); border-top: 1px solid var(--border);
+}
+
 /* --------------------------------------------------------------------------
    15. Chronologie / échéances
    -------------------------------------------------------------------------- */

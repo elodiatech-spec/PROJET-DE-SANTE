@@ -350,6 +350,10 @@ const App = {
       if (e.target.id === 'project-selector') Store.setProjet(e.target.value);
       if (['filtre-lot', 'filtre-statut'].includes(e.target.id)) this.majFiltres();
       if (['doc-cat'].includes(e.target.id)) this.majFiltresDocs();
+      if (e.target.id === 'planning-projet') {
+        this.filtres = { ...this.filtres, projet: e.target.value };
+        this.renderVue();
+      }
     });
 
     // --- Saisies filtrantes ---
@@ -789,33 +793,125 @@ const App = {
       toast(`Aucun fichier n'est encore rattaché au livrable « ${p?.livrable || ''} ».`, 'warn');
     },
 
-    /* --- Planning & comptes rendus --- */
+    /* --- Planning --- */
+    'portee-planning'(el) {
+      App.filtres = { ...App.filtres, portee: el.dataset.portee, projet: '' };
+      App.renderVue();
+    },
+
     'ajouter-evenement'() {
       Modal.formulaire({
         titre: 'Nouvel événement',
+        soustitre: "Un lien de visioconférence rend l'événement rejoignable d'un clic, pour vous comme pour le client.",
         champs: [
           { id: 'titre', label: 'Intitulé', type: 'text', requis: true, placeholder: 'Comité de pilotage' },
           { id: 'date', label: 'Date', type: 'date', requis: true, valeur: Dates.today() },
           { id: 'heure', label: 'Heure', type: 'text', placeholder: '14:30' },
           { id: 'lieu', label: 'Lieu', type: 'text', placeholder: 'Visioconférence' },
-          { id: 'type', label: 'Type', type: 'select', options: [
-            { v: 'reunion', l: 'Réunion' }, { v: 'jalon', l: 'Jalon' },
-            { v: 'livrable', l: 'Livraison' }, { v: 'formation', l: 'Formation' }] },
+          { id: 'type', label: 'Type', type: 'select',
+            options: Object.values(TYPES_EVENEMENT).map((t) => ({ v: t.id, l: t.label })) },
+          { id: 'lien', label: 'Lien Google Meet (facultatif)', type: 'url', placeholder: 'https://meet.google.com/…' },
         ],
         onSubmit: (v) => { Store.ajouterEvenement(v); toast('Événement ajouté au planning.', 'ok'); },
       });
     },
 
-    'ajouter-cr'() {
+    'supprimer-evenement'(el) {
+      const evt = Store.liste('evenements').find((e) => e.id === el.dataset.id);
+      Modal.confirmer({
+        titre: 'Retirer du planning',
+        texte: `« ${evt?.titre || 'Cet événement'} » sera supprimé du planning du projet.`,
+        libelle: 'Retirer',
+        danger: true,
+        onConfirm: () => { Store.supprimerEvenement(el.dataset.id); toast('Événement retiré.', 'ok'); },
+      });
+    },
+
+    /* --- Comptes rendus --- */
+
+    /** Crée un compte rendu à partir du lien Meet saisi dans la vue. */
+    'enregistrer-meet'() {
+      const lien = document.getElementById('meet-lien').value.trim();
+      const objet = document.getElementById('meet-objet').value.trim();
+      const doc = document.getElementById('meet-doc').value.trim();
+      const date = document.getElementById('meet-date').value || Dates.today();
+
+      if (!lien) { toast('Collez d\'abord le lien de la réunion.', 'warn'); return; }
+      if (!/^https?:\/\//i.test(lien)) { toast('Le lien doit commencer par https://', 'warn'); return; }
+
+      Store.ajouterCompteRendu({
+        date, type: 'visio',
+        objet: objet || `Réunion du ${Dates.format(date)}`,
+        participants: '',
+        decisions: '',
+        lienMeet: lien,
+        lienDoc: doc,
+      });
+
+      ['meet-lien', 'meet-objet', 'meet-doc'].forEach((id) => {
+        const champ = document.getElementById(id);
+        if (champ) champ.value = '';
+      });
+      toast('Compte rendu de réunion créé.', 'ok');
+    },
+
+    /** Prépare un compte rendu à partir d'une réunion déjà planifiée. */
+    'cr-depuis-evenement'(el) {
+      const evt = Store.liste('evenements').find((e) => e.id === el.dataset.id);
+      if (!evt) return;
+      App.actions['ajouter-cr'].call(App, null, null, {
+        date: evt.date, objet: evt.titre, lienMeet: evt.lien || '',
+        type: evt.lien ? 'visio' : 'presentiel',
+      });
+    },
+
+    'ajouter-cr'(el, e, prefill) {
+      const v = prefill || {};
       Modal.formulaire({
-        titre: 'Nouveau compte rendu',
+        titre: prefill ? 'Compte rendu de réunion' : 'Nouveau compte rendu',
+        soustitre: 'Pour une visio, un entretien téléphonique ou une réunion sur site.',
         champs: [
-          { id: 'date', label: 'Date de la réunion', type: 'date', requis: true, valeur: Dates.today() },
-          { id: 'objet', label: 'Objet', type: 'text', requis: true, placeholder: 'Comité de pilotage — septembre' },
+          { id: 'date', label: 'Date de l\'échange', type: 'date', requis: true, valeur: v.date || Dates.today() },
+          { id: 'objet', label: 'Objet', type: 'text', requis: true, valeur: v.objet || '', placeholder: 'Comité de pilotage — septembre' },
+          { id: 'type', label: 'Nature de l\'échange', type: 'select', valeur: v.type || 'visio',
+            options: Object.values(TYPES_ECHANGE).map((t) => ({ v: t.id, l: t.label })) },
           { id: 'participants', label: 'Participants', type: 'text', placeholder: 'Dr Dubois, Jean-Philippe B.' },
-          { id: 'decisions', label: 'Décisions prises', type: 'textarea', requis: true },
+          { id: 'decisions', label: 'Décisions et points retenus', type: 'textarea' },
+          { id: 'lienMeet', label: 'Lien de la réunion (facultatif)', type: 'url', valeur: v.lienMeet || '', placeholder: 'https://meet.google.com/…' },
+          { id: 'lienDoc', label: 'Google Doc du compte rendu (facultatif)', type: 'url', placeholder: 'https://docs.google.com/document/d/…' },
         ],
-        onSubmit: (v) => { Store.ajouterCompteRendu(v); toast('Compte rendu enregistré.', 'ok'); },
+        onSubmit: (valeurs) => { Store.ajouterCompteRendu(valeurs); toast('Compte rendu enregistré.', 'ok'); },
+      });
+    },
+
+    'modifier-cr'(el) {
+      const cr = Store.liste('comptesRendus').find((c) => c.id === el.dataset.id);
+      if (!cr) return;
+      Modal.formulaire({
+        titre: 'Modifier le compte rendu',
+        champs: [
+          { id: 'date', label: 'Date', type: 'date', requis: true, valeur: cr.date },
+          { id: 'objet', label: 'Objet', type: 'text', requis: true, valeur: cr.objet },
+          { id: 'type', label: 'Nature de l\'échange', type: 'select', valeur: cr.type || 'visio',
+            options: Object.values(TYPES_ECHANGE).map((t) => ({ v: t.id, l: t.label })) },
+          { id: 'participants', label: 'Participants', type: 'text', valeur: cr.participants || '' },
+          { id: 'decisions', label: 'Décisions et points retenus', type: 'textarea', valeur: cr.decisions || '' },
+          { id: 'lienMeet', label: 'Lien de la réunion', type: 'url', valeur: cr.lienMeet || '' },
+          { id: 'lienDoc', label: 'Google Doc du compte rendu', type: 'url', valeur: cr.lienDoc || '' },
+        ],
+        libelle: 'Enregistrer',
+        onSubmit: (v) => { Store.majCompteRendu(cr.id, v); toast('Compte rendu mis à jour.', 'ok'); },
+      });
+    },
+
+    'supprimer-cr'(el) {
+      const cr = Store.liste('comptesRendus').find((c) => c.id === el.dataset.id);
+      Modal.confirmer({
+        titre: 'Supprimer le compte rendu',
+        texte: `« ${cr?.objet || 'Ce compte rendu'} » sera définitivement supprimé.`,
+        libelle: 'Supprimer',
+        danger: true,
+        onConfirm: () => { Store.supprimerCompteRendu(el.dataset.id); toast('Compte rendu supprimé.', 'ok'); },
       });
     },
 
@@ -874,27 +970,38 @@ const App = {
       toast(el.value === '1' ? 'Module immobilier activé.' : 'Module immobilier désactivé.', 'ok');
     },
 
-    'nouveau-projet'() {
-      Modal.formulaire({
-        titre: 'Nouveau projet de santé',
-        soustitre: "La formule choisie détermine immédiatement le périmètre de l'accompagnement.",
-        champs: [
-          { id: 'nom', label: 'Nom de la structure', type: 'text', requis: true, placeholder: 'MSP du Morne-Rouge' },
-          { id: 'type', label: 'Type de structure', type: 'select', options: [
-            { v: 'MSP', l: 'Maison de santé pluriprofessionnelle' }, { v: 'CDS', l: 'Centre de santé' }] },
-          { id: 'formule', label: 'Formule souscrite', type: 'select', options: Object.values(FORMULES).map((f) => ({ v: f.code, l: `${f.code} — ${f.nom} (${f.prixLabel})` })) },
-          { id: 'ville', label: 'Commune', type: 'text', requis: true, placeholder: 'Le Morne-Rouge' },
-          { id: 'departement', label: 'Territoire', type: 'text', placeholder: 'Martinique (972)' },
-          { id: 'clientNom', label: 'Porteur du projet', type: 'text', requis: true, placeholder: 'Dr …' },
-          { id: 'clientFonction', label: 'Fonction', type: 'text', placeholder: 'Médecin généraliste · porteur du projet' },
-          { id: 'clientEmail', label: 'Courriel', type: 'email' },
-          { id: 'consultant', label: 'Référent ElodiaTech', type: 'text', placeholder: 'Jean-Philippe B.' },
-          { id: 'dateDebut', label: 'Date de démarrage', type: 'date', valeur: Dates.today() },
-        ],
-        libelle: 'Créer le projet',
+    /**
+     * Fiche client — création si aucun identifiant n'est fourni, modification sinon.
+     * Les mêmes champs servent dans les deux cas.
+     */
+    'fiche-client'(el) {
+      const projetId = el.dataset.id;
+      const projet = projetId ? Store.projet(projetId) : null;
+
+      // La liste des formules est construite ici pour rester à jour.
+      const groupes = FICHE_CLIENT.map((g) => ({
+        ...g,
+        champs: g.champs.map((c) => (c.chemin === 'formule'
+          ? { ...c, options: Object.values(FORMULES).map((f) => ({ v: f.code, l: `${f.code} — ${f.nom} · ${f.prixLabel}` })) }
+          : c)),
+      }));
+
+      Modal.fiche({
+        titre: projet ? `Fiche client — ${projet.nom}` : 'Nouveau client',
+        soustitre: projet
+          ? "Toute modification est enregistrée dans la feuille Google Sheets."
+          : "La formule choisie détermine immédiatement le périmètre de l'accompagnement et les modules visibles par le client.",
+        groupes,
+        valeurs: projet || { dateDebut: Dates.today(), type: 'MSP', formule: 'F1' },
+        libelle: projet ? 'Enregistrer la fiche' : 'Créer le client',
         onSubmit: (v) => {
-          Store.ajouterProjet(v);
-          toast(`Projet « ${v.nom} » créé.`, 'ok');
+          if (projet) {
+            Store.majFicheClient(projet.id, v);
+            toast('Fiche client enregistrée.', 'ok');
+          } else {
+            Store.ajouterProjet(v);
+            toast(`Client « ${v.nom} » créé. Son espace est prêt.`, 'ok');
+          }
         },
       });
     },
@@ -1019,9 +1126,9 @@ const Modal = {
           const id = `mf-${c.id}`;
           let controle;
           if (c.type === 'select') {
-            controle = `<select id="${id}" name="${esc(c.id)}">${c.options.map((o) => `<option value="${esc(o.v)}">${esc(o.l)}</option>`).join('')}</select>`;
+            controle = `<select id="${id}" name="${esc(c.id)}">${c.options.map((o) => `<option value="${esc(o.v)}" ${String(o.v) === String(c.valeur) ? 'selected' : ''}>${esc(o.l)}</option>`).join('')}</select>`;
           } else if (c.type === 'textarea') {
-            controle = `<textarea id="${id}" name="${esc(c.id)}" ${c.requis ? 'required' : ''} placeholder="${esc(c.placeholder || '')}"></textarea>`;
+            controle = `<textarea id="${id}" name="${esc(c.id)}" ${c.requis ? 'required' : ''} placeholder="${esc(c.placeholder || '')}">${esc(c.valeur || '')}</textarea>`;
           } else {
             controle = `<input type="${esc(c.type || 'text')}" id="${id}" name="${esc(c.id)}" ${c.requis ? 'required' : ''}
                           value="${esc(c.valeur || '')}" placeholder="${esc(c.placeholder || '')}">`;
@@ -1046,6 +1153,65 @@ const Modal = {
       const valeurs = Object.fromEntries(new FormData(form).entries());
       this.close(true);
       onSubmit(valeurs);
+    };
+    document.getElementById('modal-submit').addEventListener('click', valider);
+    form.addEventListener('submit', (e) => { e.preventDefault(); valider(); });
+  },
+
+  /**
+   * Formulaire structuré en sections, alimenté par des chemins pointés
+   * (« client.nom »). Sert à la fiche client, en création comme en modification.
+   */
+  fiche({ titre, soustitre, groupes, valeurs, libelle, onSubmit }) {
+    const lire = (chemin) => chemin.split('.')
+      .reduce((noeud, seg) => (noeud == null ? undefined : noeud[seg]), valeurs);
+
+    const corps = `<form id="modal-form" class="stack">
+        ${groupes.map((g) => `
+          <fieldset style="border:0">
+            <legend class="section-title" style="margin-bottom:10px">
+              <i class="fa-solid fa-circle-dot"></i> ${esc(g.groupe)}
+            </legend>
+            <div class="grid grid-2">
+              ${g.champs.map((c) => {
+                const id = `fc-${c.chemin.replace(/\./g, '-')}`;
+                const val = lire(c.chemin);
+                let controle;
+
+                if (c.type === 'select') {
+                  controle = `<select id="${id}" name="${esc(c.chemin)}">
+                      ${(c.options || []).map((o) => `<option value="${esc(o.v)}" ${String(o.v) === String(val ?? '') ? 'selected' : ''}>${esc(o.l)}</option>`).join('')}
+                    </select>`;
+                } else if (c.type === 'textarea') {
+                  controle = `<textarea id="${id}" name="${esc(c.chemin)}" placeholder="${esc(c.placeholder || '')}">${esc(val || '')}</textarea>`;
+                } else {
+                  controle = `<input type="${esc(c.type || 'text')}" id="${id}" name="${esc(c.chemin)}"
+                                ${c.requis ? 'required' : ''} value="${esc(val ?? '')}"
+                                placeholder="${esc(c.placeholder || '')}">`;
+                }
+
+                return `<div class="field" ${c.type === 'textarea' ? 'style="grid-column:1 / -1"' : ''}>
+                    <label class="field__label" for="${id}">${esc(c.label)}${c.requis ? ' *' : ''}</label>
+                    ${controle}
+                  </div>`;
+              }).join('')}
+            </div>
+          </fieldset>`).join('')}
+      </form>`;
+
+    this.open({
+      titre, soustitre, corps, large: true,
+      actions: `
+        <button class="btn" data-action="fermer-modal">Annuler</button>
+        <button class="btn btn--primary" id="modal-submit">${esc(libelle || 'Enregistrer')}</button>`,
+    });
+
+    const form = document.getElementById('modal-form');
+    const valider = () => {
+      if (!form.reportValidity()) return;
+      const saisies = Object.fromEntries(new FormData(form).entries());
+      this.close(true);
+      onSubmit(saisies);
     };
     document.getElementById('modal-submit').addEventListener('click', valider);
     form.addEventListener('submit', (e) => { e.preventDefault(); valider(); });

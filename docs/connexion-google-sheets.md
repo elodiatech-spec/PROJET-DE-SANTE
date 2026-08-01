@@ -49,12 +49,21 @@ Les 11 onglets sont créés, mis en forme et remplis :
 | Onglet | Contenu |
 |---|---|
 | `Lisez-moi` | Consignes d'utilisation |
-| `Projets` | Un projet par ligne — c'est ici que se règle la formule (F1/F2/F3) |
+| `Projets` | Un projet par ligne — fiche client, formule (F1/F2/F3), notes internes |
 | `Prestations` | Une ligne par prestation et par projet, avec statut et échéance |
 | `Catalogue` | Référence des 34 prestations et de leur rattachement aux formules |
 | `Documents`, `Signatures`, `Messages`, `Evenements`, `ComptesRendus`, `Financements`, `Partenaires` | Données de suivi |
 
 > Pour partir d'une base vierge, choisissez plutôt **« Créer les onglets vides seulement »**.
+
+### Mettre à jour la structure après une évolution du script
+
+Quand une nouvelle version du script apporte des colonnes supplémentaires, **n'utilisez pas
+« Initialiser la base »** : elle reconstruit tout et efface vos données.
+
+Utilisez **ElodiaTech → Mettre à jour la structure (sans perte de données)**. La commande
+ajoute les colonnes et les onglets manquants, laisse le reste intact, et vous liste ce qu'elle
+a fait. Elle est sans effet si tout est déjà en place, donc sans risque à relancer.
 
 ---
 

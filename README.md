@@ -178,10 +178,18 @@ l'état attendu. Aucune donnée réelle n'est touchée.
 - Bibliothèque des livrables par lot
 
 **Collaboration**
-- Messagerie, planning, comptes rendus de réunions
+- Messagerie
+- Planning du projet, et pour l'expert **planning général** cumulant les échéances
+  de tout le portefeuille, filtrable par client
+- Événements porteurs d'un lien Google Meet, rejoignable d'un clic par le client
+- Comptes rendus typés — visioconférence, entretien téléphonique, réunion sur site,
+  échange écrit — portant le lien de la réunion et celui du Google Doc de notes.
+  Un lien Meet collé crée le compte rendu ; la saisie manuelle reste possible.
 
 **Console expert**
-- Portefeuille consolidé, création et suppression de projets
+- Portefeuille en **étiquettes clients** : un clic ouvre la vue d'ensemble du projet
+- **Fiche client** complète, créable et modifiable : structure, porteur, référent,
+  cadrage, notes internes
 - Attribution des formules et des options
 - Paramètres et source de données
 

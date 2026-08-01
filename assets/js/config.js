@@ -266,7 +266,7 @@ const MODULES = [
 
   { id: 'faq',          pole: 'support',   label: 'FAQ réglementaire',       icone: 'fa-solid fa-circle-question',      formules: null },
 
-  { id: 'admin-projets',pole: 'console',   label: 'Portefeuille de projets', icone: 'fa-solid fa-diagram-project',      formules: null, roles: ['expert'] },
+  { id: 'admin-projets',pole: 'console',   label: 'Portefeuille clients',    icone: 'fa-solid fa-address-card',         formules: null, roles: ['expert'] },
   { id: 'admin-offres', pole: 'console',   label: 'Offres & périmètres',     icone: 'fa-solid fa-tags',                 formules: null, roles: ['expert'] },
   { id: 'admin-params', pole: 'console',   label: 'Paramètres & données',    icone: 'fa-solid fa-sliders',              formules: null, roles: ['expert'] },
 ];
@@ -404,3 +404,54 @@ const FAQ = [
 
 /** Catégories de documents du coffre-fort. */
 const CATEGORIES_DOC = ['Projet', 'Juridique', 'ARS', 'Finances', 'Immobilier', 'Équipe', 'Partenariats', 'Identité'];
+
+/** Nature d'un échange donnant lieu à un compte rendu. */
+const TYPES_ECHANGE = {
+  visio:      { id: 'visio',      label: 'Visioconférence', icone: 'fa-solid fa-video',        couleur: 'info' },
+  telephone:  { id: 'telephone',  label: 'Entretien téléphonique', icone: 'fa-solid fa-phone', couleur: 'brand' },
+  presentiel: { id: 'presentiel', label: 'Réunion sur site', icone: 'fa-solid fa-users',       couleur: 'accent' },
+  ecrit:      { id: 'ecrit',      label: 'Échange écrit',    icone: 'fa-solid fa-envelope',    couleur: 'neutre' },
+};
+
+/** Types d'événements du planning. */
+const TYPES_EVENEMENT = {
+  reunion:   { id: 'reunion',   label: 'Réunion',    icone: 'fa-solid fa-video' },
+  jalon:     { id: 'jalon',     label: 'Jalon',      icone: 'fa-solid fa-flag' },
+  livrable:  { id: 'livrable',  label: 'Livraison',  icone: 'fa-solid fa-box' },
+  formation: { id: 'formation', label: 'Formation',  icone: 'fa-solid fa-chalkboard-user' },
+};
+
+/**
+ * Champs de la fiche client.
+ * `groupe` structure le formulaire, `chemin` désigne l'emplacement de la
+ * valeur dans l'objet projet (notation pointée pour les sous-objets).
+ */
+const FICHE_CLIENT = [
+  { groupe: 'Structure', champs: [
+    { chemin: 'nom',         label: 'Nom de la structure', type: 'text', requis: true, placeholder: 'MSP du Morne-Rouge' },
+    { chemin: 'type',        label: 'Type', type: 'select', options: [
+      { v: 'MSP', l: 'Maison de santé pluriprofessionnelle' },
+      { v: 'CDS', l: 'Centre de santé' }] },
+    { chemin: 'reference',   label: 'Référence interne', type: 'text', placeholder: 'MSP-972-0048' },
+    { chemin: 'ville',       label: 'Commune', type: 'text', requis: true, placeholder: 'Le Morne-Rouge' },
+    { chemin: 'departement', label: 'Territoire', type: 'text', placeholder: 'Martinique (972)' },
+    { chemin: 'adresse',     label: 'Adresse', type: 'text', placeholder: '12 rue des Écoles, 97260…' },
+  ]},
+  { groupe: 'Porteur du projet', champs: [
+    { chemin: 'client.nom',      label: 'Nom et prénom', type: 'text', requis: true, placeholder: 'Dr Marie Léger' },
+    { chemin: 'client.fonction', label: 'Fonction', type: 'text', placeholder: 'Médecin généraliste · porteur du projet' },
+    { chemin: 'client.email',    label: 'Courriel', type: 'email', placeholder: 'contact@exemple.fr' },
+    { chemin: 'client.tel',      label: 'Téléphone', type: 'text', placeholder: '0596 00 00 00' },
+  ]},
+  { groupe: 'Accompagnement', champs: [
+    { chemin: 'formule',           label: 'Formule souscrite', type: 'select', options: null }, // rempli dynamiquement
+    { chemin: 'consultant.nom',    label: 'Référent ElodiaTech', type: 'text', placeholder: 'Jean-Philippe B.' },
+    { chemin: 'consultant.email',  label: 'Courriel du référent', type: 'email', placeholder: 'prenom@elodiatech.com' },
+    { chemin: 'dateDebut',         label: 'Date de démarrage', type: 'date' },
+  ]},
+  { groupe: 'Cadrage', champs: [
+    { chemin: 'equipe',  label: 'Professionnels dans l\'équipe', type: 'number', placeholder: '8' },
+    { chemin: 'surface', label: 'Surface des locaux (m²)', type: 'number', placeholder: '240' },
+    { chemin: 'notes',   label: 'Notes internes', type: 'textarea', placeholder: 'Contexte, points de vigilance, historique…' },
+  ]},
+];

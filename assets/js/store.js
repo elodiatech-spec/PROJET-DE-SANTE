@@ -6,6 +6,18 @@
 
 const STORAGE_KEY = 'elodiatech.plateforme.v4';
 
+/**
+ * Identifiant unique pour un élément créé dans l'interface.
+ * Le compteur est indispensable : deux créations dans la même milliseconde
+ * produiraient sinon le même identifiant, et la seconde écraserait la première
+ * dans la feuille Google Sheets.
+ */
+let _sequence = 0;
+function idUnique(prefixe) {
+  _sequence += 1;
+  return prefixe + Date.now().toString(36) + _sequence.toString(36);
+}
+
 /* --------------------------------------------------------------------------
    Utilitaires de date
    -------------------------------------------------------------------------- */
@@ -118,6 +130,7 @@ function demoProjets() {
       gdocProjetSante: 'https://docs.google.com/document/d/EXEMPLE_MSP_CARAIBES/edit',
       driveUrl: 'https://drive.google.com/drive/folders/EXEMPLE_MSP_CARAIBES',
       siteUrl: '',
+      notes: '',
       prestations: seedPrestations('F3', iso(9), 24, { P32: 'en_cours', P27: 'bloque' }, ['P27']),
     },
     {
@@ -140,6 +153,7 @@ function demoProjets() {
       gdocProjetSante: 'https://docs.google.com/document/d/EXEMPLE_MSP_ARCHIPEL/edit',
       driveUrl: 'https://drive.google.com/drive/folders/EXEMPLE_MSP_ARCHIPEL',
       siteUrl: '',
+      notes: '',
       prestations: seedPrestations('F2', iso(5), 15, {}, ['P21']),
     },
     {
@@ -162,6 +176,7 @@ function demoProjets() {
       gdocProjetSante: 'https://docs.google.com/document/d/EXEMPLE_CDS_NORD/edit',
       driveUrl: 'https://drive.google.com/drive/folders/EXEMPLE_CDS_NORD',
       siteUrl: '',
+      notes: '',
       prestations: seedPrestations('F1', iso(2), 7),
     },
     {
@@ -184,6 +199,7 @@ function demoProjets() {
       gdocProjetSante: '',
       driveUrl: '',
       siteUrl: '',
+      notes: '',
       prestations: seedPrestations('F2', iso(1), 4),
     },
   ];
@@ -253,33 +269,33 @@ function demoDonnees() {
     },
     evenements: {
       'msp-fort-de-france': [
-        { id: 'e1', titre: 'Comité de pilotage mensuel', type: 'reunion', date: j(4), heure: '14:30', lieu: 'Visioconférence' },
-        { id: 'e2', titre: 'Commission ARS — instruction du dossier', type: 'jalon', date: j(21), heure: '09:00', lieu: 'ARS Martinique' },
-        { id: 'e3', titre: 'Livraison de la maquette du site internet', type: 'livrable', date: j(12), heure: '', lieu: '' },
-        { id: 'e4', titre: 'Formation équipe — logiciel métier', type: 'formation', date: j(35), heure: '09:00', lieu: 'Sur site' },
+        { id: 'e1', titre: 'Comité de pilotage mensuel', type: 'reunion', date: j(4), heure: '14:30', lieu: 'Visioconférence', lien: 'https://meet.google.com/exemple-copil' },
+        { id: 'e2', titre: 'Commission ARS — instruction du dossier', type: 'jalon', date: j(21), heure: '09:00', lieu: 'ARS Martinique', lien: '' },
+        { id: 'e3', titre: 'Livraison de la maquette du site internet', type: 'livrable', date: j(12), heure: '', lieu: '', lien: '' },
+        { id: 'e4', titre: 'Formation équipe — logiciel métier', type: 'formation', date: j(35), heure: '09:00', lieu: 'Sur site', lien: '' },
       ],
       'msp-pointe-a-pitre': [
-        { id: 'e5', titre: 'Atelier rédaction — exercice coordonné', type: 'reunion', date: j(6), heure: '18:00', lieu: 'Visioconférence' },
-        { id: 'e6', titre: 'Clôture du dépôt FEDER', type: 'jalon', date: j(18), heure: '23:59', lieu: 'Portail e-Synergie' },
+        { id: 'e5', titre: 'Atelier rédaction — exercice coordonné', type: 'reunion', date: j(6), heure: '18:00', lieu: 'Visioconférence', lien: 'https://meet.google.com/exemple-atelier' },
+        { id: 'e6', titre: 'Clôture du dépôt FEDER', type: 'jalon', date: j(18), heure: '23:59', lieu: 'Portail e-Synergie', lien: '' },
       ],
       'cds-gros-morne': [
-        { id: 'e7', titre: 'Restitution du diagnostic territorial', type: 'reunion', date: j(9), heure: '10:00', lieu: 'Sur site' },
+        { id: 'e7', titre: 'Restitution du diagnostic territorial', type: 'reunion', date: j(9), heure: '10:00', lieu: 'Sur site', lien: '' },
       ],
       'cds-cayenne': [
-        { id: 'e8', titre: 'Rendez-vous découverte', type: 'reunion', date: j(3), heure: '15:00', lieu: 'Visioconférence' },
+        { id: 'e8', titre: 'Rendez-vous découverte', type: 'reunion', date: j(3), heure: '15:00', lieu: 'Visioconférence', lien: 'https://meet.google.com/exemple-decouverte' },
       ],
     },
     comptesRendus: {
       'msp-fort-de-france': [
-        { id: 'cr1', date: j(-12), objet: 'Comité de pilotage — juillet', participants: "Dr Dubois, Jean-Philippe B., ArchiSanté", decisions: "Validation des plans d'exécution. Lancement de la charte graphique.", statut: 'valide' },
-        { id: 'cr2', date: j(-40), objet: 'Cadrage des statuts SISA', participants: 'Associés, Jean-Philippe B., cabinet comptable', decisions: 'Modèle SISA approuvé à l\'unanimité des associés.', statut: 'valide' },
+        { id: 'cr1', date: j(-12), objet: 'Comité de pilotage — juillet', type: 'visio', participants: "Dr Dubois, Jean-Philippe B., ArchiSanté", decisions: "Validation des plans d'exécution. Lancement de la charte graphique.", statut: 'valide', lienMeet: 'https://meet.google.com/exemple-copil', lienDoc: 'https://docs.google.com/document/d/EXEMPLE_CR_JUILLET/edit' },
+        { id: 'cr2', date: j(-40), objet: 'Cadrage des statuts SISA', type: 'presentiel', participants: 'Associés, Jean-Philippe B., cabinet comptable', decisions: 'Modèle SISA approuvé à l\'unanimité des associés.', statut: 'valide', lienMeet: '', lienDoc: '' },
       ],
       'msp-pointe-a-pitre': [
-        { id: 'cr3', date: j(-20), objet: 'Restitution du diagnostic territorial', participants: 'Dr Mercier, équipe, Jean-Philippe B.', decisions: "Priorisation de trois axes : diabète, santé mentale, prévention.", statut: 'valide' },
+        { id: 'cr3', date: j(-20), objet: 'Restitution du diagnostic territorial', type: 'visio', participants: 'Dr Mercier, équipe, Jean-Philippe B.', decisions: "Priorisation de trois axes : diabète, santé mentale, prévention.", statut: 'valide', lienMeet: '', lienDoc: '' },
       ],
       'cds-gros-morne': [],
       'cds-cayenne': [
-        { id: 'cr4', date: j(-14), objet: 'Réunion de lancement', participants: 'Dr Anselme, Camille R.', decisions: 'Calendrier validé, démarrage du diagnostic territorial.', statut: 'valide' },
+        { id: 'cr4', date: j(-14), objet: 'Point téléphonique de lancement', type: 'telephone', participants: 'Dr Anselme, Camille R.', decisions: 'Calendrier validé, démarrage du diagnostic territorial.', statut: 'valide', lienMeet: '', lienDoc: '' },
       ],
     },
     financements: {
@@ -547,6 +563,36 @@ const Store = {
     return this.liste('signatures', projetId).filter((s) => s.statut === 'a_signer');
   },
 
+  /**
+   * Planning consolidé de tout le portefeuille, réservé à l'expert.
+   * Chaque entrée porte le projet dont elle provient.
+   */
+  planningGlobal() {
+    const entrees = [];
+
+    this.state.projets.forEach((p) => {
+      (this.state.evenements[p.id] || []).forEach((e) => {
+        entrees.push({
+          date: e.date, heure: e.heure || '', titre: e.titre, type: e.type,
+          lieu: e.lieu || '', lien: e.lien || '',
+          projetId: p.id, projetNom: p.nom, projetVille: p.ville,
+        });
+      });
+
+      this.prestations(p.id)
+        .filter((x) => x.etat.statut !== 'valide' && x.etat.echeance)
+        .forEach((x) => {
+          entrees.push({
+            date: x.etat.echeance, heure: '', titre: x.titre, type: 'prestation',
+            lieu: LOTS[x.lot].nom, lien: '',
+            projetId: p.id, projetNom: p.nom, projetVille: p.ville,
+          });
+        });
+    });
+
+    return entrees.sort((a, b) => (a.date + a.heure).localeCompare(b.date + b.heure));
+  },
+
   /** Prochaines échéances à venir (événements + prestations), triées. */
   echeances(projetId, limite = 6) {
     const aujourdhui = Dates.today();
@@ -702,33 +748,80 @@ const Store = {
     ]);
   },
 
+  /** Applique des valeurs en notation point\u00e9e (\u00ab client.nom \u00bb) \u00e0 un objet. */
+  _appliquerChemins(cible, valeurs) {
+    Object.keys(valeurs).forEach((chemin) => {
+      const segments = chemin.split('.');
+      let noeud = cible;
+      segments.slice(0, -1).forEach((seg) => {
+        if (typeof noeud[seg] !== 'object' || noeud[seg] === null) noeud[seg] = {};
+        noeud = noeud[seg];
+      });
+      noeud[segments[segments.length - 1]] = valeurs[chemin];
+    });
+    return cible;
+  },
+
+  /** Enregistre la fiche client d'un projet existant. */
+  majFicheClient(projetId, valeurs) {
+    let formuleAvant = null;
+    this.commit((s) => {
+      const p = s.projets.find((x) => x.id === projetId);
+      if (!p) return;
+      formuleAvant = p.formule;
+      const { formule, ...reste } = valeurs;
+      this._appliquerChemins(p, reste);
+      p.equipe = Number(p.equipe) || 0;
+      p.surface = Number(p.surface) || 0;
+    });
+
+    // La formule passe par son propre chemin : elle cr\u00e9e des prestations.
+    if (valeurs.formule && valeurs.formule !== formuleAvant) {
+      this.changerFormule(projetId, valeurs.formule);
+    } else {
+      const p = this.projet(projetId);
+      if (p) this.pousser('projets', p.id, this._ligneProjet(p));
+    }
+  },
+
   ajouterProjet(donnees) {
     const id = (donnees.nom || 'projet')
       .toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '-' + Date.now().toString(36).slice(-4);
+      .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '-' + idUnique('').slice(-5);
 
     this.commit((s) => {
       const debut = donnees.dateDebut || Dates.today();
-      s.projets.push({
+      const type = donnees.type || 'MSP';
+      const formule = donnees.formule || 'F1';
+
+      const projet = {
         id,
         nom: donnees.nom,
-        type: donnees.type || 'MSP',
-        ville: donnees.ville || '',
-        departement: donnees.departement || '',
+        type,
+        ville: '',
+        departement: '',
         adresse: '',
         coords: [14.6415, -61.0242],
-        reference: donnees.reference || `${(donnees.type || 'MSP')}-${Date.now().toString().slice(-6)}`,
-        formule: donnees.formule || 'F1',
-        options: { immobilier: donnees.formule === 'F3' },
-        modeleJuridique: donnees.type === 'CDS' ? 'assoc' : 'sisa',
+        reference: donnees.reference || `${type}-${Date.now().toString().slice(-6)}`,
+        formule,
+        options: { immobilier: formule === 'F3' },
+        modeleJuridique: type === 'CDS' ? 'assoc' : 'sisa',
         dateDebut: debut,
-        client: { nom: donnees.clientNom || '', fonction: donnees.clientFonction || '', email: donnees.clientEmail || '', tel: '' },
-        consultant: { nom: donnees.consultant || '', email: '' },
-        equipe: Number(donnees.equipe) || 0,
+        client: { nom: '', fonction: '', email: '', tel: '' },
+        consultant: { nom: '', email: '' },
+        equipe: 0,
         surface: 0,
-        gdocProjetSante: '', driveUrl: '', siteUrl: '',
-        prestations: seedPrestations(donnees.formule || 'F1', debut, 0),
-      });
+        gdocProjetSante: '', driveUrl: '', siteUrl: '', notes: '',
+        prestations: seedPrestations(formule, debut, 0),
+      };
+
+      // Les champs de la fiche arrivent en notation point\u00e9e.
+      const { formule: _ignore, type: _ignore2, ...reste } = donnees;
+      this._appliquerChemins(projet, reste);
+      projet.equipe = Number(projet.equipe) || 0;
+      projet.surface = Number(projet.surface) || 0;
+
+      s.projets.push(projet);
       ['documents', 'signatures', 'messages', 'evenements', 'comptesRendus', 'financements', 'partenaires']
         .forEach((cle) => { s[cle][id] = []; });
       s.projetActifId = id;
@@ -770,7 +863,7 @@ const Store = {
   },
 
   ajouterMessage(texte, auteur, role) {
-    const msg = { id: 'm' + Date.now(), auteur, role, texte, date: new Date().toISOString() };
+    const msg = { id: idUnique('m'), auteur, role, texte, date: new Date().toISOString() };
     this.commit((s) => {
       const id = s.projetActifId;
       if (!s.messages[id]) s.messages[id] = [];
@@ -780,7 +873,7 @@ const Store = {
   },
 
   ajouterDocument(doc) {
-    const item = { id: 'doc' + Date.now(), date: Dates.today(), ...doc };
+    const item = { id: idUnique('doc'), date: Dates.today(), ...doc };
     this.commit((s) => {
       const id = s.projetActifId;
       if (!s.documents[id]) s.documents[id] = [];
@@ -808,7 +901,11 @@ const Store = {
   },
 
   ajouterEvenement(evt) {
-    const item = { id: 'e' + Date.now(), ...evt };
+    const item = {
+      id: idUnique('e'),
+      titre: '', type: 'reunion', date: Dates.today(), heure: '', lieu: '', lien: '',
+      ...evt,
+    };
     this.commit((s) => {
       const id = s.projetActifId;
       if (!s.evenements[id]) s.evenements[id] = [];
@@ -816,21 +913,54 @@ const Store = {
       s.evenements[id].sort((a, b) => a.date.localeCompare(b.date));
     });
     this._pousserItem('evenements', item);
+    return item;
   },
 
   ajouterCompteRendu(cr) {
-    const item = { id: 'cr' + Date.now(), statut: 'valide', ...cr };
+    const item = {
+      id: idUnique('cr'),
+      date: Dates.today(), objet: '', type: 'visio', participants: '', decisions: '',
+      statut: 'valide', lienMeet: '', lienDoc: '',
+      ...cr,
+    };
     this.commit((s) => {
       const id = s.projetActifId;
       if (!s.comptesRendus[id]) s.comptesRendus[id] = [];
       s.comptesRendus[id].unshift(item);
+      s.comptesRendus[id].sort((a, b) => String(b.date).localeCompare(String(a.date)));
     });
     this._pousserItem('comptesRendus', item);
+    return item;
+  },
+
+  majCompteRendu(crId, champs) {
+    this.commit((s) => {
+      const cr = (s.comptesRendus[s.projetActifId] || []).find((x) => x.id === crId);
+      if (cr) Object.assign(cr, champs);
+    });
+    const cr = this.liste('comptesRendus').find((x) => x.id === crId);
+    if (cr) this._pousserItem('comptesRendus', cr);
+  },
+
+  supprimerCompteRendu(crId) {
+    this.commit((s) => {
+      const id = s.projetActifId;
+      s.comptesRendus[id] = (s.comptesRendus[id] || []).filter((c) => c.id !== crId);
+    });
+    this._pousserItem('comptesRendus', { id: crId }, 'delete');
+  },
+
+  supprimerEvenement(evtId) {
+    this.commit((s) => {
+      const id = s.projetActifId;
+      s.evenements[id] = (s.evenements[id] || []).filter((e) => e.id !== evtId);
+    });
+    this._pousserItem('evenements', { id: evtId }, 'delete');
   },
 
   ajouterFinancement(donnees) {
     const item = {
-      id: 'f' + Date.now(), source: donnees.source,
+      id: idUnique('f'), source: donnees.source,
       montant: Number(donnees.montant) || 0,
       statut: donnees.statut || 'etude', echeance: donnees.echeance || '',
     };
@@ -853,7 +983,7 @@ const Store = {
 
   ajouterPartenaire(donnees) {
     const item = {
-      id: 'pa' + Date.now(), nom: donnees.nom, type: donnees.type,
+      id: idUnique('pa'), nom: donnees.nom, type: donnees.type,
       statut: donnees.statut || 'a_faire',
     };
     this.commit((s) => {
@@ -985,6 +1115,7 @@ const Store = {
       gdocProjetSante: projet.gdocProjetSante,
       driveUrl: projet.driveUrl,
       siteUrl: projet.siteUrl,
+      notes: projet.notes,
     };
   },
 
