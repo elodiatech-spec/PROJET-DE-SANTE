@@ -2309,7 +2309,11 @@ function creerTousLesDossiers() {
   var crees = 0;
   for (var l = 1; l < valeurs.length; l++) {
     if (!valeurs[l][iId]) continue;
-    if (String(valeurs[l][iUrl] || '').indexOf('http') === 0) continue;
+
+    // Le jeu de démonstration contient des adresses factices (…/EXEMPLE_…).
+    // Elles ne doivent pas empêcher la création du vrai dossier.
+    var url = String(valeurs[l][iUrl] || '');
+    if (url.indexOf('http') === 0 && url.indexOf('EXEMPLE') === -1) continue;
 
     var titre = valeurs[l][iNom] + (valeurs[l][iVille] ? ' — ' + valeurs[l][iVille] : '');
     var dossier = parent.createFolder(titre);
