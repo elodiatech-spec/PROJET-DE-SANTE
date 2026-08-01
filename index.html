@@ -59,9 +59,11 @@
           <p class="connexion__erreur" id="connexion-erreur" hidden></p>
         </form>
 
-        <div class="connexion__separateur"><span>ou choisissez un profil</span></div>
-
-        <div class="stack-xs" id="connexion-profils"></div>
+        <!-- Profils de démonstration : masqué dès qu'une source réelle est branchée. -->
+        <div id="connexion-bloc-profils" hidden>
+          <div class="connexion__separateur"><span>ou choisissez un profil</span></div>
+          <div class="stack-xs" id="connexion-profils"></div>
+        </div>
 
         <p class="connexion__note">
           <i class="fa-solid fa-circle-info"></i>

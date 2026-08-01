@@ -39,8 +39,21 @@ const App = {
     this.renderNotifications();
   },
 
-  /** Liste des profils proposés sur l'écran de connexion. */
+  /**
+   * Liste des profils proposés sur l'écran de connexion.
+   *
+   * Cette liste nomme les porteurs de projet et leurs structures : elle ne doit
+   * apparaître que sur le jeu de démonstration. Dès qu'une source Google Sheets
+   * est branchée, les données sont réelles et la liste divulguerait le
+   * portefeuille à quiconque ouvre la page. Seule la saisie de l'adresse reste
+   * alors possible, et elle ne révèle rien.
+   */
   renderConnexion() {
+    const demo = Store.state.reglages.source !== 'sheets';
+    const bloc = document.getElementById('connexion-bloc-profils');
+    bloc.hidden = !demo;
+    if (!demo) return;
+
     const profils = [];
 
     // Un référent peut suivre plusieurs projets : on ne le propose qu'une fois.
