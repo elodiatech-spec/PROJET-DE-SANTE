@@ -25,11 +25,53 @@ const App = {
     if (!projet) return;
 
     this.appliquerTheme();
+
+    // Hors session, l'application n'est pas rendue du tout : rien à voir,
+    // rien à inspecter dans le DOM.
+    const connecte = Store.estConnecte();
+    document.body.classList.toggle('non-connecte', !connecte);
+    if (!connecte) { this.renderConnexion(); return; }
+
     this.renderTopbar();
     this.renderSidebar();
     this.renderBreadcrumb();
     this.renderVue();
     this.renderNotifications();
+  },
+
+  /** Liste des profils proposés sur l'écran de connexion. */
+  renderConnexion() {
+    const profils = [];
+
+    // Un référent peut suivre plusieurs projets : on ne le propose qu'une fois.
+    const referents = new Map();
+    Store.state.projets.forEach((p) => {
+      if (p.consultant?.nom && !referents.has(p.consultant.nom)) {
+        referents.set(p.consultant.nom, { ...p.consultant, projetId: p.id });
+      }
+    });
+
+    referents.forEach((c) => profils.push({
+      role: 'expert', projetId: c.projetId, nom: c.nom,
+      detail: 'Consultant ElodiaTech — espace expert', email: c.email || '',
+    }));
+
+    Store.state.projets.forEach((p) => profils.push({
+      role: 'client', projetId: p.id, nom: p.client?.nom || p.nom,
+      detail: `${p.nom} — espace client`, email: p.client?.email || '',
+    }));
+
+    document.getElementById('connexion-profils').innerHTML = profils.map((p) => `
+      <button type="button" class="profil-connexion"
+              data-action="connexion-profil"
+              data-role="${esc(p.role)}" data-projet="${esc(p.projetId)}" data-email="${esc(p.email)}">
+        <span class="avatar ${p.role === 'expert' ? 'avatar--admin' : ''}">${esc(initiales(p.nom))}</span>
+        <span class="grow" style="min-width:0">
+          <span class="profil-connexion__nom truncate">${esc(p.nom)}</span>
+          <span class="profil-connexion__role truncate">${esc(p.detail)}</span>
+        </span>
+        <i class="fa-solid fa-chevron-right text-muted text-xs"></i>
+      </button>`).join('');
   },
 
   renderTopbar() {
@@ -370,6 +412,15 @@ const App = {
         e.preventDefault();
         this.envoyerMessage();
       }
+      if (e.target.id === 'form-connexion') {
+        e.preventDefault();
+        this.connexionParEmail();
+      }
+    });
+
+    // --- Bascule de thème depuis l'écran de connexion ---
+    document.getElementById('connexion-theme')?.addEventListener('click', () => {
+      Store.setTheme(Store.state.theme === 'dark' ? 'light' : 'dark');
     });
 
     // --- Clavier ---
@@ -453,6 +504,26 @@ const App = {
     if (boite) boite.hidden = true;
   },
 
+  /* ---- Connexion ---- */
+  connexionParEmail() {
+    const champ = document.getElementById('connexion-email');
+    const zoneErreur = document.getElementById('connexion-erreur');
+    const profil = Store.identifier(champ.value);
+
+    if (!profil) {
+      zoneErreur.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i> '
+        + "Cette adresse n'est rattachée à aucun dossier. Choisissez un profil ci-dessous "
+        + 'ou contactez votre référent ElodiaTech.';
+      zoneErreur.hidden = false;
+      champ.focus();
+      return;
+    }
+
+    zoneErreur.hidden = true;
+    Store.connecter({ role: profil.role, projetId: profil.projetId, identifiant: champ.value.trim() });
+    toast(`Bienvenue, ${profil.nom}.`, 'ok');
+  },
+
   /* ---- Messagerie ---- */
   envoyerMessage() {
     const champ = document.getElementById('message-input');
@@ -518,6 +589,9 @@ const App = {
             <i class="fa-solid fa-circle-info"></i>
             L'espace client masque la console de gestion, les champs d'administration et les autres dossiers du portefeuille.
           </p>`,
+        actions: `<button class="btn btn--danger" data-action="se-deconnecter">
+                    <i class="fa-solid fa-arrow-right-from-bracket"></i> Se déconnecter
+                  </button>`,
       });
     },
 
@@ -526,6 +600,25 @@ const App = {
       App.filtres = {};
       Store.setRole(el.dataset.role);
       toast(el.dataset.role === 'expert' ? 'Espace expert activé.' : 'Espace client activé.', 'ok');
+    },
+
+    'connexion-profil'(el) {
+      App.filtres = {};
+      Store.connecter({
+        role: el.dataset.role,
+        projetId: el.dataset.projet,
+        identifiant: el.dataset.email,
+      });
+    },
+
+    'se-deconnecter'() {
+      Modal.close();
+      App.filtres = {};
+      Store.deconnecter();
+      const champ = document.getElementById('connexion-email');
+      if (champ) champ.value = '';
+      const erreur = document.getElementById('connexion-erreur');
+      if (erreur) erreur.hidden = true;
     },
 
     /* --- Prestations --- */

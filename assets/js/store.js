@@ -398,6 +398,7 @@ const Store = {
 
     this.state = {
       // Session
+      session: { connecte: false, identifiant: '' },
       role: 'client',            // 'client' | 'expert'
       theme: 'dark',
       projetActifId: donnees.projets[0].id,
@@ -411,6 +412,7 @@ const Store = {
     if (sauvegarde) {
       // On ne restaure que ce qui a du sens : réglages, session et données modifiées.
       Object.assign(this.state, {
+        session: { ...this.state.session, ...(sauvegarde.session || {}) },
         role: sauvegarde.role || 'client',
         theme: sauvegarde.theme || 'dark',
         projetActifId: sauvegarde.projetActifId || this.state.projetActifId,
@@ -661,6 +663,46 @@ const Store = {
   },
 
   /* ---- Mutations ---- */
+
+  /* ---- Session ---- */
+
+  estConnecte() { return !!this.state.session?.connecte; },
+
+  /**
+   * Reconnaît une adresse parmi les référents et les porteurs de projet.
+   * Il ne s'agit pas d'une authentification : aucun secret n'est vérifié.
+   * Le contrôle d'accès réel devra être assuré par le serveur.
+   */
+  identifier(email) {
+    const e = String(email || '').trim().toLowerCase();
+    if (!e) return null;
+
+    const commeExpert = this.state.projets.find(
+      (p) => String(p.consultant?.email || '').toLowerCase() === e);
+    if (commeExpert) return { role: 'expert', projetId: commeExpert.id, nom: commeExpert.consultant.nom };
+
+    const commeClient = this.state.projets.find(
+      (p) => String(p.client?.email || '').toLowerCase() === e);
+    if (commeClient) return { role: 'client', projetId: commeClient.id, nom: commeClient.client.nom };
+
+    return null;
+  },
+
+  connecter({ role, projetId, identifiant }) {
+    this.commit((s) => {
+      s.session = { connecte: true, identifiant: identifiant || '' };
+      s.role = role === 'expert' ? 'expert' : 'client';
+      if (projetId && s.projets.some((p) => p.id === projetId)) s.projetActifId = projetId;
+      s.route = 'dashboard';
+    });
+  },
+
+  deconnecter() {
+    this.commit((s) => {
+      s.session = { connecte: false, identifiant: '' };
+      s.route = 'dashboard';
+    });
+  },
 
   setRole(role) {
     this.commit((s) => {

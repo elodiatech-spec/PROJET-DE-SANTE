@@ -161,6 +161,119 @@ img, svg { max-width: 100%; }
 }
 
 /* --------------------------------------------------------------------------
+   3 bis. Page de connexion
+   Le corps porte « non-connecte » tant qu'aucune session n'est ouverte :
+   l'application reste alors hors du DOM visible, sans clignotement au chargement.
+   -------------------------------------------------------------------------- */
+.connexion { display: none; }
+body.non-connecte > .topbar,
+body.non-connecte > .layout,
+body.non-connecte > .drawer,
+body.non-connecte > .skip-link { display: none !important; }
+body.non-connecte { overflow: hidden; }
+body.non-connecte > .connexion { display: grid; }
+
+.connexion {
+  position: fixed; inset: 0; z-index: 150;
+  grid-template-columns: minmax(0, 1.15fr) minmax(380px, .85fr);
+  background: var(--bg);
+}
+
+.connexion__visuel {
+  position: relative; overflow: hidden;
+  background:
+    radial-gradient(900px 500px at 30% 20%, color-mix(in srgb, var(--brand-500) 45%, transparent), transparent 70%),
+    linear-gradient(150deg, var(--brand-700), var(--brand-800) 55%, #06192a);
+}
+.connexion__visuel img {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%; object-fit: cover; object-position: center 35%;
+}
+.connexion__visuel::after {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(to top, rgba(6, 25, 42, .92) 0%, rgba(6, 25, 42, .45) 40%, rgba(6, 25, 42, .1) 100%);
+}
+
+.connexion__accroche {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 1;
+  padding: var(--sp-8) var(--sp-10);
+  color: #fff;
+}
+.connexion__citation {
+  font-size: 1.35rem; font-weight: 800; line-height: 1.35;
+  max-width: 24ch; letter-spacing: -0.02em;
+  text-wrap: balance;
+  text-shadow: 0 2px 18px rgba(0, 0, 0, .45);
+}
+.connexion__signature {
+  margin-top: 10px; font-size: .78rem; font-weight: 700;
+  color: var(--accent-400); letter-spacing: .04em;
+}
+
+.connexion__panneau {
+  display: flex; flex-direction: column; justify-content: space-between;
+  background: var(--bg-elevated);
+  border-left: 1px solid var(--border);
+  overflow-y: auto;
+}
+.connexion__contenu {
+  flex: 1; display: flex; flex-direction: column; justify-content: center;
+  padding: var(--sp-8) var(--sp-8);
+  max-width: 460px; width: 100%; margin: 0 auto;
+}
+.connexion__logo { width: 190px; height: auto; margin-bottom: var(--sp-6); }
+.connexion__titre { font-size: 1.5rem; margin-bottom: 6px; }
+.connexion__intro { font-size: .85rem; color: var(--text-muted); margin-bottom: var(--sp-6); max-width: 42ch; }
+
+.connexion__erreur {
+  font-size: .78rem; font-weight: 700; color: var(--danger-500);
+  display: flex; align-items: center; gap: 6px;
+}
+.connexion__erreur[hidden] { display: none; }
+
+.connexion__separateur {
+  display: flex; align-items: center; gap: 12px;
+  margin: var(--sp-6) 0 var(--sp-4);
+  font-size: .72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .08em;
+}
+.connexion__separateur::before,
+.connexion__separateur::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+.profil-connexion {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  padding: 11px 13px; border-radius: var(--r-md); text-align: left;
+  background: var(--surface); border: 1px solid var(--border);
+  transition: all .15s var(--ease);
+}
+.profil-connexion:hover { border-color: var(--brand-500); background: var(--surface-2); transform: translateX(2px); }
+.profil-connexion__nom { display: block; font-size: .84rem; font-weight: 800; }
+.profil-connexion__role { display: block; font-size: .72rem; color: var(--text-muted); }
+
+.connexion__note {
+  margin-top: var(--sp-6); padding: 11px 13px;
+  border-radius: var(--r-sm); background: var(--surface-2);
+  border-left: 3px solid var(--info-500);
+  font-size: .74rem; color: var(--text-muted); line-height: 1.5;
+}
+.connexion__note i { color: var(--info-500); margin-right: 4px; }
+
+.connexion__pied {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: var(--sp-4) var(--sp-8);
+  border-top: 1px solid var(--border);
+  font-size: .74rem; color: var(--text-muted);
+}
+
+@media (max-width: 900px) {
+  .connexion { grid-template-columns: minmax(0, 1fr); grid-template-rows: 190px minmax(0, 1fr); }
+  .connexion__panneau { border-left: none; border-top: 1px solid var(--border); }
+  .connexion__accroche { padding: var(--sp-5); }
+  .connexion__citation { font-size: 1.05rem; max-width: 30ch; }
+  .connexion__contenu { padding: var(--sp-6) var(--sp-5); justify-content: flex-start; }
+  .connexion__pied { padding: var(--sp-4) var(--sp-5); }
+}
+
+/* --------------------------------------------------------------------------
    4. Barre supérieure
    -------------------------------------------------------------------------- */
 .topbar {

@@ -18,7 +18,67 @@
   <link rel="stylesheet" href="assets/css/app.css">
 </head>
 
-<body>
+<body class="non-connecte">
+
+  <!-- ================= PAGE DE CONNEXION ================= -->
+  <!-- Masquée par CSS dès que le corps perd la classe « non-connecte ». -->
+  <div class="connexion" id="ecran-connexion">
+
+    <div class="connexion__visuel">
+      <!-- L'image est retirée si le fichier est absent : le dégradé de marque prend le relais. -->
+      <img src="assets/img/connexion.jpg" alt="" onerror="this.remove()">
+      <div class="connexion__accroche">
+        <p class="connexion__citation">
+          «&nbsp;Construire un projet de santé, c'est d'abord partir du territoire
+          et de son&nbsp;équipe.&nbsp;»
+        </p>
+        <p class="connexion__signature">ElodiaTech — Ingénierie médicale</p>
+      </div>
+    </div>
+
+    <div class="connexion__panneau">
+      <div class="connexion__contenu">
+        <img class="connexion__logo" src="assets/img/logo-complet.png" alt="ElodiaTech — Ingénierie médicale"
+             width="900" height="482">
+
+        <h1 class="connexion__titre">Plateforme Projets de Santé</h1>
+        <p class="connexion__intro">
+          Suivez l'avancement de votre projet, retrouvez vos livrables
+          et échangez avec votre référent ElodiaTech.
+        </p>
+
+        <form id="form-connexion" class="stack-sm" autocomplete="on">
+          <div class="field">
+            <label class="field__label" for="connexion-email">Adresse électronique</label>
+            <input type="email" id="connexion-email" name="email" autocomplete="email"
+                   placeholder="prenom.nom@exemple.fr" required>
+          </div>
+          <button type="submit" class="btn btn--primary btn--block">
+            <i class="fa-solid fa-arrow-right-to-bracket"></i> Accéder à mon espace
+          </button>
+          <p class="connexion__erreur" id="connexion-erreur" hidden></p>
+        </form>
+
+        <div class="connexion__separateur"><span>ou choisissez un profil</span></div>
+
+        <div class="stack-xs" id="connexion-profils"></div>
+
+        <p class="connexion__note">
+          <i class="fa-solid fa-circle-info"></i>
+          Cet écran identifie votre profil ; il ne vérifie pas encore de mot de passe.
+          L'authentification sera assurée par le serveur lors de sa mise en place.
+        </p>
+      </div>
+
+      <footer class="connexion__pied">
+        <span>ElodiaTech · Ingénierie médicale</span>
+        <button class="btn btn--ghost btn--sm" id="connexion-theme" type="button">
+          <i class="fa-solid fa-circle-half-stroke"></i> Thème
+        </button>
+      </footer>
+    </div>
+  </div>
+
   <a class="skip-link" href="#view-root">Aller au contenu principal</a>
 
   <!-- ================= BARRE SUPÉRIEURE ================= -->

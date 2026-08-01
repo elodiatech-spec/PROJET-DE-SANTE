@@ -193,6 +193,17 @@ l'état attendu. Aucune donnée réelle n'est touchée.
 - Attribution des formules et des options
 - Paramètres et source de données
 
+**Accès**
+- Page de connexion aux couleurs ElodiaTech : une adresse électronique reconnue
+  ouvre directement le bon espace — celui de l'expert, ou le dossier du client
+  correspondant. Une liste de profils permet aussi d'entrer sans saisie.
+- Hors session, l'application n'est pas rendue : rien à voir dans la page.
+- La session est conservée d'une visite à l'autre ; déconnexion depuis le menu du profil.
+
+> Cet écran **identifie** un profil, il ne vérifie aucun mot de passe. C'est une
+> commodité de navigation, pas une barrière de sécurité : voir la section
+> « Sécurité du rendu » plus bas.
+
 **Transverse**
 - Thèmes clair et sombre
 - Recherche globale (`Ctrl` / `⌘` + `K`)
@@ -209,7 +220,13 @@ contenant du HTML est affiché tel quel, jamais interprété.
 
 Cette protection porte sur le rendu côté navigateur. Lors du branchement d'un backend,
 l'authentification et le contrôle d'accès aux données restent à mettre en place côté serveur :
-la bascule client/expert de l'interface est une commodité de navigation, pas une barrière de sécurité.
+la page de connexion et la bascule client/expert sont des commodités de navigation,
+pas des barrières de sécurité. Toutes les données du portefeuille sont chargées dans le
+navigateur, quel que soit le profil choisi.
+
+Le jour où un serveur sera en place, l'écran de connexion est prêt à l'accueillir :
+`Store.identifier()` et `Store.connecter()` dans `assets/js/store.js` sont les deux seuls
+points à remplacer par un véritable appel d'authentification.
 
 ---
 
