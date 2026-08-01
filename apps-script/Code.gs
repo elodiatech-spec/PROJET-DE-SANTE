@@ -2059,6 +2059,7 @@ function onOpen() {
     .createMenu('ElodiaTech')
     .addItem('Initialiser la base (onglets + données de démonstration)', 'initialiserBase')
     .addItem('Créer les onglets vides seulement', 'initialiserBaseVide')
+    .addItem('Vérifier la base', 'verifierBase')
     .addSeparator()
     .addItem('Créer les dossiers Drive manquants', 'creerTousLesDossiers')
     .addToUi();
@@ -2082,10 +2083,20 @@ function construire(avecDonnees) {
     ui.ButtonSet.OK_CANCEL);
   if (reponse !== ui.Button.OK) return;
 
-  Object.keys(ONGLETS).forEach(function (nom) {
+  var noms = Object.keys(ONGLETS);
+
+  noms.forEach(function (nom) {
     var entetes = ONGLETS[nom];
     var feuille = classeur.getSheetByName(nom);
     if (feuille) { feuille.clear(); } else { feuille = classeur.insertSheet(nom); }
+
+    // Le format texte doit être posé AVANT l'écriture : sans cela Sheets
+    // convertit « 2026-03-15 » en date sérielle et l'affiche en nombre.
+    entetes.forEach(function (titre, i) {
+      if (titre === 'date' || titre === 'echeance' || titre === 'date_debut') {
+        feuille.getRange(1, i + 1, feuille.getMaxRows()).setNumberFormat('@');
+      }
+    });
 
     feuille.getRange(1, 1, 1, entetes.length).setValues([entetes])
       .setFontWeight('bold').setFontColor('#ffffff').setBackground('#1e95cb');
@@ -2100,22 +2111,49 @@ function construire(avecDonnees) {
       feuille.getRange(2, 1, lignes.length, entetes.length).setValues(lignes);
     }
 
-    // Les colonnes de dates restent en texte : évite tout décalage de fuseau.
-    entetes.forEach(function (titre, i) {
-      if (titre === 'date' || titre === 'echeance' || titre === 'date_debut') {
-        feuille.getRange(1, i + 1, feuille.getMaxRows()).setNumberFormat('@');
-      }
-    });
-
     feuille.autoResizeColumns(1, Math.min(entetes.length, 8));
   });
 
-  // Onglet par défaut « Feuille 1 » devenu inutile
-  var parDefaut = classeur.getSheetByName('Feuille 1') || classeur.getSheetByName('Sheet1');
-  if (parDefaut && classeur.getSheets().length > 1) classeur.deleteSheet(parDefaut);
+  // Onglet par défaut laissé par Google (« Feuille 1 », « Feuille1 », « Sheet1 »…).
+  // On ne se fie pas à son nom, qui varie selon la langue : on supprime toute
+  // feuille étrangère à la structure ET restée vide, ce qui préserve les
+  // onglets que vous auriez ajoutés vous-même.
+  classeur.getSheets().forEach(function (f) {
+    if (noms.indexOf(f.getName()) !== -1) return;
+    if (f.getLastRow() > 0 || f.getLastColumn() > 0) return;
+    if (classeur.getSheets().length > 1) classeur.deleteSheet(f);
+  });
 
   classeur.setActiveSheet(classeur.getSheetByName('Lisez-moi'));
-  ui.alert('Base initialisée', 'Les ' + Object.keys(ONGLETS).length + ' onglets sont prêts.', ui.ButtonSet.OK);
+  ui.alert('Base initialisée',
+    'Les ' + noms.length + ' onglets sont prêts : ' + noms.join(', ') + '.',
+    ui.ButtonSet.OK);
+}
+
+/**
+ * Contrôle de l'installation — menu « Vérifier la base ».
+ * Affiche le nombre de lignes par onglet pour confirmer que tout est en place.
+ */
+function verifierBase() {
+  var classeur = SpreadsheetApp.getActive();
+  var lignes = [];
+  var manquants = [];
+
+  Object.keys(ONGLETS).forEach(function (nom) {
+    var f = classeur.getSheetByName(nom);
+    if (!f) { manquants.push(nom); return; }
+    lignes.push(nom + ' : ' + Math.max(0, f.getLastRow() - 1) + ' ligne(s)');
+  });
+
+  var message = lignes.join('\n');
+  if (manquants.length) {
+    message += '\n\nOnglets MANQUANTS : ' + manquants.join(', ')
+             + "\nRelancez « Initialiser la base ».";
+  } else {
+    message += '\n\nStructure complète.';
+  }
+
+  SpreadsheetApp.getUi().alert('État de la base', message, SpreadsheetApp.getUi().ButtonSet.OK);
 }
 
 /* ==========================================================================
