@@ -2235,52 +2235,182 @@ function construireDonnees() {
 
 /* ==========================================================================
    API — ÉCRITURE
-   ========================================================================== */
-function doPost(e) {
-  try {
-    var requete = JSON.parse(e.postData.contents);
-    if (requete.action !== 'update') return json({ erreur: 'Action non prise en charge' });
 
-    if (requete.entite === 'prestations') {
-      var parties = String(requete.id).split(':');
-      majPrestation(parties[0], parties[1], requete.payload || {});
-      return json({ ok: true });
+   L'application envoie l'une de ces requêtes :
+     { action:'upsert', entite, id, payload }   crée ou met à jour une ligne
+     { action:'delete', entite, id }            supprime une ligne
+     { action:'batch',  operations:[ … ] }      plusieurs opérations d'un coup
+
+   Le champ « id » reprend les colonnes identifiantes de l'entité, séparées
+   par le caractère deux-points.
+   Exemples : 'msp-fort-de-france' pour un projet,
+              'msp-fort-de-france:P17' pour une prestation.
+   ========================================================================== */
+
+/** Correspondance entre les champs envoyés par l'application et les colonnes. */
+var ECRITURE = {
+  projets: {
+    onglet: 'Projets', cles: ['id'], cascade: true,
+    champs: {
+      nom: 'nom', type: 'type', ville: 'ville', departement: 'departement',
+      adresse: 'adresse', lat: 'lat', lng: 'lng', reference: 'reference',
+      formule: 'formule', optionImmobilier: 'option_immobilier',
+      modeleJuridique: 'modele_juridique', dateDebut: 'date_debut',
+      clientNom: 'client_nom', clientFonction: 'client_fonction',
+      clientEmail: 'client_email', clientTel: 'client_tel',
+      consultantNom: 'consultant_nom', consultantEmail: 'consultant_email',
+      equipe: 'equipe', surface: 'surface',
+      gdocProjetSante: 'gdoc_projet_sante', driveUrl: 'drive_url', siteUrl: 'site_url'
     }
-    return json({ erreur: 'Entité non prise en charge : ' + requete.entite });
+  },
+  prestations: {
+    onglet: 'Prestations', cles: ['projet_id', 'prestation_id'],
+    champs: { statut: 'statut', echeance: 'echeance', note: 'note', livrableUrl: 'livrable_url' }
+  },
+  documents: {
+    onglet: 'Documents', cles: ['projet_id', 'id'],
+    champs: { nom: 'nom', cat: 'cat', type: 'type', taille: 'taille', date: 'date', auteur: 'auteur', url: 'url' }
+  },
+  signatures: {
+    onglet: 'Signatures', cles: ['projet_id', 'id'],
+    champs: { titre: 'titre', desc: 'desc', statut: 'statut', date: 'date', url: 'url' }
+  },
+  messages: {
+    onglet: 'Messages', cles: ['projet_id', 'id'],
+    champs: { auteur: 'auteur', role: 'role', texte: 'texte', date: 'date' }
+  },
+  evenements: {
+    onglet: 'Evenements', cles: ['projet_id', 'id'],
+    champs: { titre: 'titre', type: 'type', date: 'date', heure: 'heure', lieu: 'lieu' }
+  },
+  comptesRendus: {
+    onglet: 'ComptesRendus', cles: ['projet_id', 'id'],
+    champs: { date: 'date', objet: 'objet', participants: 'participants', decisions: 'decisions', statut: 'statut' }
+  },
+  financements: {
+    onglet: 'Financements', cles: ['projet_id', 'id'],
+    champs: { source: 'source', montant: 'montant', statut: 'statut', echeance: 'echeance' }
+  },
+  partenaires: {
+    onglet: 'Partenaires', cles: ['projet_id', 'id'],
+    champs: { nom: 'nom', type: 'type', statut: 'statut' }
+  }
+};
+
+function doPost(e) {
+  var verrou = LockService.getScriptLock();
+  try {
+    // Deux écritures simultanées corrompraient les numéros de ligne.
+    verrou.waitLock(25000);
+    var requete = JSON.parse(e.postData.contents);
+
+    var resultat;
+    if (requete.action === 'batch') {
+      resultat = (requete.operations || []).map(function (op) {
+        var r = executerEcriture(op);
+        SpreadsheetApp.flush();
+        return r;
+      });
+    } else {
+      resultat = executerEcriture(requete);
+    }
+    return json({ ok: true, resultat: resultat });
   } catch (err) {
-    return json({ erreur: String(err) });
+    return json({ erreur: String(err && err.message ? err.message : err) });
+  } finally {
+    try { verrou.releaseLock(); } catch (ignore) { /* verrou jamais pris */ }
   }
 }
 
-function majPrestation(projetId, prestationId, payload) {
-  var feuille = SpreadsheetApp.getActive().getSheetByName('Prestations');
-  if (!feuille) throw new Error("Onglet 'Prestations' introuvable");
+function executerEcriture(op) {
+  var conf = ECRITURE[op.entite];
+  if (!conf) throw new Error('Entité inconnue : ' + op.entite);
+
+  var cles = String(op.id).split(':');
+  if (cles.length !== conf.cles.length) {
+    throw new Error('Identifiant invalide pour ' + op.entite + ' : ' + op.id);
+  }
+
+  if (op.action === 'delete') return supprimerLigne(conf, cles);
+  return ecrireLigne(conf, cles, op.payload || {});   // 'upsert' et 'update'
+}
+
+function ecrireLigne(conf, cles, payload) {
+  var feuille = SpreadsheetApp.getActive().getSheetByName(conf.onglet);
+  if (!feuille) throw new Error('Onglet introuvable : ' + conf.onglet);
 
   var valeurs = feuille.getDataRange().getValues();
   var entetes = valeurs[0].map(String);
-  var iProjet = entetes.indexOf('projet_id');
-  var iPresta = entetes.indexOf('prestation_id');
 
-  var correspondance = { statut: 'statut', echeance: 'echeance', note: 'note', livrableUrl: 'livrable_url' };
+  var idxCles = conf.cles.map(function (c) {
+    var i = entetes.indexOf(c);
+    if (i < 0) throw new Error('Colonne « ' + c + ' » absente de ' + conf.onglet);
+    return i;
+  });
 
-  for (var ligne = 1; ligne < valeurs.length; ligne++) {
-    if (valeurs[ligne][iProjet] === projetId && valeurs[ligne][iPresta] === prestationId) {
-      Object.keys(correspondance).forEach(function (cle) {
-        if (payload[cle] === undefined) return;
-        var col = entetes.indexOf(correspondance[cle]);
-        if (col >= 0) feuille.getRange(ligne + 1, col + 1).setValue(payload[cle]);
-      });
-      return;
-    }
+  var ligne = trouverLigne(valeurs, idxCles, cles);
+
+  if (ligne > 0) {
+    Object.keys(conf.champs).forEach(function (cleJs) {
+      if (payload[cleJs] === undefined) return;
+      var col = entetes.indexOf(conf.champs[cleJs]);
+      if (col >= 0) feuille.getRange(ligne + 1, col + 1).setValue(payload[cleJs]);
+    });
+    return conf.onglet + ' : ligne mise à jour';
   }
 
-  var nouvelle = entetes.map(function (h) {
-    if (h === 'projet_id') return projetId;
-    if (h === 'prestation_id') return prestationId;
-    if (h === 'livrable_url') return payload.livrableUrl || '';
-    return payload[h] !== undefined ? payload[h] : '';
-  });
-  feuille.appendRow(nouvelle);
+  var inverse = {};
+  Object.keys(conf.champs).forEach(function (k) { inverse[conf.champs[k]] = k; });
+
+  feuille.appendRow(entetes.map(function (h) {
+    var iCle = conf.cles.indexOf(h);
+    if (iCle >= 0) return cles[iCle];
+    var cleJs = inverse[h];
+    return (cleJs && payload[cleJs] !== undefined) ? payload[cleJs] : '';
+  }));
+  return conf.onglet + ' : ligne ajoutée';
+}
+
+function supprimerLigne(conf, cles) {
+  var classeur = SpreadsheetApp.getActive();
+  var feuille = classeur.getSheetByName(conf.onglet);
+  if (!feuille) throw new Error('Onglet introuvable : ' + conf.onglet);
+
+  var valeurs = feuille.getDataRange().getValues();
+  var entetes = valeurs[0].map(String);
+  var idxCles = conf.cles.map(function (c) { return entetes.indexOf(c); });
+
+  var ligne = trouverLigne(valeurs, idxCles, cles);
+  if (ligne > 0) feuille.deleteRow(ligne + 1);
+
+  // Suppression d'un projet : ses lignes filles disparaissent avec lui.
+  if (conf.cascade) {
+    var projetId = cles[0];
+    Object.keys(ECRITURE).forEach(function (nom) {
+      var c = ECRITURE[nom];
+      if (c.cascade) return;
+      var f = classeur.getSheetByName(c.onglet);
+      if (!f) return;
+      var v = f.getDataRange().getValues();
+      var iP = v[0].map(String).indexOf('projet_id');
+      if (iP < 0) return;
+      for (var l = v.length - 1; l >= 1; l--) {
+        if (String(v[l][iP]) === projetId) f.deleteRow(l + 1);
+      }
+    });
+  }
+  return conf.onglet + ' : ligne supprimée';
+}
+
+function trouverLigne(valeurs, idxCles, cles) {
+  for (var l = 1; l < valeurs.length; l++) {
+    var correspond = true;
+    for (var k = 0; k < idxCles.length; k++) {
+      if (String(valeurs[l][idxCles[k]]) !== String(cles[k])) { correspond = false; break; }
+    }
+    if (correspond) return l;
+  }
+  return -1;
 }
 
 /* ==========================================================================

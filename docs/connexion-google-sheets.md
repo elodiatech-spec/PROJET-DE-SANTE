@@ -99,26 +99,43 @@ Les données de la feuille remplacent alors le jeu de démonstration local.
 
 ## Ce qui circule dans quel sens
 
-**Lecture — opérationnelle.** « Synchroniser maintenant » recharge l'intégralité des projets
-et de leurs données de suivi depuis la feuille.
+**Lecture.** « Synchroniser maintenant » recharge l'intégralité des projets et de leurs
+données de suivi depuis la feuille.
 
-**Écriture des prestations — en place.** Lorsqu'une source Google Sheets est active, toute
-modification de statut, d'échéance, de note ou de lien de livrable est renvoyée vers l'onglet
-`Prestations` (`Store.pousser()` dans `assets/js/store.js`).
+**Écriture.** Dès qu'une source Google Sheets est active, **toute modification faite dans
+l'interface est renvoyée vers la feuille**, sans action de votre part :
 
-> Ce retour d'écriture n'a pas été testé contre une feuille réelle. Vérifiez-le sur une copie
-> de votre classeur avant de l'utiliser sur vos données de production.
+| Action dans l'interface | Onglet mis à jour |
+|---|---|
+| Changer la formule d'un projet | `Projets` + les prestations ajoutées dans `Prestations` |
+| Activer ou désactiver le module immobilier | `Projets` |
+| Modifier le modèle juridique, le lien Google Doc, l'adresse du site | `Projets` |
+| Créer ou supprimer un projet | `Projets` (+ purge de ses lignes dans tous les autres onglets) |
+| Changer le statut, l'échéance, la note ou le lien d'une prestation | `Prestations` |
+| Référencer ou supprimer un document | `Documents` |
+| Marquer un acte signé, renseigner un lien de parapheur | `Signatures` |
+| Ajouter un événement, un compte rendu, un financement, un partenaire | onglet correspondant |
+| Envoyer un message | `Messages` |
 
-En cas d'échec réseau, la modification reste enregistrée localement et un message le signale :
-aucune saisie n'est perdue.
+En cas d'échec réseau, la modification reste enregistrée localement et un message vous
+le signale : aucune saisie n'est perdue. Relancez une synchronisation ensuite pour repartir
+de l'état de la feuille.
 
-**Écriture des autres entités — à ajouter si besoin.** Le contrat est déjà en place.
-Pour étendre l'écriture aux documents, par exemple :
+**Attention aux modifications concurrentes.** Si vous éditez la feuille à la main pendant
+qu'une session de l'application est ouverte, la dernière écriture l'emporte. Pour un travail
+à plusieurs, privilégiez l'interface et gardez la feuille en lecture.
 
-1. Dans `assets/js/store.js`, à la fin de `ajouterDocument()`, appelez
-   `this.pousser('documents', identifiant, donnees);`
-2. Dans `apps-script/Code.gs`, traitez `requete.entite === 'documents'` dans `doPost`,
-   sur le modèle de `majPrestation`.
+### Vérifier que l'aller-retour fonctionne
+
+Depuis le dossier du dépôt :
+
+```bash
+node tests/aller-retour.mjs
+```
+
+Le test simule un classeur en mémoire, exécute une douzaine d'actions de l'interface, applique
+les écritures avec le vrai code du script, puis vérifie l'état obtenu. Il ne touche à aucune
+donnée réelle. À relancer après toute modification de `store.js` ou de `apps-script/Code.gs`.
 
 ---
 

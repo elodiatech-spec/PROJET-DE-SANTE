@@ -92,6 +92,8 @@ plateforme-projet-sante/
 │       └── app.js                Navigation, interactions, modales, graphiques, carte
 ├── apps-script/
 │   └── Code.gs                   Passerelle Google Sheets & Drive (à coller dans Apps Script)
+├── tests/
+│   └── aller-retour.mjs          Test d'intégration de la synchronisation
 ├── docs/
 │   └── connexion-google-sheets.md
 └── README.md
@@ -133,7 +135,22 @@ Chaque projet dispose d'un dossier Drive à huit sous-dossiers correspondant aux
 documentaires. Client et expert y déposent leurs pièces, puis les référencent dans le
 coffre-fort de l'application.
 
+Une fois la feuille reliée, la synchronisation est **bidirectionnelle** : la lecture recharge
+tout depuis la feuille, et chaque modification faite dans l'interface — formule, prestations,
+documents, signatures, planning, financements, partenaires, messages — y est renvoyée
+automatiquement. Le détail figure dans la documentation de connexion.
+
 Un export JSON complet est disponible depuis **Console expert → Paramètres & données**.
+
+## Tests
+
+```bash
+node tests/aller-retour.mjs
+```
+
+Vérifie l'intégration Google Sheets de bout en bout, sur un classeur simulé en mémoire :
+les actions de l'interface produisent-elles les bonnes écritures, et une relecture rend-elle
+l'état attendu. Aucune donnée réelle n'est touchée.
 
 ---
 

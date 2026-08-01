@@ -657,11 +657,10 @@ const App = {
     /* --- Financements --- */
     'cycle-financement'(el) {
       const cycle = ['etude', 'depose', 'instruction', 'accorde'];
-      Store.commit((s) => {
-        const f = (s.financements[s.projetActifId] || []).find((x) => x.id === el.dataset.id);
-        if (!f) return;
-        const i = cycle.indexOf(f.statut);
-        f.statut = cycle[(i + 1) % cycle.length];
+      const f = Store.liste('financements').find((x) => x.id === el.dataset.id);
+      if (!f) return;
+      Store.majFinancement(el.dataset.id, {
+        statut: cycle[(cycle.indexOf(f.statut) + 1) % cycle.length],
       });
     },
 
@@ -675,14 +674,7 @@ const App = {
           { id: 'statut', label: 'Statut', type: 'select', options: Object.entries(STATUTS_FINANCEMENT).map(([v, o]) => ({ v, l: o.label })) },
         ],
         onSubmit: (v) => {
-          Store.commit((s) => {
-            const id = s.projetActifId;
-            if (!s.financements[id]) s.financements[id] = [];
-            s.financements[id].push({
-              id: 'f' + Date.now(), source: v.source, montant: Number(v.montant) || 0,
-              statut: v.statut || 'etude', echeance: v.echeance || '',
-            });
-          });
+          Store.ajouterFinancement(v);
           toast('Demande de financement ajoutée.', 'ok');
         },
       });
@@ -691,11 +683,10 @@ const App = {
     /* --- Partenaires --- */
     'cycle-partenaire'(el) {
       const cycle = ['a_faire', 'en_cours', 'a_signer', 'signe'];
-      Store.commit((s) => {
-        const p = (s.partenaires[s.projetActifId] || []).find((x) => x.id === el.dataset.id);
-        if (!p) return;
-        const i = cycle.indexOf(p.statut);
-        p.statut = cycle[(i + 1) % cycle.length];
+      const p = Store.liste('partenaires').find((x) => x.id === el.dataset.id);
+      if (!p) return;
+      Store.majPartenaire(el.dataset.id, {
+        statut: cycle[(cycle.indexOf(p.statut) + 1) % cycle.length],
       });
     },
 
@@ -708,11 +699,7 @@ const App = {
           { id: 'statut', label: 'Statut', type: 'select', options: Object.entries(STATUTS_PARTENAIRE).map(([v, o]) => ({ v, l: o.label })) },
         ],
         onSubmit: (v) => {
-          Store.commit((s) => {
-            const id = s.projetActifId;
-            if (!s.partenaires[id]) s.partenaires[id] = [];
-            s.partenaires[id].push({ id: 'pa' + Date.now(), nom: v.nom, type: v.type, statut: v.statut || 'a_faire' });
-          });
+          Store.ajouterPartenaire(v);
           toast('Partenaire ajouté.', 'ok');
         },
       });

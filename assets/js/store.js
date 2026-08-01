@@ -347,15 +347,23 @@ const SheetsAdapter = {
     return data;
   },
 
-  async enregistrer(webAppUrl, entite, id, payload) {
+  /**
+   * Envoie une écriture au script. `corps` suit l'un de ces formats :
+   *   { action:'upsert', entite, id, payload }
+   *   { action:'delete', entite, id }
+   *   { action:'batch',  operations:[ … ] }
+   */
+  async envoyer(webAppUrl, corps) {
     // text/plain évite la requête préliminaire CORS refusée par Apps Script.
     const rep = await fetch(webAppUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action: 'update', entite, id, payload }),
+      body: JSON.stringify(corps),
     });
-    if (!rep.ok) throw new Error(`Réponse ${rep.status} du script Google`);
-    return rep.json();
+    if (!rep.ok) throw new Error(`réponse ${rep.status} du script Google`);
+    const data = await rep.json();
+    if (data && data.erreur) throw new Error(data.erreur);
+    return data;
   },
 };
 
@@ -647,15 +655,19 @@ const Store = {
   },
 
   majProjet(champs, projetId) {
+    const id = projetId || this.state.projetActifId;
     this.commit((s) => {
-      const id = projetId || s.projetActifId;
       const p = s.projets.find((x) => x.id === id);
       if (p) Object.assign(p, champs);
     });
+    const p = this.projet(id);
+    if (p) this.pousser('projets', p.id, this._ligneProjet(p));
   },
 
   /** Change la formule d'un projet et complète l'état des prestations ajoutées. */
   changerFormule(projetId, codeFormule) {
+    const ajoutees = [];
+
     this.commit((s) => {
       const p = s.projets.find((x) => x.id === projetId);
       if (!p || !FORMULES[codeFormule]) return;
@@ -669,12 +681,25 @@ const Store = {
             echeance: Dates.addDays(p.dateDebut, curseur),
             note: '', livrableUrl: '', majLe: Dates.today(),
           };
+          ajoutees.push(presta.id);
         }
       });
       if (s.projetActifId === projetId && !this.moduleAccessible(s.route, projetId)) {
         s.route = 'dashboard';
       }
     });
+
+    const p = this.projet(projetId);
+    if (!p) return;
+
+    // Une seule requête : la nouvelle formule et les prestations créées.
+    this.pousserLot([
+      { action: 'upsert', entite: 'projets', id: p.id, payload: this._ligneProjet(p) },
+      ...ajoutees.map((idPresta) => ({
+        action: 'upsert', entite: 'prestations',
+        id: `${p.id}:${idPresta}`, payload: p.prestations[idPresta],
+      })),
+    ]);
   },
 
   ajouterProjet(donnees) {
@@ -709,36 +734,59 @@ const Store = {
       s.projetActifId = id;
       s.route = 'dashboard';
     });
+
+    const p = this.projet(id);
+    // Le projet et toutes ses prestations initiales, en une requête.
+    this.pousserLot([
+      { action: 'upsert', entite: 'projets', id, payload: this._ligneProjet(p) },
+      ...Object.keys(p.prestations).map((idPresta) => ({
+        action: 'upsert', entite: 'prestations',
+        id: `${id}:${idPresta}`, payload: p.prestations[idPresta],
+      })),
+    ]);
+
     return id;
   },
 
   supprimerProjet(projetId) {
+    let supprime = false;
     this.commit((s) => {
       if (s.projets.length <= 1) return;
       s.projets = s.projets.filter((p) => p.id !== projetId);
       ['documents', 'signatures', 'messages', 'evenements', 'comptesRendus', 'financements', 'partenaires']
         .forEach((cle) => { delete s[cle][projetId]; });
       if (s.projetActifId === projetId) s.projetActifId = s.projets[0].id;
+      supprime = true;
     });
+    // Le script retire aussi les lignes filles du projet dans les autres onglets.
+    if (supprime) this.pousser('projets', projetId, null, 'delete');
+  },
+
+  /* --- Entités rattachées à un projet ---
+     Chaque ajout ou modification est répercuté sous la clé « projet:id ». */
+
+  _pousserItem(entite, item, mode) {
+    this.pousser(entite, `${this.state.projetActifId}:${item.id}`, mode === 'delete' ? null : item, mode);
   },
 
   ajouterMessage(texte, auteur, role) {
+    const msg = { id: 'm' + Date.now(), auteur, role, texte, date: new Date().toISOString() };
     this.commit((s) => {
       const id = s.projetActifId;
       if (!s.messages[id]) s.messages[id] = [];
-      s.messages[id].push({
-        id: 'm' + Date.now(), auteur, role, texte,
-        date: new Date().toISOString(),
-      });
+      s.messages[id].push(msg);
     });
+    this._pousserItem('messages', { ...msg, date: msg.date.slice(0, 10) });
   },
 
   ajouterDocument(doc) {
+    const item = { id: 'doc' + Date.now(), date: Dates.today(), ...doc };
     this.commit((s) => {
       const id = s.projetActifId;
       if (!s.documents[id]) s.documents[id] = [];
-      s.documents[id].unshift({ id: 'doc' + Date.now(), date: Dates.today(), ...doc });
+      s.documents[id].unshift(item);
     });
+    this._pousserItem('documents', item);
   },
 
   supprimerDocument(docId) {
@@ -746,6 +794,7 @@ const Store = {
       const id = s.projetActifId;
       s.documents[id] = (s.documents[id] || []).filter((d) => d.id !== docId);
     });
+    this._pousserItem('documents', { id: docId }, 'delete');
   },
 
   majSignature(sigId, champs) {
@@ -754,23 +803,74 @@ const Store = {
       const sig = liste.find((x) => x.id === sigId);
       if (sig) Object.assign(sig, champs);
     });
+    const sig = this.liste('signatures').find((x) => x.id === sigId);
+    if (sig) this._pousserItem('signatures', sig);
   },
 
   ajouterEvenement(evt) {
+    const item = { id: 'e' + Date.now(), ...evt };
     this.commit((s) => {
       const id = s.projetActifId;
       if (!s.evenements[id]) s.evenements[id] = [];
-      s.evenements[id].push({ id: 'e' + Date.now(), ...evt });
+      s.evenements[id].push(item);
       s.evenements[id].sort((a, b) => a.date.localeCompare(b.date));
     });
+    this._pousserItem('evenements', item);
   },
 
   ajouterCompteRendu(cr) {
+    const item = { id: 'cr' + Date.now(), statut: 'valide', ...cr };
     this.commit((s) => {
       const id = s.projetActifId;
       if (!s.comptesRendus[id]) s.comptesRendus[id] = [];
-      s.comptesRendus[id].unshift({ id: 'cr' + Date.now(), statut: 'valide', ...cr });
+      s.comptesRendus[id].unshift(item);
     });
+    this._pousserItem('comptesRendus', item);
+  },
+
+  ajouterFinancement(donnees) {
+    const item = {
+      id: 'f' + Date.now(), source: donnees.source,
+      montant: Number(donnees.montant) || 0,
+      statut: donnees.statut || 'etude', echeance: donnees.echeance || '',
+    };
+    this.commit((s) => {
+      const id = s.projetActifId;
+      if (!s.financements[id]) s.financements[id] = [];
+      s.financements[id].push(item);
+    });
+    this._pousserItem('financements', item);
+  },
+
+  majFinancement(finId, champs) {
+    this.commit((s) => {
+      const f = (s.financements[s.projetActifId] || []).find((x) => x.id === finId);
+      if (f) Object.assign(f, champs);
+    });
+    const f = this.liste('financements').find((x) => x.id === finId);
+    if (f) this._pousserItem('financements', f);
+  },
+
+  ajouterPartenaire(donnees) {
+    const item = {
+      id: 'pa' + Date.now(), nom: donnees.nom, type: donnees.type,
+      statut: donnees.statut || 'a_faire',
+    };
+    this.commit((s) => {
+      const id = s.projetActifId;
+      if (!s.partenaires[id]) s.partenaires[id] = [];
+      s.partenaires[id].push(item);
+    });
+    this._pousserItem('partenaires', item);
+  },
+
+  majPartenaire(partId, champs) {
+    this.commit((s) => {
+      const p = (s.partenaires[s.projetActifId] || []).find((x) => x.id === partId);
+      if (p) Object.assign(p, champs);
+    });
+    const p = this.liste('partenaires').find((x) => x.id === partId);
+    if (p) this._pousserItem('partenaires', p);
   },
 
   /* ---- Recherche globale ---- */
@@ -824,19 +924,68 @@ const Store = {
 
   /* ---- Google Sheets ---- */
 
+  /** Vrai lorsque les écritures doivent être répercutées vers la feuille. */
+  ecritureActive() {
+    const { source, webAppUrl } = this.state.reglages;
+    return source === 'sheets' && !!webAppUrl;
+  },
+
   /**
    * Répercute une modification vers Google Sheets si la source externe est active.
    * Sans effet en mode démonstration. L'échec n'interrompt jamais l'utilisateur :
    * la modification reste enregistrée localement et un message l'en informe.
    */
-  pousser(entite, id, payload) {
-    const { source, webAppUrl } = this.state.reglages;
-    if (source !== 'sheets' || !webAppUrl) return;
-    SheetsAdapter.enregistrer(webAppUrl, entite, id, payload).catch((err) => {
-      if (typeof toast === 'function') {
-        toast(`Écriture Google Sheets impossible (${err.message}). La modification est conservée localement.`, 'warn');
-      }
-    });
+  pousser(entite, id, payload, mode) {
+    if (!this.ecritureActive()) return;
+    SheetsAdapter.envoyer(this.state.reglages.webAppUrl, {
+      action: mode || 'upsert', entite, id, payload,
+    }).catch((err) => this._alerteEcriture(err));
+  },
+
+  /** Regroupe plusieurs écritures en une seule requête. */
+  pousserLot(operations) {
+    if (!this.ecritureActive() || !operations.length) return;
+    SheetsAdapter.envoyer(this.state.reglages.webAppUrl, { action: 'batch', operations })
+      .catch((err) => this._alerteEcriture(err));
+  },
+
+  _alerteEcriture(err) {
+    if (typeof toast === 'function') {
+      toast(`Écriture Google Sheets impossible (${err.message}). La modification est conservée localement.`, 'warn');
+    }
+  },
+
+  /**
+   * Représentation d'un projet sous forme de colonnes de la feuille.
+   * On pousse toujours la ligne complète : plus sûr qu'un envoi partiel,
+   * et idempotent si une écriture précédente s'est perdue.
+   */
+  _ligneProjet(projet) {
+    return {
+      nom: projet.nom,
+      type: projet.type,
+      ville: projet.ville,
+      departement: projet.departement,
+      adresse: projet.adresse,
+      lat: projet.coords?.[0],
+      lng: projet.coords?.[1],
+      reference: projet.reference,
+      formule: projet.formule,
+      optionImmobilier: projet.options?.immobilier ? 'OUI' : 'NON',
+      modeleJuridique: projet.modeleJuridique,
+      dateDebut: projet.dateDebut,
+      clientNom: projet.client?.nom,
+      clientFonction: projet.client?.fonction,
+      clientEmail: projet.client?.email,
+      clientTel: projet.client?.tel,
+      consultantNom: projet.consultant?.nom,
+      consultantEmail: projet.consultant?.email,
+      equipe: projet.equipe,
+      surface: projet.surface,
+      gdocProjetSante: projet.gdocProjetSante,
+      driveUrl: projet.driveUrl,
+      siteUrl: projet.siteUrl,
+    };
   },
 
   async synchroniser() {
