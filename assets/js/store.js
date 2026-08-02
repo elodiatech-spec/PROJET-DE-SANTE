@@ -1252,6 +1252,35 @@ const Store = {
    * Sans effet en mode démonstration. L'échec n'interrompt jamais l'utilisateur :
    * la modification reste enregistrée localement et un message l'en informe.
    */
+  /**
+   * Obtient le lien d'accès d'un client, en le créant au besoin.
+   * Sur source réelle c'est le serveur qui produit le jeton et l'inscrit dans
+   * la feuille ; en démonstration on en fabrique un localement pour pouvoir
+   * essayer la fonction.
+   */
+  async genererLienClient(projetId) {
+    const projet = this.projet(projetId);
+    if (!projet) throw new Error('projet introuvable');
+    if (projet.jeton) return projet.jeton;
+
+    let jeton;
+    if (this.ecritureActive()) {
+      const rep = await SheetsAdapter.envoyer(this.state.reglages.webAppUrl, {
+        action: 'genererJeton', projetId, ...this.porteCles(),
+      });
+      jeton = rep.jeton;
+      if (!jeton) throw new Error('le serveur n\'a pas renvoyé de lien');
+    } else {
+      jeton = 'demo' + Math.random().toString(36).slice(2, 12) + Date.now().toString(36);
+    }
+
+    this.commit((s) => {
+      const p = s.projets.find((x) => x.id === projetId);
+      if (p) p.jeton = jeton;
+    });
+    return jeton;
+  },
+
   /** Porte-clés à joindre à chaque requête : code expert ou jeton client. */
   porteCles() {
     const s = this.state.session || {};

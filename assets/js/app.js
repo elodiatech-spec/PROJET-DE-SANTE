@@ -620,6 +620,93 @@ const App = {
     toast(`Bienvenue, ${profil.nom}.`, 'ok');
   },
 
+  /* ---- Lien d'accès client ---- */
+
+  /**
+   * Prépare les moyens de transmission. Rien n'est envoyé d'ici : le courriel
+   * s'ouvre dans votre logiciel de messagerie, prêt à être relu puis expédié
+   * par vous.
+   */
+  afficherLienClient(projet) {
+    const base = window.location.origin + window.location.pathname;
+    const lien = `${base}?c=${projet.jeton}`;
+    const formule = FORMULES[projet.formule];
+    const referent = projet.consultant?.nom || 'votre référent ElodiaTech';
+
+    const objet = `Votre espace de suivi — ${projet.nom}`;
+    const corpsMail =
+      `Bonjour${projet.client?.nom ? ' ' + projet.client.nom : ''},\n\n`
+      + `Votre espace de suivi en ligne est ouvert. Vous y retrouverez à tout moment :\n\n`
+      + `  • l'avancement de votre projet de santé, prestation par prestation ;\n`
+      + `  • les livrables produits par ElodiaTech ;\n`
+      + `  • les documents de votre dossier ;\n`
+      + `  • les rendez-vous à venir et les comptes rendus de nos échanges.\n\n`
+      + `Votre accès personnel :\n${lien}\n\n`
+      + `Ce lien vous est propre : conservez-le et ne le diffusez pas. `
+      + `Il ne donne accès qu'à votre dossier.\n\n`
+      + `Formule souscrite : ${formule.code} — ${formule.nom}.\n\n`
+      + `Je reste à votre disposition.\n\n`
+      + `${referent}\nElodiaTech — Ingénierie médicale`;
+
+    const mailto = `mailto:${encodeURIComponent(projet.client?.email || '')}`
+      + `?subject=${encodeURIComponent(objet)}&body=${encodeURIComponent(corpsMail)}`;
+
+    const numero = String(projet.client?.tel || '').replace(/[^0-9]/g, '').replace(/^0/, '596');
+    const texteWa = `Bonjour, voici votre espace de suivi ElodiaTech pour ${projet.nom} : ${lien}`;
+    const whatsapp = numero.length >= 8
+      ? `https://wa.me/${numero}?text=${encodeURIComponent(texteWa)}`
+      : '';
+
+    Modal.open({
+      titre: `Accès de ${projet.client?.nom || projet.nom}`,
+      soustitre: 'Ce lien ouvre son dossier, et lui seul.',
+      corps: `
+        <div class="field">
+          <label class="field__label" for="lien-client-champ">Lien personnel</label>
+          <div class="input-group">
+            <input type="text" id="lien-client-champ" class="input--mono" readonly value="${esc(lien)}">
+            <button class="btn btn--primary" data-action="copier-lien"><i class="fa-solid fa-copy"></i> Copier</button>
+          </div>
+        </div>
+
+        <h4 class="section-title" style="margin:18px 0 10px"><i class="fa-solid fa-paper-plane"></i> Le lui transmettre</h4>
+        <div class="stack-xs">
+          <a class="file-row" href="${esc(mailto)}" style="text-decoration:none">
+            <span class="file-icon" style="color:var(--brand-500)"><i class="fa-solid fa-envelope"></i></span>
+            <span class="grow">
+              <span class="text-sm fw-800" style="display:block">Par courriel</span>
+              <span class="text-xs text-muted">${projet.client?.email
+                ? `Message pré-rédigé à ${esc(projet.client.email)}`
+                : 'Aucune adresse dans la fiche — le message s\'ouvrira sans destinataire'}</span>
+            </span>
+            <i class="fa-solid fa-arrow-up-right-from-square text-muted text-xs"></i>
+          </a>
+
+          ${whatsapp ? `
+          <a class="file-row" href="${esc(whatsapp)}" target="_blank" rel="noopener noreferrer" style="text-decoration:none">
+            <span class="file-icon" style="color:var(--ok-500)"><i class="fa-brands fa-whatsapp"></i></span>
+            <span class="grow">
+              <span class="text-sm fw-800" style="display:block">Par WhatsApp</span>
+              <span class="text-xs text-muted">Message pré-rédigé au ${esc(projet.client.tel)}</span>
+            </span>
+            <i class="fa-solid fa-arrow-up-right-from-square text-muted text-xs"></i>
+          </a>` : ''}
+        </div>
+
+        <div class="card card--flat" style="margin-top:16px;border-left:3px solid var(--warn-500)">
+          <p class="text-sm text-soft">
+            Ce lien tient lieu de mot de passe : toute personne qui l'obtient accède au dossier.
+            Ne le publiez pas et ne le mettez pas dans un message collectif.
+          </p>
+          <p class="text-sm text-muted" style="margin-top:8px">
+            Pour l'invalider : videz la cellule « jeton » de ce projet dans la feuille,
+            puis rouvrez cette fenêtre — un nouveau lien sera créé et l'ancien cessera de fonctionner.
+          </p>
+        </div>`,
+      actions: '<button class="btn" data-action="fermer-modal">Fermer</button>',
+    });
+  },
+
   /* ---- Messagerie ---- */
   envoyerMessage() {
     const champ = document.getElementById('message-input');
@@ -1118,50 +1205,31 @@ const App = {
     },
 
     /* --- Console : projets --- */
-    /** Affiche et copie le lien personnel d'accès d'un client. */
-    'lien-client'(el) {
+    /** Donne le lien d'accès d'un client et les moyens de le lui transmettre. */
+    async 'lien-client'(el) {
       const projet = Store.projet(el.dataset.id);
       if (!projet) return;
 
-      const jeton = projet.jeton || '';
-      const base = window.location.origin + window.location.pathname;
-      const lien = jeton ? `${base}?c=${jeton}` : '';
+      if (!projet.jeton) {
+        try {
+          await Store.genererLienClient(projet.id);
+        } catch (err) {
+          Modal.open({
+            titre: `Lien d'accès — ${projet.nom}`,
+            corps: `<div class="empty" style="border-style:solid">
+                <i class="fa-solid fa-link-slash"></i>
+                <div class="empty__title">Lien impossible à créer</div>
+                <div class="empty__text">${esc(err.message)}<br><br>
+                  Depuis la feuille Google Sheets : <strong>ElodiaTech → Mettre à jour la structure</strong>,
+                  puis <strong>Générer les liens clients</strong>.</div>
+              </div>`,
+            actions: '<button class="btn" data-action="fermer-modal">Fermer</button>',
+          });
+          return;
+        }
+      }
 
-      Modal.open({
-        titre: `Lien d'accès — ${projet.nom}`,
-        soustitre: projet.client?.nom
-          ? `À transmettre à ${projet.client.nom}.`
-          : 'À transmettre au porteur du projet.',
-        corps: lien
-          ? `<div class="field">
-               <label class="field__label" for="lien-client-champ">Lien personnel</label>
-               <div class="input-group">
-                 <input type="text" id="lien-client-champ" class="input--mono" readonly value="${esc(lien)}">
-                 <button class="btn btn--primary" data-action="copier-lien"><i class="fa-solid fa-copy"></i> Copier</button>
-               </div>
-             </div>
-             <div class="card card--flat" style="margin-top:14px;border-left:3px solid var(--warn-500)">
-               <p class="text-sm text-soft">
-                 Ce lien ouvre le dossier de ce client, et lui seul. Il ne donne accès
-                 à aucun autre dossier du portefeuille.
-               </p>
-               <p class="text-sm text-muted" style="margin-top:8px">
-                 Il tient lieu de mot de passe : toute personne qui l'obtient accède au dossier.
-                 Transmettez-le par un canal sûr et ne le publiez pas.
-                 Pour l'invalider, videz la cellule « jeton » de ce projet dans la feuille,
-                 puis relancez « Générer les liens clients ».
-               </p>
-             </div>`
-          : `<div class="empty" style="border-style:solid">
-               <i class="fa-solid fa-link-slash"></i>
-               <div class="empty__title">Aucun lien pour ce client</div>
-               <div class="empty__text">
-                 Ouvrez la feuille Google Sheets, menu <strong>ElodiaTech → Générer les liens clients</strong>,
-                 puis synchronisez depuis Paramètres &amp; données.
-               </div>
-             </div>`,
-        actions: '<button class="btn" data-action="fermer-modal">Fermer</button>',
-      });
+      App.afficherLienClient(Store.projet(el.dataset.id));
     },
 
     'copier-lien'() {

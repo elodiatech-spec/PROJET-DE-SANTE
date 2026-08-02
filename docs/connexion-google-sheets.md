@@ -102,17 +102,29 @@ connexion, avec votre adresse électronique.
 
 ### Les liens de vos clients
 
-Menu **ElodiaTech → Générer les liens clients**. Chaque projet reçoit un jeton de
-vingt-quatre caractères, inscrit dans la colonne `jeton` de l'onglet `Projets`.
-
-Récupérez ensuite le lien de chaque client depuis l'application : **Console expert →
-Portefeuille clients**, bouton **Lien** sur son étiquette. Le lien ressemble à :
+Depuis l'application : **Console expert → Portefeuille clients**, bouton **Lien** sur
+l'étiquette du client. Le lien est créé à la demande s'il n'existe pas encore, et inscrit
+dans la colonne `jeton` de l'onglet `Projets`. Il ressemble à :
 
 ```
 https://elodiatech-spec.github.io/PROJET-DE-SANTE/?c=xxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
-Le client clique, et arrive directement sur son espace. Rien à retenir, rien à saisir.
+La même fenêtre propose de le transmettre :
+
+- **Par courriel** — votre logiciel de messagerie s'ouvre avec un message déjà rédigé,
+  adressé au courriel de la fiche client. Vous le relisez et vous l'envoyez.
+- **Par WhatsApp** — même principe, si le téléphone figure dans la fiche.
+- **Copier** — pour le coller où vous voulez.
+
+Rien n'est envoyé automatiquement : vous gardez la main sur le message.
+
+Le client clique sur son lien et arrive directement sur son espace. Rien à retenir,
+rien à saisir. Le jeton disparaît de la barre d'adresse dès la page chargée, pour ne pas
+traîner dans l'historique.
+
+> Pour attribuer d'un coup un jeton à tous les projets, le menu
+> **ElodiaTech → Générer les liens clients** existe toujours dans la feuille.
 
 ### Ce que le serveur applique
 

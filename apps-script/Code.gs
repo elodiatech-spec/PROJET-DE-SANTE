@@ -2351,6 +2351,35 @@ function genererJetonsClients() {
     ui.ButtonSet.OK);
 }
 
+/**
+ * Jeton d'un projet : le crée s'il n'en a pas encore, le renvoie sinon.
+ * Un projet conserve donc le même lien tant qu'on ne vide pas sa cellule.
+ */
+function jetonDuProjet(projetId) {
+  var feuille = SpreadsheetApp.getActive().getSheetByName('Projets');
+  if (!feuille) throw new Error("Onglet 'Projets' introuvable");
+
+  var valeurs = feuille.getDataRange().getValues();
+  var entetes = valeurs[0].map(String);
+  var iId = entetes.indexOf('id');
+  var iJeton = entetes.indexOf('jeton');
+
+  if (iJeton < 0) {
+    throw new Error("colonne « jeton » absente — lancez « Mettre à jour la structure »");
+  }
+
+  for (var l = 1; l < valeurs.length; l++) {
+    if (String(valeurs[l][iId]) !== projetId) continue;
+    var existant = String(valeurs[l][iJeton] || '');
+    if (existant.length >= 12) return existant;
+    var jeton = nouveauJeton();
+    feuille.getRange(l + 1, iJeton + 1).setValue(jeton);
+    return jeton;
+  }
+
+  throw new Error('projet introuvable : ' + projetId);
+}
+
 /** Jeton imprévisible de 24 caractères, sans caractères ambigus. */
 function nouveauJeton() {
   var alphabet = 'abcdefghijkmnpqrstuvwxyz23456789';
@@ -2585,6 +2614,13 @@ function doPost(e) {
       return json(acces.role === 'expert'
         ? construireDonnees()
         : construireDonnees(acces.projetId));
+    }
+
+    // --- Création du lien d'accès d'un client, à la demande de l'expert ---
+    if (requete.action === 'genererJeton') {
+      if (acces.role !== 'expert') throw new Error('Réservé à l\'expert.');
+      verrou.waitLock(25000);
+      return json({ ok: true, jeton: jetonDuProjet(String(requete.projetId)) });
     }
 
     // --- Écriture ---
