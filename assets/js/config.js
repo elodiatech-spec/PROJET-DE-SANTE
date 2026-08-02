@@ -268,6 +268,7 @@ const MODULES = [
 
   { id: 'admin-projets',pole: 'console',   label: 'Portefeuille clients',    icone: 'fa-solid fa-address-card',         formules: null, roles: ['expert'] },
   { id: 'admin-offres', pole: 'console',   label: 'Offres & périmètres',     icone: 'fa-solid fa-tags',                 formules: null, roles: ['expert'] },
+  { id: 'admin-experts',pole: 'console',   label: 'Équipe ElodiaTech',       icone: 'fa-solid fa-user-tie',             formules: null, roles: ['expert'] },
   { id: 'admin-params', pole: 'console',   label: 'Paramètres & données',    icone: 'fa-solid fa-sliders',              formules: null, roles: ['expert'] },
 ];
 
@@ -490,10 +491,11 @@ const FICHE_CLIENT = [
     { chemin: 'client.tel',      label: 'Téléphone', type: 'text', placeholder: '0596 00 00 00' },
   ]},
   { groupe: 'Accompagnement', champs: [
-    { chemin: 'formule',           label: 'Formule souscrite', type: 'select', options: null }, // rempli dynamiquement
-    { chemin: 'consultant.nom',    label: 'Référent ElodiaTech', type: 'text', placeholder: 'Jean-Philippe B.' },
-    { chemin: 'consultant.email',  label: 'Courriel du référent', type: 'email', placeholder: 'prenom@elodiatech.com' },
-    { chemin: 'dateDebut',         label: 'Date de démarrage', type: 'date' },
+    // Les options de ces deux listes sont remplies à l'ouverture du formulaire :
+    // formules du catalogue, et experts déclarés dans l'équipe.
+    { chemin: 'formule',        label: 'Formule souscrite', type: 'select', options: null },
+    { chemin: 'consultant.nom', label: 'Référent ElodiaTech', type: 'select', options: null },
+    { chemin: 'dateDebut',      label: 'Date de démarrage', type: 'date' },
   ]},
   { groupe: 'Cadrage', champs: [
     { chemin: 'equipe',  label: 'Professionnels dans l\'équipe', type: 'number', placeholder: '8' },

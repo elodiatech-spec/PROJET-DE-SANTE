@@ -202,8 +202,19 @@ ou de `apps-script/Code.gs`.
 - Portefeuille en **étiquettes clients** : un clic ouvre la vue d'ensemble du projet
 - **Fiche client** complète, créable et modifiable : structure, porteur, référent,
   cadrage, notes internes
+- **Lien d'accès** de chaque client, créé à la demande, transmissible par courriel
+  ou WhatsApp pré-rédigé
+- **Dossiers Drive** créés depuis l'application, pour un client ou pour tous
+- **Équipe ElodiaTech** : ajout et retrait d'experts ; le référent d'un projet se
+  choisit dans cette liste. Un expert rattaché à des clients ne peut pas être retiré,
+  et il en reste toujours au moins un.
+- **Annuaire des prestataires** partagé entre tous les dossiers, modifiable par
+  l'expert et consultable par le client
 - Attribution des formules et des options
 - Paramètres et source de données
+
+> Le code d'accès expert est **unique** et partagé par l'équipe : il est défini dans le
+> script Google. Un code par personne demanderait un vrai serveur d'authentification.
 
 **Accès**
 - Page de connexion aux couleurs ElodiaTech : une adresse électronique reconnue

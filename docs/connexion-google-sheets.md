@@ -69,7 +69,12 @@ a fait. Elle est sans effet si tout est déjà en place, donc sans risque à rel
 
 ## Étape 2 — Créer les dossiers Drive des projets
 
-Toujours dans le menu **ElodiaTech**, choisissez **« Créer les dossiers Drive manquants »**.
+> Le plus simple, une fois tout relié : le faire **depuis l'application**, dans
+> **Console expert → Portefeuille clients**. Le bouton *Créer les dossiers Drive* traite
+> tous les clients qui n'en ont pas ; le bouton *Drive* d'une étiquette ne traite que
+> celui-là. Le menu de la feuille ci-dessous reste disponible.
+
+Dans le menu **ElodiaTech**, choisissez **« Créer les dossiers Drive manquants »**.
 
 Pour chaque projet dépourvu d'adresse Drive, le script :
 

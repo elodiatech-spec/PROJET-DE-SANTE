@@ -124,7 +124,7 @@ function demoProjets() {
       modeleJuridique: 'sisa',
       dateDebut: iso(9),
       client: { nom: 'Dr Marc Dubois', fonction: 'Médecin généraliste · porteur du projet', email: 'm.dubois@msp-caraibes.fr', tel: '0596 00 00 00' },
-      consultant: { nom: 'Jean-Philippe B.', email: 'jp.b@elodiatech.com' },
+      consultant: { nom: 'ARNOBE Frédéric', email: 'elodiatech@gmail.com' },
       equipe: 9,
       surface: 280,
       gdocProjetSante: 'https://docs.google.com/document/d/EXEMPLE_MSP_CARAIBES/edit',
@@ -147,7 +147,7 @@ function demoProjets() {
       modeleJuridique: 'sisa',
       dateDebut: iso(5),
       client: { nom: 'Dr Aline Mercier', fonction: 'Médecin généraliste · coordinatrice', email: 'a.mercier@msp-archipel.fr', tel: '0590 00 00 00' },
-      consultant: { nom: 'Jean-Philippe B.', email: 'jp.b@elodiatech.com' },
+      consultant: { nom: 'ARNOBE Frédéric', email: 'elodiatech@gmail.com' },
       equipe: 6,
       surface: 195,
       gdocProjetSante: 'https://docs.google.com/document/d/EXEMPLE_MSP_ARCHIPEL/edit',
@@ -170,7 +170,7 @@ function demoProjets() {
       modeleJuridique: 'assoc',
       dateDebut: iso(2),
       client: { nom: 'Mme Sophie Rivière', fonction: 'Directrice · structure gestionnaire', email: 's.riviere@cds-nord.fr', tel: '0596 00 00 00' },
-      consultant: { nom: 'Camille R.', email: 'c.r@elodiatech.com' },
+      consultant: { nom: 'ARNOBE Frédéric', email: 'elodiatech@gmail.com' },
       equipe: 12,
       surface: 240,
       gdocProjetSante: 'https://docs.google.com/document/d/EXEMPLE_CDS_NORD/edit',
@@ -193,7 +193,7 @@ function demoProjets() {
       modeleJuridique: 'assoc',
       dateDebut: iso(1),
       client: { nom: 'Dr Paul Anselme', fonction: 'Médecin coordonnateur', email: 'p.anselme@cds-amazonie.fr', tel: '0594 00 00 00' },
-      consultant: { nom: 'Camille R.', email: 'c.r@elodiatech.com' },
+      consultant: { nom: 'ARNOBE Frédéric', email: 'elodiatech@gmail.com' },
       equipe: 8,
       surface: 310,
       gdocProjetSante: '',
@@ -213,23 +213,23 @@ function demoDonnees() {
     projets,
     documents: {
       'msp-fort-de-france': [
-        { id: 'doc1', nom: 'Projet_de_sante_MSP_Caraibes_V4.pdf', cat: 'Projet', type: 'pdf', taille: '4,2 Mo', date: j(-26), auteur: 'Jean-Philippe B.', url: '' },
-        { id: 'doc2', nom: 'Statuts_SISA_signes.pdf', cat: 'Juridique', type: 'pdf', taille: '1,1 Mo', date: j(-61), auteur: 'Jean-Philippe B.', url: '' },
-        { id: 'doc3', nom: 'Dossier_ARS_depot.zip', cat: 'ARS', type: 'zip', taille: '18,4 Mo', date: j(-40), auteur: 'Jean-Philippe B.', url: '' },
-        { id: 'doc4', nom: 'Plan_financement_triennal.xlsx', cat: 'Finances', type: 'xls', taille: '286 Ko', date: j(-18), auteur: 'Jean-Philippe B.', url: '' },
+        { id: 'doc1', nom: 'Projet_de_sante_MSP_Caraibes_V4.pdf', cat: 'Projet', type: 'pdf', taille: '4,2 Mo', date: j(-26), auteur: 'ARNOBE Frédéric', url: '' },
+        { id: 'doc2', nom: 'Statuts_SISA_signes.pdf', cat: 'Juridique', type: 'pdf', taille: '1,1 Mo', date: j(-61), auteur: 'ARNOBE Frédéric', url: '' },
+        { id: 'doc3', nom: 'Dossier_ARS_depot.zip', cat: 'ARS', type: 'zip', taille: '18,4 Mo', date: j(-40), auteur: 'ARNOBE Frédéric', url: '' },
+        { id: 'doc4', nom: 'Plan_financement_triennal.xlsx', cat: 'Finances', type: 'xls', taille: '286 Ko', date: j(-18), auteur: 'ARNOBE Frédéric', url: '' },
         { id: 'doc5', nom: 'Plans_execution_BPE.pdf', cat: 'Immobilier', type: 'pdf', taille: '12,7 Mo', date: j(-33), auteur: 'ArchiSanté Caraïbes', url: '' },
         { id: 'doc6', nom: 'Charte_graphique_MSP.pdf', cat: 'Identité', type: 'pdf', taille: '6,8 Mo', date: j(-9), auteur: 'Studio ElodiaTech', url: '' },
       ],
       'msp-pointe-a-pitre': [
-        { id: 'doc7', nom: 'Diagnostic_territorial_971.pdf', cat: 'Projet', type: 'pdf', taille: '3,4 Mo', date: j(-52), auteur: 'Jean-Philippe B.', url: '' },
-        { id: 'doc8', nom: 'Projet_de_sante_V2_travail.docx', cat: 'Projet', type: 'doc', taille: '780 Ko', date: j(-6), auteur: 'Jean-Philippe B.', url: '' },
+        { id: 'doc7', nom: 'Diagnostic_territorial_971.pdf', cat: 'Projet', type: 'pdf', taille: '3,4 Mo', date: j(-52), auteur: 'ARNOBE Frédéric', url: '' },
+        { id: 'doc8', nom: 'Projet_de_sante_V2_travail.docx', cat: 'Projet', type: 'doc', taille: '780 Ko', date: j(-6), auteur: 'ARNOBE Frédéric', url: '' },
       ],
       'cds-gros-morne': [
         { id: 'doc9', nom: 'Questionnaire_faisabilite.pdf', cat: 'Projet', type: 'pdf', taille: '520 Ko', date: j(-48), auteur: 'Sophie Rivière', url: '' },
-        { id: 'doc10', nom: 'Analyse_besoins_sante_Nord.pdf', cat: 'Projet', type: 'pdf', taille: '2,9 Mo', date: j(-11), auteur: 'Camille R.', url: '' },
+        { id: 'doc10', nom: 'Analyse_besoins_sante_Nord.pdf', cat: 'Projet', type: 'pdf', taille: '2,9 Mo', date: j(-11), auteur: 'ARNOBE Frédéric', url: '' },
       ],
       'cds-cayenne': [
-        { id: 'doc11', nom: 'Compte_rendu_cadrage.pdf', cat: 'Projet', type: 'pdf', taille: '410 Ko', date: j(-14), auteur: 'Camille R.', url: '' },
+        { id: 'doc11', nom: 'Compte_rendu_cadrage.pdf', cat: 'Projet', type: 'pdf', taille: '410 Ko', date: j(-14), auteur: 'ARNOBE Frédéric', url: '' },
       ],
     },
     signatures: {
@@ -253,18 +253,18 @@ function demoDonnees() {
     },
     messages: {
       'msp-fort-de-france': [
-        { id: 'm1', auteur: 'Jean-Philippe B.', role: 'expert', texte: "Bonjour Docteur, le dossier ARS a bien été déposé. Nous sommes en attente de l'accusé de réception.", date: j(-12) },
+        { id: 'm1', auteur: 'ARNOBE Frédéric', role: 'expert', texte: "Bonjour Docteur, le dossier ARS a bien été déposé. Nous sommes en attente de l'accusé de réception.", date: j(-12) },
         { id: 'm2', auteur: 'Dr Marc Dubois', role: 'client', texte: "Parfait, merci. Où en est le contrat ACI ?", date: j(-11) },
-        { id: 'm3', auteur: 'Jean-Philippe B.', role: 'expert', texte: "Le contrat ACI est prêt et déposé sur le parapheur électronique. Il attend votre signature.", date: j(-10) },
+        { id: 'm3', auteur: 'ARNOBE Frédéric', role: 'expert', texte: "Le contrat ACI est prêt et déposé sur le parapheur électronique. Il attend votre signature.", date: j(-10) },
       ],
       'msp-pointe-a-pitre': [
-        { id: 'm4', auteur: 'Jean-Philippe B.', role: 'expert', texte: "Le diagnostic territorial est finalisé, vous pouvez le consulter dans le coffre-fort documentaire.", date: j(-8) },
+        { id: 'm4', auteur: 'ARNOBE Frédéric', role: 'expert', texte: "Le diagnostic territorial est finalisé, vous pouvez le consulter dans le coffre-fort documentaire.", date: j(-8) },
       ],
       'cds-gros-morne': [
-        { id: 'm5', auteur: 'Camille R.', role: 'expert', texte: "Bonjour, l'analyse des besoins de santé est terminée. Je vous propose une visio la semaine prochaine.", date: j(-5) },
+        { id: 'm5', auteur: 'ARNOBE Frédéric', role: 'expert', texte: "Bonjour, l'analyse des besoins de santé est terminée. Je vous propose une visio la semaine prochaine.", date: j(-5) },
       ],
       'cds-cayenne': [
-        { id: 'm6', auteur: 'Camille R.', role: 'expert', texte: "Bienvenue sur votre espace de suivi. Le questionnaire de faisabilité est disponible.", date: j(-14) },
+        { id: 'm6', auteur: 'ARNOBE Frédéric', role: 'expert', texte: "Bienvenue sur votre espace de suivi. Le questionnaire de faisabilité est disponible.", date: j(-14) },
       ],
     },
     evenements: {
@@ -288,14 +288,14 @@ function demoDonnees() {
     comptesRendus: {
       'msp-fort-de-france': [
         { id: 'cr1', date: j(-12), objet: 'Comité de pilotage — juillet', type: 'visio', participants: "Dr Dubois, Jean-Philippe B., ArchiSanté", decisions: "Validation des plans d'exécution. Lancement de la charte graphique.", statut: 'valide', lienMeet: 'https://meet.google.com/exemple-copil', lienDoc: 'https://docs.google.com/document/d/EXEMPLE_CR_JUILLET/edit' },
-        { id: 'cr2', date: j(-40), objet: 'Cadrage des statuts SISA', type: 'presentiel', participants: 'Associés, Jean-Philippe B., cabinet comptable', decisions: 'Modèle SISA approuvé à l\'unanimité des associés.', statut: 'valide', lienMeet: '', lienDoc: '' },
+        { id: 'cr2', date: j(-40), objet: 'Cadrage des statuts SISA', type: 'presentiel', participants: 'Associés, ARNOBE Frédéric, cabinet comptable', decisions: 'Modèle SISA approuvé à l\'unanimité des associés.', statut: 'valide', lienMeet: '', lienDoc: '' },
       ],
       'msp-pointe-a-pitre': [
-        { id: 'cr3', date: j(-20), objet: 'Restitution du diagnostic territorial', type: 'visio', participants: 'Dr Mercier, équipe, Jean-Philippe B.', decisions: "Priorisation de trois axes : diabète, santé mentale, prévention.", statut: 'valide', lienMeet: '', lienDoc: '' },
+        { id: 'cr3', date: j(-20), objet: 'Restitution du diagnostic territorial', type: 'visio', participants: 'Dr Mercier, équipe, ARNOBE Frédéric', decisions: "Priorisation de trois axes : diabète, santé mentale, prévention.", statut: 'valide', lienMeet: '', lienDoc: '' },
       ],
       'cds-gros-morne': [],
       'cds-cayenne': [
-        { id: 'cr4', date: j(-14), objet: 'Point téléphonique de lancement', type: 'telephone', participants: 'Dr Anselme, Camille R.', decisions: 'Calendrier validé, démarrage du diagnostic territorial.', statut: 'valide', lienMeet: '', lienDoc: '' },
+        { id: 'cr4', date: j(-14), objet: 'Point téléphonique de lancement', type: 'telephone', participants: 'Dr Anselme, ARNOBE Frédéric', decisions: 'Calendrier validé, démarrage du diagnostic territorial.', statut: 'valide', lienMeet: '', lienDoc: '' },
       ],
     },
     financements: {
@@ -327,6 +327,12 @@ function demoDonnees() {
       'cds-gros-morne': [],
       'cds-cayenne': [],
     },
+    // Équipe ElodiaTech. Le référent d'un projet est choisi dans cette liste.
+    experts: [
+      { id: 'exp1', nom: 'ARNOBE Frédéric', fonction: 'Expert projets de santé · fondateur',
+        email: 'elodiatech@gmail.com', tel: '', principal: 'OUI' },
+    ],
+
     prestataires: [
       { id: 'v1', nom: 'ComptaSanté Antilles', metier: 'Expert-comptable', specialite: 'SISA, paie et fiscalité des structures de santé', contact: 'contact@comptasante.fr', lot: 'LE' },
       { id: 'v2', nom: 'WEDA', metier: 'Logiciel médical', specialite: 'Solution labellisée Ségur, lecteurs CPx', contact: 'commercial@weda.fr', lot: 'LE' },
@@ -467,7 +473,8 @@ const Store = {
       // ouverture, avec le porte-clés. Seuls les réglages et la session restent.
       if (this.state.reglages.source === 'sheets') {
         ['projets', 'documents', 'signatures', 'messages', 'evenements',
-         'comptesRendus', 'financements', 'partenaires'].forEach((cle) => {
+         'comptesRendus', 'financements', 'partenaires',
+         'experts', 'prestataires'].forEach((cle) => {
           delete aEnregistrer[cle];
         });
       }
@@ -1279,6 +1286,111 @@ const Store = {
       if (p) p.jeton = jeton;
     });
     return jeton;
+  },
+
+  /**
+   * Demande au serveur de créer l'arborescence Drive.
+   * Sans identifiant de projet, tous ceux qui n'ont pas encore de dossier
+   * sont traités. Réservé à l'expert par le script.
+   */
+  async creerDossiersDrive(projetId) {
+    if (!this.ecritureActive()) {
+      throw new Error('la source Google Sheets doit être connectée');
+    }
+    const rep = await SheetsAdapter.envoyer(this.state.reglages.webAppUrl, {
+      action: 'creerDossiers', projetId: projetId || '', ...this.porteCles(),
+    });
+
+    // Le script renvoie les adresses créées : on les applique sans resynchroniser.
+    this.commit((s) => {
+      (rep.dossiers || []).forEach(({ id, url }) => {
+        const p = s.projets.find((x) => x.id === id);
+        if (p) p.driveUrl = url;
+      });
+    });
+
+    return rep.dossiers || [];
+  },
+
+  /* ---- Équipe ElodiaTech ---- */
+
+  /** Nom de tous les experts déclarés, pour les listes de choix. */
+  nomsExperts() {
+    return (this.state.experts || []).map((e) => e.nom).filter(Boolean);
+  },
+
+  expertParNom(nom) {
+    return (this.state.experts || []).find((e) => e.nom === nom) || null;
+  },
+
+  ajouterExpert(donnees) {
+    const item = {
+      id: idUnique('exp'),
+      nom: donnees.nom || '',
+      fonction: donnees.fonction || '',
+      email: donnees.email || '',
+      tel: donnees.tel || '',
+      principal: donnees.principal === 'OUI' ? 'OUI' : 'NON',
+    };
+    this.commit((s) => { s.experts.push(item); });
+    this.pousser('experts', item.id, item);
+    return item;
+  },
+
+  majExpert(id, champs) {
+    this.commit((s) => {
+      const e = s.experts.find((x) => x.id === id);
+      if (e) Object.assign(e, champs);
+    });
+    const e = this.state.experts.find((x) => x.id === id);
+    if (e) this.pousser('experts', e.id, e);
+  },
+
+  supprimerExpert(id) {
+    // Un projet ne doit pas se retrouver sans référent identifiable.
+    const expert = this.state.experts.find((x) => x.id === id);
+    if (!expert) return { ok: false, raison: 'introuvable' };
+    if (this.state.experts.length <= 1) {
+      return { ok: false, raison: 'dernier' };
+    }
+    const rattaches = this.state.projets.filter((p) => p.consultant?.nom === expert.nom);
+    if (rattaches.length) {
+      return { ok: false, raison: 'rattache', projets: rattaches.map((p) => p.nom) };
+    }
+
+    this.commit((s) => { s.experts = s.experts.filter((x) => x.id !== id); });
+    this.pousser('experts', id, null, 'delete');
+    return { ok: true };
+  },
+
+  /* ---- Annuaire des prestataires ---- */
+
+  ajouterPrestataire(donnees) {
+    const item = {
+      id: idUnique('v'),
+      nom: donnees.nom || '',
+      metier: donnees.metier || '',
+      specialite: donnees.specialite || '',
+      contact: donnees.contact || '',
+      lot: donnees.lot || 'LE',
+    };
+    this.commit((s) => { s.prestataires.push(item); });
+    this.pousser('prestataires', item.id, item);
+    return item;
+  },
+
+  majPrestataire(id, champs) {
+    this.commit((s) => {
+      const v = s.prestataires.find((x) => x.id === id);
+      if (v) Object.assign(v, champs);
+    });
+    const v = this.state.prestataires.find((x) => x.id === id);
+    if (v) this.pousser('prestataires', v.id, v);
+  },
+
+  supprimerPrestataire(id) {
+    this.commit((s) => { s.prestataires = s.prestataires.filter((x) => x.id !== id); });
+    this.pousser('prestataires', id, null, 'delete');
   },
 
   /** Porte-clés à joindre à chaque requête : code expert ou jeton client. */

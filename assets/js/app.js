@@ -124,9 +124,13 @@ const App = {
       selecteur.hidden = true;
     }
 
-    // Identité affichée
+    // Identité affichée — la fonction vient de la fiche de l'expert s'il est déclaré.
+    const fiche = expert ? Store.expertParNom(projet.consultant?.nom) : null;
     const identite = expert
-      ? { nom: projet.consultant.nom || 'Expert ElodiaTech', role: 'Consultant ElodiaTech' }
+      ? {
+          nom: projet.consultant?.nom || 'Expert ElodiaTech',
+          role: fiche?.fonction || 'Consultant ElodiaTech',
+        }
       : { nom: projet.client.nom, role: projet.client.fonction };
 
     document.getElementById('user-name').textContent = identite.nom;
@@ -1240,6 +1244,147 @@ const App = {
         .catch(() => toast('Copie impossible — sélectionnez le lien et copiez-le à la main.', 'warn'));
     },
 
+    /**
+     * Crée l'arborescence Drive : un projet précis si un identifiant est
+     * fourni, sinon tous ceux qui n'en ont pas encore.
+     */
+    async 'creer-dossiers-drive'(el) {
+      const projetId = el.dataset.id || '';
+      const projet = projetId ? Store.projet(projetId) : null;
+
+      if (!Store.ecritureActive()) {
+        toast("Connectez d'abord la source Google Sheets — la création se fait sur votre Drive.", 'warn');
+        return;
+      }
+
+      const libelle = el.innerHTML;
+      el.disabled = true;
+      el.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Création…';
+
+      try {
+        const crees = await Store.creerDossiersDrive(projetId);
+        if (!crees.length) {
+          toast(projet
+            ? `« ${projet.nom} » dispose déjà de son dossier.`
+            : 'Tous les clients disposent déjà de leur dossier.', 'ok');
+        } else {
+          toast(`${crees.length} dossier${crees.length > 1 ? 's' : ''} créé${crees.length > 1 ? 's' : ''}, `
+                + 'avec les huit sous-dossiers.', 'ok');
+        }
+      } catch (err) {
+        toast(`Création impossible : ${err.message}`, 'danger');
+      } finally {
+        el.disabled = false;
+        el.innerHTML = libelle;
+      }
+    },
+
+    /* --- Équipe ElodiaTech --- */
+
+    'fiche-expert'(el) {
+      const expert = el.dataset.id ? Store.state.experts.find((e) => e.id === el.dataset.id) : null;
+
+      Modal.formulaire({
+        titre: expert ? `Modifier — ${expert.nom}` : 'Nouvel expert',
+        soustitre: expert
+          ? "Ces informations apparaissent dans l'espace des clients qu'il accompagne."
+          : "Il pourra ensuite être désigné référent d'un projet depuis la fiche client.",
+        champs: [
+          { id: 'nom', label: 'Nom et prénom', type: 'text', requis: true,
+            valeur: expert?.nom || '', placeholder: 'ARNOBE Frédéric' },
+          { id: 'fonction', label: 'Fonction', type: 'text',
+            valeur: expert?.fonction || '', placeholder: 'Expert projets de santé' },
+          { id: 'email', label: 'Courriel', type: 'email',
+            valeur: expert?.email || '', placeholder: 'prenom@elodiatech.com' },
+          { id: 'tel', label: 'Téléphone', type: 'text', valeur: expert?.tel || '' },
+          { id: 'principal', label: 'Rôle', type: 'select', valeur: expert?.principal || 'NON',
+            options: [{ v: 'NON', l: 'Consultant' }, { v: 'OUI', l: 'Administrateur' }] },
+        ],
+        libelle: expert ? 'Enregistrer' : 'Ajouter',
+        onSubmit: (v) => {
+          if (expert) {
+            const ancienNom = expert.nom;
+            Store.majExpert(expert.id, v);
+            // Le référent est stocké par son nom dans les projets : on suit le renommage.
+            if (v.nom !== ancienNom) {
+              Store.state.projets
+                .filter((p) => p.consultant?.nom === ancienNom)
+                .forEach((p) => Store.majProjet({ consultant: { nom: v.nom, email: v.email } }, p.id));
+            }
+            toast('Fiche enregistrée.', 'ok');
+          } else {
+            Store.ajouterExpert(v);
+            toast(`${v.nom} rejoint l'équipe.`, 'ok');
+          }
+        },
+      });
+    },
+
+    'supprimer-expert'(el) {
+      const expert = Store.state.experts.find((e) => e.id === el.dataset.id);
+      if (!expert) return;
+
+      Modal.confirmer({
+        titre: 'Retirer de l\'équipe',
+        texte: `${expert.nom} sera retiré de l'équipe ElodiaTech. Les dossiers restent intacts.`,
+        libelle: 'Retirer',
+        danger: true,
+        onConfirm: () => {
+          const res = Store.supprimerExpert(el.dataset.id);
+          if (res.ok) { toast('Expert retiré.', 'ok'); return; }
+          if (res.raison === 'dernier') {
+            toast("Impossible : il doit rester au moins un expert.", 'warn');
+          } else if (res.raison === 'rattache') {
+            toast(`Impossible : référent de ${res.projets.join(', ')}. Changez d'abord leur référent.`, 'warn');
+          }
+        },
+      });
+    },
+
+    /* --- Annuaire des prestataires --- */
+
+    'fiche-prestataire'(el) {
+      const presta = el.dataset.id
+        ? Store.state.prestataires.find((v) => v.id === el.dataset.id)
+        : null;
+
+      Modal.formulaire({
+        titre: presta ? `Modifier — ${presta.nom}` : 'Nouveau prestataire',
+        soustitre: 'Cet annuaire est commun à tous vos dossiers et visible par vos clients.',
+        champs: [
+          { id: 'nom', label: 'Nom du prestataire', type: 'text', requis: true,
+            valeur: presta?.nom || '', placeholder: 'ComptaSanté Antilles' },
+          { id: 'metier', label: 'Métier', type: 'text', requis: true,
+            valeur: presta?.metier || '', placeholder: 'Expert-comptable, logiciel médical, architecte…' },
+          { id: 'specialite', label: 'Spécialité', type: 'text',
+            valeur: presta?.specialite || '', placeholder: 'SISA, paie et fiscalité des structures de santé' },
+          { id: 'contact', label: 'Courriel de contact', type: 'email',
+            valeur: presta?.contact || '', placeholder: 'contact@exemple.fr' },
+          { id: 'lot', label: 'Rattachement', type: 'select', valeur: presta?.lot || 'LE',
+            options: [
+              { v: 'LE', l: LOTS.LE.nom },
+              { v: 'LF', l: LOTS.LF.nom },
+            ] },
+        ],
+        libelle: presta ? 'Enregistrer' : 'Ajouter',
+        onSubmit: (v) => {
+          if (presta) { Store.majPrestataire(presta.id, v); toast('Prestataire mis à jour.', 'ok'); }
+          else { Store.ajouterPrestataire(v); toast(`« ${v.nom} » ajouté à l'annuaire.`, 'ok'); }
+        },
+      });
+    },
+
+    'supprimer-prestataire'(el) {
+      const presta = Store.state.prestataires.find((v) => v.id === el.dataset.id);
+      Modal.confirmer({
+        titre: 'Retirer de l\'annuaire',
+        texte: `« ${presta?.nom || 'Ce prestataire'} » sera retiré de l'annuaire, pour tous vos dossiers.`,
+        libelle: 'Retirer',
+        danger: true,
+        onConfirm: () => { Store.supprimerPrestataire(el.dataset.id); toast('Prestataire retiré.', 'ok'); },
+      });
+    },
+
     'ouvrir-projet'(el) {
       Store.setProjet(el.dataset.id);
       App.aller('dashboard');
@@ -1295,12 +1440,22 @@ const App = {
       const projetId = el.dataset.id;
       const projet = projetId ? Store.projet(projetId) : null;
 
-      // La liste des formules est construite ici pour rester à jour.
+      // Formules du catalogue et experts déclarés : listes construites à
+      // l'ouverture, pour rester en phase avec l'équipe du moment.
+      const optionsExperts = Store.nomsExperts().map((nom) => ({ v: nom, l: nom }));
+
       const groupes = FICHE_CLIENT.map((g) => ({
         ...g,
-        champs: g.champs.map((c) => (c.chemin === 'formule'
-          ? { ...c, options: Object.values(FORMULES).map((f) => ({ v: f.code, l: `${f.code} — ${f.nom} · ${f.prixLabel}` })) }
-          : c)),
+        champs: g.champs.map((c) => {
+          if (c.chemin === 'formule') {
+            return { ...c, options: Object.values(FORMULES)
+              .map((f) => ({ v: f.code, l: `${f.code} — ${f.nom} · ${f.prixLabel}` })) };
+          }
+          if (c.chemin === 'consultant.nom') {
+            return { ...c, options: optionsExperts };
+          }
+          return c;
+        }),
       }));
 
       Modal.fiche({
@@ -1312,6 +1467,10 @@ const App = {
         valeurs: projet || { dateDebut: Dates.today(), type: 'MSP', formule: 'F1' },
         libelle: projet ? 'Enregistrer la fiche' : 'Créer le client',
         onSubmit: (v) => {
+          // Le courriel du référent suit son nom, pris dans l'équipe.
+          const referent = Store.expertParNom(v['consultant.nom']);
+          if (referent) v['consultant.email'] = referent.email || '';
+
           if (projet) {
             Store.majFicheClient(projet.id, v);
             toast('Fiche client enregistrée.', 'ok');

@@ -141,6 +141,22 @@ var ONGLETS = {
     "nom",
     "type",
     "statut"
+  ],
+  "Experts": [
+    "id",
+    "nom",
+    "fonction",
+    "email",
+    "tel",
+    "principal"
+  ],
+  "Prestataires": [
+    "id",
+    "nom",
+    "metier",
+    "specialite",
+    "contact",
+    "lot"
   ]
 };
 
@@ -2087,7 +2103,67 @@ var AMORCE = {
    "Établissement hospitalier",
    "en_cours"
   ]
+ ],
+ "Experts": [
+ [
+  "exp1",
+  "ARNOBE Frédéric",
+  "Expert projets de santé · fondateur",
+  "elodiatech@gmail.com",
+  "",
+  "OUI"
  ]
+],
+ "Prestataires": [
+ [
+  "v1",
+  "ComptaSanté Antilles",
+  "Expert-comptable",
+  "SISA, paie et fiscalité des structures de santé",
+  "contact@comptasante.fr",
+  "LE"
+ ],
+ [
+  "v2",
+  "WEDA",
+  "Logiciel médical",
+  "Solution labellisée Ségur, lecteurs CPx",
+  "commercial@weda.fr",
+  "LE"
+ ],
+ [
+  "v3",
+  "Maiia / Cegedim",
+  "Logiciel médical",
+  "Agenda partagé, téléconsultation, Ségur",
+  "contact@maiia.com",
+  "LE"
+ ],
+ [
+  "v4",
+  "ArchiSanté Caraïbes",
+  "Architecte",
+  "ERP catégorie 5, accessibilité PMR",
+  "agence@archisante.fr",
+  "LE"
+ ],
+ [
+  "v5",
+  "BET Tropic Ingénierie",
+  "Bureau d'études",
+  "Fluides, thermique, acoustique en milieu tropical",
+  "etudes@tropic-ing.fr",
+  "LE"
+ ],
+ [
+  "v6",
+  "Studio ElodiaTech",
+  "Identité visuelle",
+  "Logo, charte graphique, site internet",
+  "studio@elodiatech.com",
+  "LF"
+ ]
+]
 };
 
 /* ==========================================================================
@@ -2494,6 +2570,26 @@ function construireDonnees(projetIdUnique) {
 
   var donnees = { projets: projets };
 
+  // Annuaire des prestataires : commun à tous, visible aussi par le client.
+  donnees.prestataires = lireOnglet('Prestataires').map(function (r) {
+    return {
+      id: r.id, nom: r.nom || '', metier: r.metier || '',
+      specialite: r.specialite || '', contact: r.contact || '', lot: r.lot || 'LE'
+    };
+  });
+
+  // L'équipe ElodiaTech ne concerne que l'expert : le client connaît déjà
+  // son référent par la fiche de son projet.
+  if (!projetIdUnique) {
+    donnees.experts = lireOnglet('Experts').map(function (r) {
+      return {
+        id: r.id, nom: r.nom || '', fonction: r.fonction || '',
+        email: r.email || '', tel: String(r.tel || ''),
+        principal: String(r.principal || '').toUpperCase() === 'OUI' ? 'OUI' : 'NON'
+      };
+    });
+  }
+
   Object.keys(ENTITES_PAR_PROJET).forEach(function (cle) {
     var conf = ENTITES_PAR_PROJET[cle];
     var alias = ALIAS_LECTURE[cle] || {};
@@ -2584,6 +2680,16 @@ var ECRITURE = {
   partenaires: {
     onglet: 'Partenaires', cles: ['projet_id', 'id'],
     champs: { nom: 'nom', type: 'type', statut: 'statut' }
+  },
+
+  // Référentiels communs : pas de colonne projet_id, la clé est l'identifiant.
+  experts: {
+    onglet: 'Experts', cles: ['id'],
+    champs: { nom: 'nom', fonction: 'fonction', email: 'email', tel: 'tel', principal: 'principal' }
+  },
+  prestataires: {
+    onglet: 'Prestataires', cles: ['id'],
+    champs: { nom: 'nom', metier: 'metier', specialite: 'specialite', contact: 'contact', lot: 'lot' }
   }
 };
 
@@ -2621,6 +2727,13 @@ function doPost(e) {
       if (acces.role !== 'expert') throw new Error('Réservé à l\'expert.');
       verrou.waitLock(25000);
       return json({ ok: true, jeton: jetonDuProjet(String(requete.projetId)) });
+    }
+
+    // --- Création de l'arborescence Drive ---
+    if (requete.action === 'creerDossiers') {
+      if (acces.role !== 'expert') throw new Error('Réservé à l\'expert.');
+      verrou.waitLock(120000);   // création de dossiers : plus lent qu'une écriture
+      return json({ ok: true, dossiers: creerDossiers(String(requete.projetId || '')) });
     }
 
     // --- Écriture ---
@@ -2765,7 +2878,12 @@ function trouverLigne(valeurs, idxCles, cles) {
    Crée, pour chaque projet dépourvu de drive_url, un dossier calqué sur
    « _MODELE — Nouveau projet » et inscrit son URL dans l'onglet Projets.
    ========================================================================== */
-function creerTousLesDossiers() {
+/**
+ * Crée l'arborescence Drive des projets qui n'en ont pas.
+ * @param {string} [projetId] limite le traitement à un seul projet.
+ * @returns {Array} [{ id, nom, url }] des dossiers créés.
+ */
+function creerDossiers(projetId) {
   var feuille = SpreadsheetApp.getActive().getSheetByName('Projets');
   if (!feuille) throw new Error("Onglet 'Projets' introuvable");
 
@@ -2776,16 +2894,22 @@ function creerTousLesDossiers() {
   var iVille = entetes.indexOf('ville');
   var iUrl = entetes.indexOf('drive_url');
 
+  if (iUrl < 0) throw new Error("colonne « drive_url » absente de l'onglet Projets");
+
   var parent = DriveApp.getFolderById(DOSSIER_PROJETS);
-  var modele = DriveApp.getFolderById(DOSSIER_MODELE);
+
+  // Les sous-dossiers reprennent ceux du gabarit : le modifier suffit à
+  // changer la structure des projets créés ensuite.
   var sousDossiers = [];
-  var it = modele.getFolders();
+  var it = DriveApp.getFolderById(DOSSIER_MODELE).getFolders();
   while (it.hasNext()) sousDossiers.push(it.next().getName());
   sousDossiers.sort();
 
-  var crees = 0;
+  var crees = [];
   for (var l = 1; l < valeurs.length; l++) {
-    if (!valeurs[l][iId]) continue;
+    var id = String(valeurs[l][iId] || '');
+    if (!id) continue;
+    if (projetId && id !== projetId) continue;
 
     // Le jeu de démonstration contient des adresses factices (…/EXEMPLE_…).
     // Elles ne doivent pas empêcher la création du vrai dossier.
@@ -2797,12 +2921,19 @@ function creerTousLesDossiers() {
     sousDossiers.forEach(function (n) { dossier.createFolder(n); });
 
     feuille.getRange(l + 1, iUrl + 1).setValue(dossier.getUrl());
-    crees++;
+    crees.push({ id: id, nom: titre, url: dossier.getUrl() });
   }
 
-  SpreadsheetApp.getUi().alert(
-    'Dossiers Drive',
-    crees ? crees + ' dossier(s) de projet créé(s) avec leurs sous-dossiers.' : 'Tous les projets disposent déjà de leur dossier.',
+  return crees;
+}
+
+/** Même traitement, déclenché depuis le menu de la feuille. */
+function creerTousLesDossiers() {
+  var crees = creerDossiers('');
+  SpreadsheetApp.getUi().alert('Dossiers Drive',
+    crees.length
+      ? crees.length + ' dossier(s) de projet créé(s) avec leurs sous-dossiers.'
+      : 'Tous les projets disposent déjà de leur dossier.',
     SpreadsheetApp.getUi().ButtonSet.OK);
 }
 

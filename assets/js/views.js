@@ -861,9 +861,14 @@ const Views = {
 
   /* ====================== PRESTATAIRES & OUTILS ====================== */
   prestataires() {
+    const expert = Store.estExpert();
     const prestas = Store.prestations().filter((p) => p.lot === 'LE');
-    const annuaire = Store.state.prestataires.filter((v) => v.lot === 'LE');
+    const annuaire = Store.state.prestataires || [];
     let n = 0;
+
+    // Tri par métier puis par nom : l'annuaire reste lisible en s'étoffant.
+    const tries = annuaire.slice().sort((a, b) =>
+      (a.metier || '').localeCompare(b.metier || '') || (a.nom || '').localeCompare(b.nom || ''));
 
     return `
     <section class="view stack">
@@ -871,23 +876,47 @@ const Views = {
         <div class="card__head">
           <div>
             <h2 class="card__title"><i class="fa-solid fa-screwdriver-wrench"></i> Prestataires & outils métier</h2>
-            <p class="card__subtitle">Expert-comptable, logiciels labellisés Ségur et organisation des démonstrations.</p>
+            <p class="card__subtitle">
+              ${expert
+                ? "Votre annuaire de partenaires, partagé entre tous vos dossiers."
+                : 'Les partenaires que votre référent ElodiaTech peut mobiliser sur votre projet.'}
+            </p>
             ${bandeauFormule('LE')}
           </div>
+          ${expert ? `
+            <button class="btn btn--primary btn--sm" data-action="fiche-prestataire">
+              <i class="fa-solid fa-plus"></i> Ajouter un prestataire
+            </button>` : ''}
         </div>
-        <div class="grid grid-3">
-          ${annuaire.map((v) => `
-            <div class="card card--flat">
-              <div class="row-tight" style="justify-content:space-between">
-                <span class="badge badge--brand">${esc(v.metier)}</span>
-              </div>
-              <h4 style="margin:8px 0 4px">${esc(v.nom)}</h4>
-              <p class="text-xs text-muted">${esc(v.specialite)}</p>
-              <a class="text-xs" href="mailto:${esc(v.contact)}" style="margin-top:8px;display:inline-block">
-                <i class="fa-solid fa-envelope"></i> ${esc(v.contact)}
-              </a>
-            </div>`).join('')}
-        </div>
+
+        ${tries.length ? `
+          <div class="grid grid-3">
+            ${tries.map((v) => `
+              <div class="card card--flat" style="display:flex;flex-direction:column">
+                <div class="spread" style="margin-bottom:8px">
+                  <span class="badge badge--${v.lot === 'LF' ? 'purple' : 'brand'}">${esc(v.metier || 'Prestataire')}</span>
+                  ${expert ? `
+                    <span class="row-tight" style="gap:2px">
+                      <button class="btn btn--ghost btn--sm" data-action="fiche-prestataire" data-id="${esc(v.id)}" title="Modifier">
+                        <i class="fa-solid fa-pen"></i>
+                      </button>
+                      <button class="btn btn--ghost btn--sm" data-action="supprimer-prestataire" data-id="${esc(v.id)}" title="Retirer de l'annuaire">
+                        <i class="fa-solid fa-trash"></i>
+                      </button>
+                    </span>` : ''}
+                </div>
+                <h4>${esc(v.nom)}</h4>
+                <p class="text-xs text-muted" style="margin-top:4px">${esc(v.specialite)}</p>
+                ${v.contact ? `
+                  <a class="text-xs mt-auto" href="mailto:${esc(v.contact)}" style="padding-top:10px">
+                    <i class="fa-solid fa-envelope"></i> ${esc(v.contact)}
+                  </a>` : ''}
+              </div>`).join('')}
+          </div>`
+          : empty('Annuaire vide',
+                  expert ? 'Ajoutez vos partenaires : expert-comptable, éditeurs, architectes…'
+                         : 'Aucun prestataire référencé pour le moment.',
+                  'fa-solid fa-screwdriver-wrench')}
       </div>
 
       <div class="card">
@@ -1665,6 +1694,9 @@ const Views = {
             <p class="card__subtitle">Vue consolidée de tous les accompagnements en cours.</p>
           </div>
           <div class="row-tight">
+            <button class="btn btn--sm" data-action="creer-dossiers-drive">
+              <i class="fa-brands fa-google-drive"></i> Créer les dossiers Drive
+            </button>
             <button class="btn btn--sm" data-action="aller" data-route="planning"><i class="fa-solid fa-calendar-days"></i> Planning général</button>
             <button class="btn btn--primary btn--sm" data-action="fiche-client"><i class="fa-solid fa-plus"></i> Nouveau client</button>
           </div>
@@ -1737,6 +1769,15 @@ const Views = {
               </button>
 
               <div class="etiquette__pied">
+                ${!urlSure(p.driveUrl) || String(p.driveUrl).includes('EXEMPLE')
+                  ? `<button class="btn btn--ghost btn--sm" data-action="creer-dossiers-drive" data-id="${esc(p.id)}"
+                             title="Créer le dossier Drive de ce client">
+                       <i class="fa-brands fa-google-drive"></i> Drive
+                     </button>`
+                  : `<a class="btn btn--ghost btn--sm" href="${esc(urlSure(p.driveUrl))}" target="_blank" rel="noopener noreferrer"
+                        title="Ouvrir le dossier Drive">
+                       <i class="fa-brands fa-google-drive"></i> Drive
+                     </a>`}
                 <div class="offre-pills" role="group" aria-label="Formule de ${esc(p.nom)}">
                   ${Object.values(FORMULES).map((x) => `
                     <button type="button" class="offre-pill ${x.code === p.formule ? 'is-active' : ''}"
@@ -1859,6 +1900,83 @@ const Views = {
                 </tr>`).join('')}
             </tbody>
           </table>
+        </div>
+      </div>
+    </section>`;
+  },
+
+  /* ====================== CONSOLE : ÉQUIPE ====================== */
+  'admin-experts'() {
+    const experts = Store.state.experts || [];
+    const projets = Store.state.projets;
+
+    return `
+    <section class="view stack">
+      <div class="card">
+        <div class="card__head">
+          <div>
+            <h2 class="card__title"><i class="fa-solid fa-user-tie"></i> Équipe ElodiaTech</h2>
+            <p class="card__subtitle">
+              Les personnes qui accompagnent vos clients. Le référent d'un projet se choisit
+              dans cette liste, depuis la fiche client.
+            </p>
+          </div>
+          <button class="btn btn--primary btn--sm" data-action="fiche-expert">
+            <i class="fa-solid fa-plus"></i> Ajouter un expert
+          </button>
+        </div>
+
+        <div class="grid grid-2">
+          ${experts.map((e) => {
+            const suivis = projets.filter((p) => p.consultant?.nom === e.nom);
+            return `
+            <article class="card card--flat" style="border-left:3px solid ${e.principal === 'OUI' ? 'var(--accent-500)' : 'var(--border-strong)'}">
+              <div class="row" style="align-items:flex-start">
+                <span class="avatar avatar--lg avatar--admin">${esc(initiales(e.nom))}</span>
+                <div class="grow" style="min-width:0">
+                  <div class="row-tight" style="margin-bottom:2px">
+                    <strong class="text-sm">${esc(e.nom)}</strong>
+                    ${e.principal === 'OUI' ? badge('Administrateur', 'accent', 'fa-solid fa-star') : ''}
+                  </div>
+                  <div class="text-xs text-muted">${esc(e.fonction || 'Consultant ElodiaTech')}</div>
+                  <div class="text-xs text-muted" style="margin-top:6px">
+                    ${e.email ? `<i class="fa-solid fa-envelope"></i> ${esc(e.email)}` : ''}
+                    ${e.tel ? ` · <i class="fa-solid fa-phone"></i> ${esc(e.tel)}` : ''}
+                  </div>
+                  <div class="text-xs" style="margin-top:8px">
+                    ${suivis.length
+                      ? badge(`${suivis.length} client${suivis.length > 1 ? 's' : ''} suivi${suivis.length > 1 ? 's' : ''}`, 'brand', 'fa-solid fa-address-card')
+                      : badge('Aucun client rattaché', 'neutre')}
+                  </div>
+                </div>
+              </div>
+              <div class="row-tight" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+                <button class="btn btn--ghost btn--sm" data-action="fiche-expert" data-id="${esc(e.id)}">
+                  <i class="fa-solid fa-pen"></i> Modifier
+                </button>
+                ${experts.length > 1 && !suivis.length
+                  ? `<button class="btn btn--ghost btn--sm" data-action="supprimer-expert" data-id="${esc(e.id)}">
+                       <i class="fa-solid fa-trash"></i> Supprimer
+                     </button>`
+                  : `<span class="text-xs text-muted">
+                       ${experts.length <= 1 ? 'Dernier expert : non supprimable' : 'Des clients lui sont rattachés'}
+                     </span>`}
+              </div>
+            </article>`;
+          }).join('')}
+        </div>
+
+        <div class="card card--flat" style="margin-top:var(--sp-4);border-left:3px solid var(--info-500)">
+          <p class="text-sm text-soft">
+            <i class="fa-solid fa-circle-info text-brand"></i>
+            Ajouter un expert lui permet d'être désigné référent d'un projet et d'apparaître
+            comme interlocuteur dans l'espace du client.
+          </p>
+          <p class="text-sm text-muted" style="margin-top:8px">
+            En revanche, <strong>le code d'accès reste unique</strong> : il est défini dans le script
+            Google et partagé par toute l'équipe. Un code par personne demanderait un vrai serveur
+            d'authentification.
+          </p>
         </div>
       </div>
     </section>`;
