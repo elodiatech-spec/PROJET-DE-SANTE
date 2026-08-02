@@ -66,6 +66,10 @@ function chargerScript(codeExpert) {
       getUuid: () => '0123456789abcdef0123456789abcdef',
     },
     DriveApp: {},
+    HtmlService: {
+      createHtmlOutput: (h) => ({ setTitle: () => ({ setXFrameOptionsMode: () => ({ _html: h }) }) }),
+      XFrameOptionsMode: { DEFAULT: 'default' },
+    },
     console,
   });
 
@@ -187,8 +191,13 @@ const expertEcrit = s.appel({
 verifier('expert : peut tout écrire', !expertEcrit.erreur, expertEcrit.erreur);
 
 /* --- Le point de diagnostic ne livre rien --- */
-const diag = JSON.parse(s.doGet()._texte);
-verifier('doGet ne renvoie aucune donnée', !diag.projets && diag.ok === true, JSON.stringify(diag));
+const diag = JSON.parse(s.doGet({ parameter: { diag: '1' } })._texte);
+verifier('doGet en diagnostic ne renvoie aucune donnée', !diag.projets && diag.ok === true, JSON.stringify(diag));
+
+const accueil = s.doGet({ parameter: {} })._html;
+verifier('doGet sans paramètre : page d\'aiguillage, sans donnée',
+  accueil.indexOf('passerelle de donn') !== -1 && accueil.indexOf('MSP Sant') === -1,
+  accueil.slice(0, 60));
 
 /* --- Script non encore configuré : reste ouvert pour la mise en service --- */
 const sansCode = chargerScript(null);

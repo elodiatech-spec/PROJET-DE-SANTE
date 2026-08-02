@@ -13,6 +13,9 @@
 /* ==========================================================================
    CONFIGURATION — identifiants des dossiers Drive
    ========================================================================== */
+/** Adresse publique de l'application, vers laquelle renvoyer les visiteurs égarés. */
+var URL_APPLICATION = 'https://elodiatech-spec.github.io/PROJET-DE-SANTE/';
+
 var DOSSIER_RACINE = '1MOmLg078g_VyPUFS614WkGrh30W4LAAP';   // ElodiaTech — Projets de Santé
 var DOSSIER_PROJETS = '1aLdlM3QJwdpm6XfqvhtUXLK9FJfxTY9v';  // 03 — Projets
 var DOSSIER_MODELE = '1yxmCRenKoK-WR7EgZSmIMuIxECnoi4xu';   // _MODELE — Nouveau projet
@@ -2363,13 +2366,47 @@ function nouveauJeton() {
    Tout passe par doPost : les secrets ne circulent pas dans l'URL, qui
    finirait dans l'historique du navigateur et dans les journaux serveur.
    ========================================================================== */
-function doGet() {
-  // Point de diagnostic : dit si le script répond, sans livrer la moindre donnée.
-  return json({
-    ok: true,
-    service: 'ElodiaTech — passerelle Projets de Santé',
-    protege: codeExpertDefini(),
-  });
+/**
+ * Cette adresse est la passerelle de données, pas l'application.
+ * Quelqu'un qui l'ouvre dans son navigateur — vous, ou un client à qui elle
+ * aurait été transmise par erreur — doit comprendre où aller, plutôt que de
+ * tomber sur du JSON. Aucune donnée n'est livrée ici, dans les deux cas.
+ */
+function doGet(e) {
+  if (e && e.parameter && e.parameter.diag === '1') {
+    return json({
+      ok: true,
+      service: 'ElodiaTech — passerelle Projets de Santé',
+      protege: codeExpertDefini(),
+    });
+  }
+
+  var page =
+    '<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">'
+    + '<meta name="viewport" content="width=device-width,initial-scale=1">'
+    + '<title>ElodiaTech — Projets de Santé</title>'
+    + '<style>'
+    + 'body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;'
+    + 'background:#06192a;color:#f1f5f9;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;padding:24px}'
+    + '.c{max-width:520px;text-align:center}'
+    + 'h1{font-size:1.35rem;margin:0 0 12px}'
+    + 'p{color:#93a4bb;line-height:1.6;margin:0 0 22px}'
+    + 'a{display:inline-block;background:#1e95cb;color:#fff;text-decoration:none;'
+    + 'padding:13px 26px;border-radius:10px;font-weight:700}'
+    + 'a:hover{background:#157aa8}'
+    + 'small{display:block;margin-top:26px;color:#647d94;font-size:.78rem}'
+    + '</style></head><body><div class="c">'
+    + '<h1>Vous êtes sur la passerelle de données</h1>'
+    + '<p>Cette adresse relie l\'application à sa base Google Sheets. '
+    + 'Elle ne contient aucune information et n\'affiche aucun dossier.<br><br>'
+    + 'L\'espace de suivi se trouve ici :</p>'
+    + '<a href="' + URL_APPLICATION + '">Ouvrir la plateforme</a>'
+    + '<small>ElodiaTech — Ingénierie médicale</small>'
+    + '</div></body></html>';
+
+  return HtmlService.createHtmlOutput(page)
+    .setTitle('ElodiaTech — Projets de Santé')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.DEFAULT);
 }
 
 /**
