@@ -146,11 +146,18 @@ Un export JSON complet est disponible depuis **Console expert → Paramètres & 
 
 ```bash
 node tests/aller-retour.mjs
+node tests/isolation.mjs
 ```
 
-Vérifie l'intégration Google Sheets de bout en bout, sur un classeur simulé en mémoire :
-les actions de l'interface produisent-elles les bonnes écritures, et une relecture rend-elle
-l'état attendu. Aucune donnée réelle n'est touchée.
+Le premier vérifie l'intégration Google Sheets de bout en bout : les actions de l'interface
+produisent-elles les bonnes écritures, et une relecture rend-elle l'état attendu.
+
+Le second éprouve le cloisonnement : un jeton client ne rapporte-t-il que son dossier,
+peut-il écrire ailleurs, une requête sans secret est-elle refusée.
+
+Les deux s'exécutent sur un classeur simulé en mémoire, avec le vrai code du script.
+Aucune donnée réelle n'est touchée. À relancer après toute modification de `store.js`
+ou de `apps-script/Code.gs`.
 
 ---
 
@@ -212,21 +219,35 @@ l'état attendu. Aucune donnée réelle n'est touchée.
 
 ---
 
+## Cloisonnement des accès
+
+Le script Apps Script fait office de serveur : c'est **lui** qui décide de ce que chaque
+requête a le droit de lire et d'écrire. L'interface ne fait qu'afficher ce qu'elle reçoit.
+
+- **Code expert** — rangé dans les propriétés du script, donc absent du dépôt et du
+  navigateur. Ouvre l'ensemble du portefeuille et toutes les écritures.
+- **Lien client** — un jeton par projet. Ne rapporte que ce dossier, sans les notes
+  internes, et n'autorise que trois écritures : valider une prestation qui lui est
+  soumise, envoyer un message, référencer un document.
+
+Une requête sans code ni jeton valide ne reçoit aucune donnée. Un navigateur modifié n'y
+change rien : le serveur ne renvoie simplement pas ce à quoi la requête ne donne pas droit.
+
+Mise en service : [docs/connexion-google-sheets.md](docs/connexion-google-sheets.md), étape 2 bis.
+
+**Limites à connaître.** Le lien client tient lieu de mot de passe : qui l'obtient accède au
+dossier, comme pour un document Google partagé par lien. Il n'y a ni expiration automatique,
+ni double authentification, ni journal des accès. C'est suffisant pour un usage professionnel
+courant, pas pour de l'hébergement de données de santé au sens réglementaire.
+
+Tant qu'aucun code expert n'est défini, le script répond à tout le monde — nécessaire pour la
+mise en service, à corriger avant d'entrer de vraies données.
+
 ## Sécurité du rendu
 
 Toute donnée dynamique passe par `esc()` avant insertion dans le DOM, et seules les URL
 `http(s)` sont acceptées via `urlSure()`. Un message de messagerie ou un nom de document
 contenant du HTML est affiché tel quel, jamais interprété.
-
-Cette protection porte sur le rendu côté navigateur. Lors du branchement d'un backend,
-l'authentification et le contrôle d'accès aux données restent à mettre en place côté serveur :
-la page de connexion et la bascule client/expert sont des commodités de navigation,
-pas des barrières de sécurité. Toutes les données du portefeuille sont chargées dans le
-navigateur, quel que soit le profil choisi.
-
-Le jour où un serveur sera en place, l'écran de connexion est prêt à l'accueillir :
-`Store.identifier()` et `Store.connecter()` dans `assets/js/store.js` sont les deux seuls
-points à remplacer par un véritable appel d'authentification.
 
 ---
 

@@ -49,7 +49,8 @@ var ONGLETS = {
     "gdoc_projet_sante",
     "drive_url",
     "site_url",
-    "notes"
+    "notes",
+    "jeton"
   ],
   "Prestations": [
     "projet_id",
@@ -2096,6 +2097,9 @@ function onOpen() {
     .addItem('Vérifier la base', 'verifierBase')
     .addItem('Mettre à jour la structure (sans perte de données)', 'mettreAJourStructure')
     .addSeparator()
+    .addItem('Définir mon code expert', 'definirCodeExpert')
+    .addItem('Générer les liens clients', 'genererJetonsClients')
+    .addSeparator()
     .addItem('Créer les dossiers Drive manquants', 'creerTousLesDossiers')
     .addToUi();
 }
@@ -2235,19 +2239,146 @@ function verifierBase() {
 }
 
 /* ==========================================================================
-   API — LECTURE
+   CONTRÔLE D'ACCÈS
+
+   Deux porte-clés, vérifiés ici et nulle part ailleurs :
+
+   — le CODE EXPERT, rangé dans les propriétés du script. Il n'apparaît donc
+     ni dans le dépôt GitHub, ni dans le navigateur. Il ouvre l'ensemble du
+     portefeuille et autorise toutes les écritures.
+   — un JETON par client, inscrit dans la colonne « jeton » de l'onglet
+     Projets. Il ne donne accès qu'à ce projet, et à trois écritures.
+
+   Sans l'un des deux, le script ne renvoie aucune donnée. Le cloisonnement
+   est réel : le navigateur d'un client ne reçoit jamais le dossier d'un autre.
    ========================================================================== */
-function doGet(e) {
-  try {
-    if (e && e.parameter && e.parameter.action === 'getAll') return json(construireDonnees());
-    return json({ erreur: 'Action inconnue' });
-  } catch (err) {
-    return json({ erreur: String(err) });
+
+var PROPRIETE_CODE_EXPERT = 'CODE_EXPERT';
+
+/** Définit ou remplace le code expert — menu « Définir mon code expert ». */
+function definirCodeExpert() {
+  var ui = SpreadsheetApp.getUi();
+  var reponse = ui.prompt('Code expert',
+    "Choisissez le code qui vous donnera accès à l'ensemble du portefeuille.\n"
+    + "Douze caractères au minimum.\n\n"
+    + "Il est conservé dans ce script uniquement : ni dans la page publique, ni dans le dépôt.",
+    ui.ButtonSet.OK_CANCEL);
+
+  if (reponse.getSelectedButton() !== ui.Button.OK) return;
+
+  var code = reponse.getResponseText().trim();
+  if (code.length < 12) {
+    ui.alert('Code trop court', 'Il faut au moins 12 caractères. Rien n\'a été enregistré.', ui.ButtonSet.OK);
+    return;
   }
+
+  PropertiesService.getScriptProperties().setProperty(PROPRIETE_CODE_EXPERT, code);
+  ui.alert('Code enregistré',
+    "Saisissez-le sur la page de connexion de l'application, avec votre adresse électronique.\n\n"
+    + "Oublié ? Revenez ici pour en définir un nouveau — les liens clients, eux, ne changent pas.",
+    ui.ButtonSet.OK);
 }
 
-function construireDonnees() {
-  var projets = lireOnglet('Projets').map(function (r) {
+function codeExpertDefini() {
+  return !!PropertiesService.getScriptProperties().getProperty(PROPRIETE_CODE_EXPERT);
+}
+
+/**
+ * Reconnaît l'auteur d'une requête.
+ * @returns {{role:string, projetId?:string, ouvert?:boolean}|null}
+ */
+function autoriser(requete) {
+  var attendu = PropertiesService.getScriptProperties().getProperty(PROPRIETE_CODE_EXPERT);
+
+  // Tant qu'aucun code n'est défini, le script reste ouvert : sans cela
+  // l'application serait inutilisable avant la première configuration.
+  if (!attendu) return { role: 'expert', ouvert: true };
+
+  if (requete.cle && String(requete.cle) === String(attendu)) return { role: 'expert' };
+
+  if (requete.jeton) {
+    var projetId = projetDuJeton(String(requete.jeton));
+    if (projetId) return { role: 'client', projetId: projetId };
+  }
+
+  return null;
+}
+
+function projetDuJeton(jeton) {
+  if (!jeton || jeton.length < 12) return null;
+  var trouve = null;
+  lireOnglet('Projets').forEach(function (r) {
+    if (r.jeton && String(r.jeton) === jeton) trouve = r.id;
+  });
+  return trouve;
+}
+
+/** Attribue un jeton aux projets qui n'en ont pas encore. */
+function genererJetonsClients() {
+  var ui = SpreadsheetApp.getUi();
+  var feuille = SpreadsheetApp.getActive().getSheetByName('Projets');
+  if (!feuille) throw new Error("Onglet 'Projets' introuvable");
+
+  var valeurs = feuille.getDataRange().getValues();
+  var entetes = valeurs[0].map(String);
+  var iId = entetes.indexOf('id');
+  var iJeton = entetes.indexOf('jeton');
+
+  if (iJeton < 0) {
+    ui.alert('Colonne manquante',
+      "La colonne « jeton » est absente.\nLancez d'abord « Mettre à jour la structure ».",
+      ui.ButtonSet.OK);
+    return;
+  }
+
+  var crees = 0;
+  for (var l = 1; l < valeurs.length; l++) {
+    if (!valeurs[l][iId]) continue;
+    if (String(valeurs[l][iJeton] || '').length >= 12) continue;
+    feuille.getRange(l + 1, iJeton + 1).setValue(nouveauJeton());
+    crees++;
+  }
+
+  ui.alert('Liens clients',
+    crees
+      ? crees + " jeton(s) créé(s).\n\nRécupérez le lien de chaque client depuis la console "
+        + "expert de l'application : bouton « Lien » sur son étiquette."
+      : 'Tous les projets disposent déjà de leur jeton.',
+    ui.ButtonSet.OK);
+}
+
+/** Jeton imprévisible de 24 caractères, sans caractères ambigus. */
+function nouveauJeton() {
+  var alphabet = 'abcdefghijkmnpqrstuvwxyz23456789';
+  var source = (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, '');
+  var jeton = '';
+  for (var i = 0; i < 24; i++) {
+    jeton += alphabet.charAt(parseInt(source.charAt(i), 16) * 2 % alphabet.length);
+  }
+  return jeton;
+}
+
+/* ==========================================================================
+   API — LECTURE
+   Tout passe par doPost : les secrets ne circulent pas dans l'URL, qui
+   finirait dans l'historique du navigateur et dans les journaux serveur.
+   ========================================================================== */
+function doGet() {
+  // Point de diagnostic : dit si le script répond, sans livrer la moindre donnée.
+  return json({
+    ok: true,
+    service: 'ElodiaTech — passerelle Projets de Santé',
+    protege: codeExpertDefini(),
+  });
+}
+
+/**
+ * @param {string} [projetIdUnique] restreint la réponse à un seul projet.
+ */
+function construireDonnees(projetIdUnique) {
+  var projets = lireOnglet('Projets')
+    .filter(function (r) { return !projetIdUnique || r.id === projetIdUnique; })
+    .map(function (r) {
     return {
       id: r.id,
       nom: r.nom,
@@ -2271,6 +2402,10 @@ function construireDonnees() {
       gdocProjetSante: r.gdoc_projet_sante || '',
       driveUrl: r.drive_url || '',
       siteUrl: r.site_url || '',
+      // Notes internes et jeton d'accès : réservés à l'expert. Un client
+      // ne reçoit ni les remarques prises sur son dossier, ni sa propre clé.
+      notes: projetIdUnique ? '' : (r.notes || ''),
+      jeton: projetIdUnique ? '' : (r.jeton || ''),
       prestations: {}
     };
   });
@@ -2385,24 +2520,50 @@ var ECRITURE = {
   }
 };
 
+/**
+ * Écritures permises à un client, sur son seul projet.
+ * Tout le reste — formule, fiche, suppression, financements… — est refusé
+ * par le serveur, quoi que prétende le navigateur qui envoie la requête.
+ */
+var ECRITURES_CLIENT = {
+  prestations: ['statut'],   // valider un livrable qui lui est soumis
+  messages: null,            // null = tous les champs de l'entité
+  documents: null,           // référencer une pièce qu'il a déposée
+};
+
 function doPost(e) {
   var verrou = LockService.getScriptLock();
   try {
-    // Deux écritures simultanées corrompraient les numéros de ligne.
-    verrou.waitLock(25000);
     var requete = JSON.parse(e.postData.contents);
+
+    // --- Contrôle d'accès, avant toute chose ---
+    var acces = autoriser(requete);
+    if (!acces) {
+      return json({ erreur: "Accès refusé : code ou lien invalide." });
+    }
+
+    // --- Lecture ---
+    if (requete.action === 'getAll') {
+      return json(acces.role === 'expert'
+        ? construireDonnees()
+        : construireDonnees(acces.projetId));
+    }
+
+    // --- Écriture ---
+    verrou.waitLock(25000);   // deux écritures simultanées décaleraient les lignes
 
     var resultat;
     if (requete.action === 'batch') {
       resultat = (requete.operations || []).map(function (op) {
-        var r = executerEcriture(op);
+        var r = executerEcriture(op, acces);
         SpreadsheetApp.flush();
         return r;
       });
     } else {
-      resultat = executerEcriture(requete);
+      resultat = executerEcriture(requete, acces);
     }
     return json({ ok: true, resultat: resultat });
+
   } catch (err) {
     return json({ erreur: String(err && err.message ? err.message : err) });
   } finally {
@@ -2410,7 +2571,7 @@ function doPost(e) {
   }
 }
 
-function executerEcriture(op) {
+function executerEcriture(op, acces) {
   var conf = ECRITURE[op.entite];
   if (!conf) throw new Error('Entité inconnue : ' + op.entite);
 
@@ -2419,8 +2580,32 @@ function executerEcriture(op) {
     throw new Error('Identifiant invalide pour ' + op.entite + ' : ' + op.id);
   }
 
+  var payload = op.payload || {};
+
+  // --- Restrictions applicables au client ---
+  if (acces && acces.role === 'client') {
+    if (!(op.entite in ECRITURES_CLIENT)) {
+      throw new Error('Écriture non autorisée sur ' + op.entite + '.');
+    }
+    if (op.action === 'delete') {
+      throw new Error('Suppression non autorisée.');
+    }
+    // La première clé est toujours le projet : il doit être le sien.
+    if (cles[0] !== acces.projetId) {
+      throw new Error('Écriture refusée : ce projet ne vous appartient pas.');
+    }
+    var champsPermis = ECRITURES_CLIENT[op.entite];
+    if (champsPermis) {
+      var filtre = {};
+      champsPermis.forEach(function (c) {
+        if (payload[c] !== undefined) filtre[c] = payload[c];
+      });
+      payload = filtre;
+    }
+  }
+
   if (op.action === 'delete') return supprimerLigne(conf, cles);
-  return ecrireLigne(conf, cles, op.payload || {});   // 'upsert' et 'update'
+  return ecrireLigne(conf, cles, payload);   // 'upsert' et 'update'
 }
 
 function ecrireLigne(conf, cles, payload) {

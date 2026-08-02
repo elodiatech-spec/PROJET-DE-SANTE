@@ -353,10 +353,14 @@ function demoDonnees() {
    Voir docs/connexion-google-sheets.md
    -------------------------------------------------------------------------- */
 const SheetsAdapter = {
-  async chargerTout(webAppUrl) {
-    const rep = await fetch(`${webAppUrl}?action=getAll`, { method: 'GET' });
-    if (!rep.ok) throw new Error(`Réponse ${rep.status} du script Google`);
-    const data = await rep.json();
+  /**
+   * Charge les données autorisées par le porte-clés fourni.
+   * `porteCles` vaut { cle } pour l'expert, { jeton } pour un client.
+   * Le serveur décide de ce qu'il renvoie : un jeton client ne rapporte
+   * jamais que son propre projet.
+   */
+  async chargerTout(webAppUrl, porteCles) {
+    const data = await this.envoyer(webAppUrl, { action: 'getAll', ...porteCles });
     if (!data || !Array.isArray(data.projets)) {
       throw new Error("Format inattendu : la clé 'projets' est absente");
     }
@@ -397,8 +401,8 @@ const Store = {
     const donnees = demoDonnees();
 
     this.state = {
-      // Session
-      session: { connecte: false, identifiant: '' },
+      // Session — `cle` et `jeton` sont les porte-clés envoyés au serveur.
+      session: { connecte: false, identifiant: '', cle: '', jeton: '' },
       role: 'client',            // 'client' | 'expert'
       theme: 'dark',
       projetActifId: donnees.projets[0].id,
@@ -688,9 +692,14 @@ const Store = {
     return null;
   },
 
-  connecter({ role, projetId, identifiant }) {
+  connecter({ role, projetId, identifiant, cle, jeton }) {
     this.commit((s) => {
-      s.session = { connecte: true, identifiant: identifiant || '' };
+      s.session = {
+        connecte: true,
+        identifiant: identifiant || '',
+        cle: cle || '',
+        jeton: jeton || '',
+      };
       s.role = role === 'expert' ? 'expert' : 'client';
       if (projetId && s.projets.some((p) => p.id === projetId)) s.projetActifId = projetId;
       s.route = 'dashboard';
@@ -699,9 +708,37 @@ const Store = {
 
   deconnecter() {
     this.commit((s) => {
-      s.session = { connecte: false, identifiant: '' };
+      s.session = { connecte: false, identifiant: '', cle: '', jeton: '' };
+      s.role = 'client';
       s.route = 'dashboard';
     });
+  },
+
+  /**
+   * Ouvre une session serveur : le script vérifie le porte-clés et ne renvoie
+   * que ce à quoi il donne droit. C'est lui qui décide du rôle, pas le
+   * navigateur — un client ne peut pas se déclarer expert.
+   */
+  async connecterAuServeur({ cle, jeton, identifiant }) {
+    const url = this.state.reglages.webAppUrl;
+    if (!url) throw new Error("Aucune source Google Sheets n'est configurée.");
+
+    const data = await SheetsAdapter.chargerTout(url, cle ? { cle } : { jeton });
+
+    // Un jeton client ne rapporte qu'un projet : le serveur a filtré.
+    const role = cle ? 'expert' : 'client';
+
+    this.commit((s) => {
+      Object.keys(data).forEach((k) => { if (k in s) s[k] = data[k]; });
+      s.reglages.source = 'sheets';
+      s.reglages.derniereSync = new Date().toISOString();
+      s.session = { connecte: true, identifiant: identifiant || '', cle: cle || '', jeton: jeton || '' };
+      s.role = role;
+      s.projetActifId = data.projets[0].id;
+      s.route = 'dashboard';
+    });
+
+    return { role, projets: data.projets.length };
   },
 
   setRole(role) {
@@ -1107,17 +1144,24 @@ const Store = {
    * Sans effet en mode démonstration. L'échec n'interrompt jamais l'utilisateur :
    * la modification reste enregistrée localement et un message l'en informe.
    */
+  /** Porte-clés à joindre à chaque requête : code expert ou jeton client. */
+  porteCles() {
+    const s = this.state.session || {};
+    return s.cle ? { cle: s.cle } : (s.jeton ? { jeton: s.jeton } : {});
+  },
+
   pousser(entite, id, payload, mode) {
     if (!this.ecritureActive()) return;
     SheetsAdapter.envoyer(this.state.reglages.webAppUrl, {
-      action: mode || 'upsert', entite, id, payload,
+      action: mode || 'upsert', entite, id, payload, ...this.porteCles(),
     }).catch((err) => this._alerteEcriture(err));
   },
 
   /** Regroupe plusieurs écritures en une seule requête. */
   pousserLot(operations) {
     if (!this.ecritureActive() || !operations.length) return;
-    SheetsAdapter.envoyer(this.state.reglages.webAppUrl, { action: 'batch', operations })
+    SheetsAdapter.envoyer(this.state.reglages.webAppUrl,
+      { action: 'batch', operations, ...this.porteCles() })
       .catch((err) => this._alerteEcriture(err));
   },
 
@@ -1164,7 +1208,7 @@ const Store = {
   async synchroniser() {
     const { webAppUrl } = this.state.reglages;
     if (!webAppUrl) throw new Error("Aucune URL d'application web Google renseignée.");
-    const data = await SheetsAdapter.chargerTout(webAppUrl);
+    const data = await SheetsAdapter.chargerTout(webAppUrl, this.porteCles());
     this.commit((s) => {
       Object.keys(data).forEach((cle) => { if (cle in s) s[cle] = data[cle]; });
       s.reglages.derniereSync = new Date().toISOString();

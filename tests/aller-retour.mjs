@@ -82,6 +82,11 @@ function chargerScript() {
   const contexte = vm.createContext({
     SpreadsheetApp: { getActive: () => contexte.__classeur, flush: () => {} },
     LockService: { getScriptLock: () => ({ waitLock: () => {}, releaseLock: () => {} }) },
+    // Aucun code expert défini : le script reste ouvert, comme avant
+    // configuration. Le cloisonnement est éprouvé par tests/isolation.mjs.
+    PropertiesService: {
+      getScriptProperties: () => ({ getProperty: () => null, setProperty: () => {} }),
+    },
     ContentService: {
       createTextOutput: (s) => ({ setMimeType: () => ({ _texte: s }) }),
       MimeType: { JSON: 'json' },

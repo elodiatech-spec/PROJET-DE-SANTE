@@ -86,6 +86,57 @@ du projet concerné, jamais le dossier racine.
 
 ---
 
+## Étape 2 bis — Cloisonner les accès
+
+**À faire avant d'entrer de vraies données.** Sans cette étape le script répond à tout le
+monde, ce qui convient pour tester mais pas pour travailler.
+
+### Votre code expert
+
+Menu **ElodiaTech → Définir mon code expert**. Choisissez un code d'au moins douze
+caractères. Il est rangé dans les propriétés du script : il n'apparaît ni dans le dépôt
+GitHub, ni dans la page publique, ni dans le navigateur de vos clients.
+
+C'est ce code qui vous ouvre l'ensemble du portefeuille. Vous le saisissez sur la page de
+connexion, avec votre adresse électronique.
+
+### Les liens de vos clients
+
+Menu **ElodiaTech → Générer les liens clients**. Chaque projet reçoit un jeton de
+vingt-quatre caractères, inscrit dans la colonne `jeton` de l'onglet `Projets`.
+
+Récupérez ensuite le lien de chaque client depuis l'application : **Console expert →
+Portefeuille clients**, bouton **Lien** sur son étiquette. Le lien ressemble à :
+
+```
+https://elodiatech-spec.github.io/PROJET-DE-SANTE/?c=xxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+Le client clique, et arrive directement sur son espace. Rien à retenir, rien à saisir.
+
+### Ce que le serveur applique
+
+| | Vous, avec votre code | Un client, avec son lien |
+|---|---|---|
+| Lecture | tout le portefeuille | son seul dossier |
+| Notes internes du projet | oui | **jamais transmises** |
+| Jeton d'accès | visible | non transmis |
+| Statut d'une prestation | modifiable | validation seulement, sur son projet |
+| Messages, documents | oui | oui, sur son projet |
+| Formule, fiche client, financements, partenariats | oui | **refusé** |
+| Suppression | oui | **refusé** |
+
+Ces règles sont appliquées par le script, pas par l'interface. Un navigateur modifié n'y
+change rien : le serveur ne renvoie tout simplement pas les données auxquelles la requête
+ne donne pas droit.
+
+**Le lien client tient lieu de mot de passe.** Toute personne qui l'obtient accède au
+dossier — comme un document Google partagé par lien. Transmettez-le par un canal sûr.
+Pour invalider un lien, videz la cellule `jeton` du projet et relancez « Générer les
+liens clients » : l'ancien lien cesse aussitôt de fonctionner.
+
+Vérification à tout moment : `node tests/isolation.mjs` depuis le dépôt.
+
 ## Étape 3 — Publier l'application web et la relier
 
 1. Dans l'éditeur Apps Script : **Déployer → Nouveau déploiement**.

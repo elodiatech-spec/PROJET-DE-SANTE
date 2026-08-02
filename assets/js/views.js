@@ -1729,6 +1729,10 @@ const Views = {
                             title="${esc(x.nom)} — ${esc(x.prixLabel)}">${esc(x.code)}</button>`).join('')}
                 </div>
                 <div class="row-tight">
+                  <button class="btn btn--ghost btn--sm" data-action="lien-client" data-id="${esc(p.id)}"
+                          title="Copier le lien d'accès de ce client">
+                    <i class="fa-solid fa-link"></i> Lien
+                  </button>
                   <button class="btn btn--ghost btn--sm" data-action="fiche-client" data-id="${esc(p.id)}" title="Modifier la fiche client">
                     <i class="fa-solid fa-address-card"></i> Fiche
                   </button>

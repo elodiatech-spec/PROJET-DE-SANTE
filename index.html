@@ -53,6 +53,15 @@
             <input type="email" id="connexion-email" name="email" autocomplete="email"
                    placeholder="prenom.nom@exemple.fr" required>
           </div>
+
+          <!-- Réservé à l'expert : le client, lui, arrive par son lien personnel. -->
+          <div class="field" id="connexion-champ-code" hidden>
+            <label class="field__label" for="connexion-code">Code expert</label>
+            <input type="password" id="connexion-code" name="code" autocomplete="current-password"
+                   placeholder="Votre code ElodiaTech">
+            <span class="field__hint">Réservé à ElodiaTech. Vos clients accèdent à leur espace par leur lien personnel.</span>
+          </div>
+
           <button type="submit" class="btn btn--primary btn--block">
             <i class="fa-solid fa-arrow-right-to-bracket"></i> Accéder à mon espace
           </button>

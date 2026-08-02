@@ -8,13 +8,16 @@ const App = {
   map: null,          // instance Leaflet
 
   /* ---------------------------------------------------------------------- */
-  init() {
+  async init() {
     Store.init();
     Store.subscribe(() => this.render());
 
     this.brancherEvenements();
     this.appliquerTheme();
     this.render();
+
+    // Un lien client dans l'adresse ouvre directement la session.
+    await this.connexionParLien();
   },
 
   /* ======================================================================
@@ -50,6 +53,10 @@ const App = {
    */
   renderConnexion() {
     const demo = Store.state.reglages.source !== 'sheets';
+
+    // Le champ « code expert » n'a de sens qu'avec une source réelle.
+    document.getElementById('connexion-champ-code').hidden = demo;
+
     const bloc = document.getElementById('connexion-bloc-profils');
     bloc.hidden = !demo;
     if (!demo) return;
@@ -518,22 +525,85 @@ const App = {
   },
 
   /* ---- Connexion ---- */
-  connexionParEmail() {
-    const champ = document.getElementById('connexion-email');
-    const zoneErreur = document.getElementById('connexion-erreur');
-    const profil = Store.identifier(champ.value);
 
-    if (!profil) {
-      zoneErreur.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i> '
-        + "Cette adresse n'est rattachée à aucun dossier. Choisissez un profil ci-dessous "
-        + 'ou contactez votre référent ElodiaTech.';
-      zoneErreur.hidden = false;
-      champ.focus();
+  erreurConnexion(message) {
+    const zone = document.getElementById('connexion-erreur');
+    zone.innerHTML = `<i class="fa-solid fa-circle-exclamation"></i> ${esc(message)}`;
+    zone.hidden = false;
+  },
+
+  /**
+   * Un client arrive par son lien personnel : …/?c=JETON
+   * Le jeton est retiré de l'adresse aussitôt lu, pour qu'il ne traîne pas
+   * dans l'historique ni dans une capture d'écran.
+   */
+  async connexionParLien() {
+    const params = new URLSearchParams(window.location.search);
+    const jeton = params.get('c');
+    if (!jeton) return false;
+
+    history.replaceState(null, '', window.location.pathname);
+
+    if (!Store.state.reglages.webAppUrl) {
+      this.erreurConnexion("Ce lien nécessite une source de données configurée.");
+      return false;
+    }
+
+    try {
+      await Store.connecterAuServeur({ jeton });
+      toast('Bienvenue sur votre espace de suivi.', 'ok');
+      return true;
+    } catch (err) {
+      this.erreurConnexion(`Ce lien n'est plus valide (${err.message}). Demandez-en un nouveau à votre référent.`);
+      return false;
+    }
+  },
+
+  async connexionParEmail() {
+    const champEmail = document.getElementById('connexion-email');
+    const champCode = document.getElementById('connexion-code');
+    const zone = document.getElementById('connexion-erreur');
+    const bouton = document.querySelector('#form-connexion button[type="submit"]');
+    const code = champCode?.value.trim() || '';
+    const surSheets = Store.state.reglages.source === 'sheets';
+
+    zone.hidden = true;
+
+    // --- Source réelle : c'est le serveur qui décide ---
+    if (surSheets) {
+      if (!code) {
+        this.erreurConnexion("Saisissez votre code expert. Un client accède à son espace par son lien personnel.");
+        champCode?.focus();
+        return;
+      }
+
+      const libelle = bouton.innerHTML;
+      bouton.disabled = true;
+      bouton.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Vérification…';
+
+      try {
+        const res = await Store.connecterAuServeur({ cle: code, identifiant: champEmail.value.trim() });
+        toast(`Portefeuille chargé — ${res.projets} client${res.projets > 1 ? 's' : ''}.`, 'ok');
+      } catch (err) {
+        bouton.disabled = false;
+        bouton.innerHTML = libelle;
+        this.erreurConnexion(`Code refusé (${err.message}).`);
+        champCode.value = '';
+        champCode.focus();
+      }
       return;
     }
 
-    zoneErreur.hidden = true;
-    Store.connecter({ role: profil.role, projetId: profil.projetId, identifiant: champ.value.trim() });
+    // --- Jeu de démonstration : identification locale, sans secret ---
+    const profil = Store.identifier(champEmail.value);
+    if (!profil) {
+      this.erreurConnexion("Cette adresse n'est rattachée à aucun dossier. "
+        + 'Choisissez un profil ci-dessous ou contactez votre référent ElodiaTech.');
+      champEmail.focus();
+      return;
+    }
+
+    Store.connecter({ role: profil.role, projetId: profil.projetId, identifiant: champEmail.value.trim() });
     toast(`Bienvenue, ${profil.nom}.`, 'ok');
   },
 
@@ -1029,6 +1099,60 @@ const App = {
     },
 
     /* --- Console : projets --- */
+    /** Affiche et copie le lien personnel d'accès d'un client. */
+    'lien-client'(el) {
+      const projet = Store.projet(el.dataset.id);
+      if (!projet) return;
+
+      const jeton = projet.jeton || '';
+      const base = window.location.origin + window.location.pathname;
+      const lien = jeton ? `${base}?c=${jeton}` : '';
+
+      Modal.open({
+        titre: `Lien d'accès — ${projet.nom}`,
+        soustitre: projet.client?.nom
+          ? `À transmettre à ${projet.client.nom}.`
+          : 'À transmettre au porteur du projet.',
+        corps: lien
+          ? `<div class="field">
+               <label class="field__label" for="lien-client-champ">Lien personnel</label>
+               <div class="input-group">
+                 <input type="text" id="lien-client-champ" class="input--mono" readonly value="${esc(lien)}">
+                 <button class="btn btn--primary" data-action="copier-lien"><i class="fa-solid fa-copy"></i> Copier</button>
+               </div>
+             </div>
+             <div class="card card--flat" style="margin-top:14px;border-left:3px solid var(--warn-500)">
+               <p class="text-sm text-soft">
+                 Ce lien ouvre le dossier de ce client, et lui seul. Il ne donne accès
+                 à aucun autre dossier du portefeuille.
+               </p>
+               <p class="text-sm text-muted" style="margin-top:8px">
+                 Il tient lieu de mot de passe : toute personne qui l'obtient accède au dossier.
+                 Transmettez-le par un canal sûr et ne le publiez pas.
+                 Pour l'invalider, videz la cellule « jeton » de ce projet dans la feuille,
+                 puis relancez « Générer les liens clients ».
+               </p>
+             </div>`
+          : `<div class="empty" style="border-style:solid">
+               <i class="fa-solid fa-link-slash"></i>
+               <div class="empty__title">Aucun lien pour ce client</div>
+               <div class="empty__text">
+                 Ouvrez la feuille Google Sheets, menu <strong>ElodiaTech → Générer les liens clients</strong>,
+                 puis synchronisez depuis Paramètres &amp; données.
+               </div>
+             </div>`,
+        actions: '<button class="btn" data-action="fermer-modal">Fermer</button>',
+      });
+    },
+
+    'copier-lien'() {
+      const champ = document.getElementById('lien-client-champ');
+      champ.select();
+      navigator.clipboard?.writeText(champ.value)
+        .then(() => toast('Lien copié.', 'ok'))
+        .catch(() => toast('Copie impossible — sélectionnez le lien et copiez-le à la main.', 'warn'));
+    },
+
     'ouvrir-projet'(el) {
       Store.setProjet(el.dataset.id);
       App.aller('dashboard');
