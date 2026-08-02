@@ -687,33 +687,79 @@ const Views = {
     </section>`;
   },
 
-  /* ====================== DOSSIER ARS & GUICHETS ====================== */
-  ars() {
+  /* ====================== FINANCEMENTS & AIDES ======================
+     Guichets de dépôt, demandes en cours, pièces justificatives et
+     prestations du lot : tout ce qui touche à l'argent au même endroit.
+     ================================================================== */
+  financements() {
+    const expert = Store.estExpert();
     const projet = Store.projet();
-    const docs = Store.liste('documents');
     const formule = Store.formule(projet);
+    const liste = Store.liste('financements');
+    const prestas = Store.prestations().filter((p) => p.lot === 'LC');
+    const pieces = Store.pieces();
 
-    const pieces = PIECES_DOSSIER.map((p) => ({
-      ...p,
-      fourni: docs.some((d) => d.cat === p.cat),
-    }));
-    const fournis = pieces.filter((p) => p.fourni).length;
+    const total = liste.reduce((s, f) => s + f.montant, 0);
+    const acquis = liste.filter((f) => f.statut === 'accorde').reduce((s, f) => s + f.montant, 0);
+    const enCours = liste.filter((f) => ['depose', 'instruction'].includes(f.statut))
+      .reduce((s, f) => s + f.montant, 0);
+
+    const fournies = pieces.filter((p) => p.document).length;
+    const manquantesClient = pieces.filter((p) => !p.document && p.par === 'client');
+    let n = 0;
 
     return `
     <section class="view stack">
+
       <div class="card">
         <div class="card__head">
           <div>
-            <h2 class="card__title"><i class="fa-solid fa-landmark"></i> Dossier ARS & guichets institutionnels</h2>
-            <p class="card__subtitle">Accès aux portails de dépôt et suivi des pièces obligatoires du dossier.</p>
-            ${bandeauFormule('LB')}
+            <h2 class="card__title"><i class="fa-solid fa-sack-dollar"></i> Financements & aides</h2>
+            <p class="card__subtitle">
+              ${expert
+                ? "Guichets de dépôt, demandes en cours et pièces du dossier, réunis sur un seul écran."
+                : "Les aides sollicitées pour votre projet, et les pièces qu'il nous faut pour les obtenir."}
+            </p>
+            ${bandeauFormule('LC')}
           </div>
+          ${expert ? `<button class="btn btn--primary btn--sm" data-action="ajouter-financement"><i class="fa-solid fa-plus"></i> Ajouter une demande</button>` : ''}
         </div>
 
+        <div class="grid grid-4">
+          <div class="card card--flat"><div class="kpi">
+            <span class="kpi__label">Total sollicité</span>
+            <span class="kpi__value">${esc(euros(total))}</span>
+          </div></div>
+          <div class="card card--flat"><div class="kpi">
+            <span class="kpi__label">Accordé</span>
+            <span class="kpi__value text-ok">${esc(euros(acquis))}</span>
+          </div></div>
+          <div class="card card--flat"><div class="kpi">
+            <span class="kpi__label">En instruction</span>
+            <span class="kpi__value text-warn">${esc(euros(enCours))}</span>
+          </div></div>
+          <div class="card card--flat"><div class="kpi">
+            <span class="kpi__label">Pièces réunies</span>
+            <span class="kpi__value">${fournies} / ${pieces.length}</span>
+            ${progressBar((fournies / pieces.length) * 100, 'sm')}
+          </div></div>
+        </div>
+      </div>
+
+      <!-- Les portails par lesquels on dépose -->
+      <div class="card">
+        <div class="card__head">
+          <div>
+            <h3 class="card__title"><i class="fa-solid fa-landmark"></i> Guichets de dépôt</h3>
+            <p class="card__subtitle">
+              Les portails officiels sur lesquels les demandes sont déposées et suivies.
+            </p>
+          </div>
+        </div>
         <div class="grid grid-3">
           ${PORTAILS.filter((p) => !p.formules || p.formules.includes(formule.code)).map((p) => `
             <div class="card card--flat" style="border-top:3px solid ${esc(p.couleur)}">
-              <h3 class="text-sm fw-800">${esc(p.nom)}</h3>
+              <h4>${esc(p.nom)}</h4>
               <p class="text-xs text-muted" style="margin:6px 0 12px">${esc(p.desc)}</p>
               <div class="row-tight">
                 ${p.liens.map((l) => `
@@ -725,74 +771,15 @@ const Views = {
         </div>
       </div>
 
+      <!-- Les demandes en cours -->
       <div class="card">
         <div class="card__head">
-          <div>
-            <h3 class="card__title"><i class="fa-solid fa-folder-tree"></i> Pièces obligatoires du dossier</h3>
-            <p class="card__subtitle">Le statut est déduit des documents présents dans le coffre-fort pour chaque catégorie.</p>
-          </div>
-          <span class="badge badge--${fournis === pieces.length ? 'ok' : 'warn'}">${fournis} / ${pieces.length} catégories couvertes</span>
+          <h3 class="card__title"><i class="fa-solid fa-file-invoice-dollar"></i> Demandes déposées</h3>
         </div>
-        <div class="grid grid-3">
-          ${pieces.map((p) => `
-            <div class="file-row">
-              <div class="file-icon" style="color:${p.fourni ? 'var(--ok-500)' : 'var(--text-muted)'}">
-                <i class="fa-solid ${p.fourni ? 'fa-circle-check' : 'fa-circle-dashed'}"></i>
-              </div>
-              <div class="grow">
-                <div class="text-sm fw-800">${esc(p.nom)}</div>
-                <div class="text-xs text-muted">${esc(p.cat)}</div>
-              </div>
-            </div>`).join('')}
-        </div>
-        <div class="row-tight" style="margin-top:var(--sp-4)">
-          <button class="btn btn--sm" data-action="aller" data-route="documents"><i class="fa-solid fa-folder-open"></i> Ouvrir le coffre-fort</button>
-        </div>
-      </div>
-    </section>`;
-  },
-
-  /* ====================== FINANCEMENTS ====================== */
-  financements() {
-    const expert = Store.estExpert();
-    const liste = Store.liste('financements');
-    const prestas = Store.prestations().filter((p) => p.lot === 'LC');
-    const total = liste.reduce((s, f) => s + f.montant, 0);
-    const acquis = liste.filter((f) => f.statut === 'accorde').reduce((s, f) => s + f.montant, 0);
-    let n = 0;
-
-    return `
-    <section class="view stack">
-      <div class="card">
-        <div class="card__head">
-          <div>
-            <h2 class="card__title"><i class="fa-solid fa-sack-dollar"></i> Financements & subventions</h2>
-            <p class="card__subtitle">Suivi des aides sollicitées : FIR, FEDER, ACI, collectivités.</p>
-            ${bandeauFormule('LC')}
-          </div>
-          ${expert ? `<button class="btn btn--primary btn--sm" data-action="ajouter-financement"><i class="fa-solid fa-plus"></i> Ajouter une demande</button>` : ''}
-        </div>
-
-        <div class="grid grid-3" style="margin-bottom:var(--sp-4)">
-          <div class="card card--flat"><div class="kpi">
-            <span class="kpi__label">Total sollicité</span>
-            <span class="kpi__value">${esc(euros(total))}</span>
-          </div></div>
-          <div class="card card--flat"><div class="kpi">
-            <span class="kpi__label">Montant accordé</span>
-            <span class="kpi__value text-ok">${esc(euros(acquis))}</span>
-          </div></div>
-          <div class="card card--flat"><div class="kpi">
-            <span class="kpi__label">Taux d'obtention</span>
-            <span class="kpi__value">${total ? Math.round((acquis / total) * 100) : 0} %</span>
-            ${progressBar(total ? (acquis / total) * 100 : 0, 'sm')}
-          </div></div>
-        </div>
-
         ${liste.length ? `
         <div class="table-wrap">
           <table class="table">
-            <thead><tr><th>Guichet / source</th><th>Montant sollicité</th><th>Statut</th><th>Échéance</th>${expert ? '<th></th>' : ''}</tr></thead>
+            <thead><tr><th>Guichet / source</th><th>Montant</th><th>Statut</th><th>Échéance</th>${expert ? '<th></th>' : ''}</tr></thead>
             <tbody>
               ${liste.map((f) => {
                 const st = STATUTS_FINANCEMENT[f.statut] || STATUTS_FINANCEMENT.etude;
@@ -806,7 +793,85 @@ const Views = {
               }).join('')}
             </tbody>
           </table>
-        </div>` : empty('Aucune demande enregistrée', "Les demandes de financement apparaîtront ici dès leur montage.", 'fa-solid fa-sack-dollar')}
+        </div>` : empty('Aucune demande enregistrée',
+                        expert ? "Les demandes apparaîtront ici dès leur montage."
+                               : "Votre référent déposera les demandes dès que le dossier sera complet.",
+                        'fa-solid fa-sack-dollar')}
+      </div>
+
+      <!-- Les pièces à réunir -->
+      <div class="card">
+        <div class="card__head">
+          <div>
+            <h3 class="card__title"><i class="fa-solid fa-folder-tree"></i> Pièces du dossier</h3>
+            <p class="card__subtitle">
+              ${expert
+                ? "Ce que réclament les financeurs. Les pièces marquées « à fournir » sont attendues du client."
+                : "Ces documents nous sont demandés par les financeurs. Déposez ceux qui relèvent de votre structure."}
+            </p>
+          </div>
+          <span class="badge badge--${fournies === pieces.length ? 'ok' : 'warn'}">
+            ${fournies} / ${pieces.length} réunies
+          </span>
+        </div>
+
+        ${!expert && manquantesClient.length ? `
+          <div class="card card--flat" style="margin-bottom:var(--sp-4);border-left:3px solid var(--warn-500)">
+            <p class="text-sm text-soft">
+              <i class="fa-solid fa-circle-info text-warn"></i>
+              <strong>${manquantesClient.length} document${manquantesClient.length > 1 ? 's' : ''} à nous transmettre.</strong>
+              Déposez le fichier dans votre dossier Drive, puis rattachez-le à la ligne correspondante
+              avec le bouton « Déposer ».
+            </p>
+          </div>` : ''}
+
+        <div class="stack-xs">
+          ${pieces.map((p) => {
+            const fournie = !!p.document;
+            const aMoi = p.par === 'client' ? !expert : expert;
+            const lien = fournie ? urlSure(p.document.url) : '';
+
+            return `
+            <div class="file-row" style="border-left:3px solid ${fournie ? 'var(--ok-500)' : (p.par === 'client' ? 'var(--warn-500)' : 'var(--border-strong)')}">
+              <div class="file-icon" style="color:${fournie ? 'var(--ok-500)' : 'var(--text-muted)'}">
+                <i class="fa-solid ${fournie ? 'fa-circle-check' : 'fa-file-circle-question'}"></i>
+              </div>
+
+              <div class="grow" style="min-width:0">
+                <div class="text-sm fw-800">${esc(p.nom)}</div>
+                <div class="text-xs text-muted">${esc(p.aide)}</div>
+                <div class="row-tight" style="margin-top:6px">
+                  ${p.pour.map((d) => badge(DOSSIERS_AIDE[d]?.label || d, DOSSIERS_AIDE[d]?.couleur || 'neutre')).join('')}
+                  ${fournie
+                    ? `<span class="text-xs text-muted">${esc(p.document.nom)} · ${esc(Dates.format(p.document.date))}</span>`
+                    : badge(p.par === 'client' ? 'À fournir par le client' : 'Produit par ElodiaTech',
+                            p.par === 'client' ? 'warn' : 'neutre')}
+                </div>
+              </div>
+
+              ${fournie && lien
+                ? `<a class="btn btn--sm" href="${esc(lien)}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-eye"></i> Voir</a>`
+                : ''}
+              ${fournie && expert
+                ? `<button class="btn btn--ghost btn--sm" data-action="detacher-piece" data-piece="${esc(p.id)}" title="Détacher ce document"><i class="fa-solid fa-link-slash"></i></button>`
+                : ''}
+              ${!fournie && aMoi
+                ? `<button class="btn btn--primary btn--sm" data-action="deposer-piece" data-piece="${esc(p.id)}">
+                     <i class="fa-solid fa-file-arrow-up"></i> Déposer
+                   </button>`
+                : ''}
+              ${!fournie && !aMoi ? badge('En attente', 'neutre') : ''}
+            </div>`;
+          }).join('')}
+        </div>
+
+        ${urlSure(projet.driveUrl) ? `
+          <div class="row-tight" style="margin-top:var(--sp-4)">
+            <a class="btn btn--sm" href="${esc(urlSure(projet.driveUrl))}" target="_blank" rel="noopener noreferrer">
+              <i class="fa-brands fa-google-drive"></i> Ouvrir le Drive du projet
+            </a>
+            <span class="text-xs text-muted">Déposez-y vos fichiers avant de les rattacher ci-dessus.</span>
+          </div>` : ''}
       </div>
 
       <div class="card">
@@ -815,7 +880,6 @@ const Views = {
       </div>
     </section>`;
   },
-
   /* ====================== CONVENTIONS & PARTENARIATS ====================== */
   partenariats() {
     const expert = Store.estExpert();

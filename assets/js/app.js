@@ -1015,6 +1015,58 @@ const App = {
       });
     },
 
+    /**
+     * Rattache un document à une pièce du dossier.
+     * Le fichier reste sur le Drive : on n'enregistre que sa référence, et
+     * l'identifiant de la pièce qu'il satisfait.
+     */
+    'deposer-piece'(el) {
+      const piece = PIECES_DOSSIER.find((p) => p.id === el.dataset.piece);
+      if (!piece) return;
+
+      const projet = Store.projet();
+      const dejaLa = Store.liste('documents').filter((d) => !d.piece);
+
+      Modal.formulaire({
+        titre: `Déposer — ${piece.nom}`,
+        soustitre: piece.aide,
+        champs: [
+          { id: 'existant', label: 'Un document déjà présent dans le coffre-fort ?', type: 'select',
+            options: [{ v: '', l: '— Non, je référence un nouveau fichier —' }]
+              .concat(dejaLa.map((d) => ({ v: d.id, l: d.nom }))) },
+          { id: 'nom', label: 'Nom du fichier', type: 'text',
+            placeholder: 'RIB_structure.pdf' },
+          { id: 'url', label: 'Lien du fichier sur le Drive', type: 'url',
+            placeholder: 'https://drive.google.com/…' },
+          { id: 'type', label: 'Format', type: 'select', valeur: 'pdf', options: [
+            { v: 'pdf', l: 'PDF' }, { v: 'doc', l: 'Document texte' }, { v: 'xls', l: 'Tableur' },
+            { v: 'img', l: 'Image' }, { v: 'zip', l: 'Archive' }] },
+        ],
+        libelle: 'Rattacher',
+        onSubmit: (v) => {
+          // Soit on marque un document déjà référencé, soit on en crée un.
+          if (v.existant) {
+            Store.majDocument(v.existant, { piece: piece.id, cat: piece.cat });
+          } else {
+            if (!v.nom.trim()) { toast('Indiquez au moins le nom du fichier.', 'warn'); return; }
+            Store.ajouterDocument({
+              nom: v.nom, cat: piece.cat, type: v.type || 'pdf',
+              url: v.url || '', taille: '—', piece: piece.id,
+              auteur: Store.estExpert() ? projet.consultant?.nom : projet.client?.nom,
+            });
+          }
+          toast(`« ${piece.nom} » enregistrée.`, 'ok');
+        },
+      });
+    },
+
+    'detacher-piece'(el) {
+      const doc = Store.liste('documents').find((d) => d.piece === el.dataset.piece);
+      if (!doc) return;
+      Store.majDocument(doc.id, { piece: '' });
+      toast('Document détaché — il reste dans le coffre-fort.', 'ok');
+    },
+
     'supprimer-document'(el) {
       const doc = Store.liste('documents').find((d) => d.id === el.dataset.id);
       Modal.confirmer({

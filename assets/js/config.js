@@ -166,11 +166,13 @@ const PRESTATIONS = [
   { id: 'P19', lot: 'LB', titre: 'Accompagnement au dépôt', acteur: 'expert', jours: 4,
     desc: "Dépôt sur le portail dédié, suivi de l'instruction, réponses aux demandes de compléments.",
     livrable: 'Accusé de dépôt ARS' },
-  { id: 'P20', lot: 'LB', titre: 'Démarches ACI applicables', acteur: 'expert', jours: 6,
+  /* --- LOT C : Financements & subventions (F2, F3) ---
+     L'ACI est une rémunération d'équipe versée par l'Assurance Maladie :
+     sa place est parmi les financements, non dans la structuration juridique. */
+  { id: 'P20', lot: 'LC', titre: 'Démarches ACI applicables', acteur: 'expert', jours: 6,
     desc: "Vérification de l'éligibilité à l'ACI, montage du contrat tripartite et dépôt auprès de la CPAM.",
     livrable: 'Contrat ACI déposé' },
 
-  /* --- LOT C : Financements & subventions (F2, F3) --- */
   { id: 'P21', lot: 'LC', titre: 'Identification des aides ARS', acteur: 'expert', jours: 5,
     desc: "Recensement des aides mobilisables (FIR, aides à l'installation, crédits d'amorçage) et montage des demandes.",
     livrable: 'Dossier de demande FIR' },
@@ -232,7 +234,7 @@ const PRESTATIONS = [
 const POLES = [
   { id: 'pilotage',  titre: 'Pilotage',                icone: 'fa-solid fa-gauge-high' },
   { id: 'ingenierie',titre: 'Ingénierie du projet',    icone: 'fa-solid fa-compass-drafting' },
-  { id: 'guichets',  titre: 'Guichets & financements', icone: 'fa-solid fa-landmark' },
+  { id: 'guichets',  titre: 'Financements & partenaires', icone: 'fa-solid fa-sack-dollar' },
   { id: 'identite',  titre: 'Identité & déploiement',  icone: 'fa-solid fa-rocket' },
   { id: 'documents', titre: 'Documents & validation',  icone: 'fa-solid fa-folder-open' },
   { id: 'collab',    titre: 'Collaboration',           icone: 'fa-solid fa-users' },
@@ -248,8 +250,10 @@ const MODULES = [
   { id: 'juridique',    pole: 'ingenierie',label: 'Structuration juridique', icone: 'fa-solid fa-scale-balanced',       formules: ['F2', 'F3'],       lot: 'LB' },
   { id: 'immobilier',   pole: 'ingenierie',label: 'Immobilier, locaux & ERP',icone: 'fa-solid fa-building-circle-check',formules: ['F2', 'F3'],       option: 'immobilier' },
 
-  { id: 'ars',          pole: 'guichets',  label: 'Dossier ARS & guichets',  icone: 'fa-solid fa-landmark',             formules: ['F2', 'F3'],       lot: 'LB' },
-  { id: 'financements', pole: 'guichets',  label: 'Financements',            icone: 'fa-solid fa-sack-dollar',          formules: ['F2', 'F3'],       lot: 'LC' },
+  // Guichets de dépôt, demandes et pièces justificatives : un seul espace.
+  // Les séparer entretenait la confusion — Stars FIR et e-Synergie ne sont
+  // rien d'autre que les portails par lesquels on demande une subvention.
+  { id: 'financements', pole: 'guichets',  label: 'Financements & aides',    icone: 'fa-solid fa-sack-dollar',          formules: ['F2', 'F3'],       lot: 'LC' },
   { id: 'partenariats', pole: 'guichets',  label: 'Conventions & partenaires',icone: 'fa-solid fa-handshake',           formules: ['F2', 'F3'],       lot: 'LD' },
   { id: 'prestataires', pole: 'guichets',  label: 'Prestataires & outils',   icone: 'fa-solid fa-screwdriver-wrench',   formules: ['F2', 'F3'],       lot: 'LE' },
 
@@ -290,21 +294,47 @@ const CHAPITRES_PDS = [
     desc: "Actions de prévention, ETP, indicateurs, évaluation annuelle des pratiques." },
 ];
 
-/** Pièces obligatoires du dossier ARS / financeur. */
+/**
+ * Pièces à réunir pour les demandes d'aides et le dossier ARS.
+ *
+ * `par` désigne qui fournit la pièce : le client détient les documents de sa
+ * structure, ElodiaTech produit ceux qu'il rédige.
+ * `pour` indique à quel dossier elle sert, ce qui évite de la redemander.
+ */
 const PIECES_DOSSIER = [
-  { id: 'D01', nom: 'Kbis ou récépissé de déclaration', cat: 'Juridique' },
-  { id: 'D02', nom: 'Statuts signés de la structure', cat: 'Juridique' },
-  { id: 'D03', nom: 'RIB professionnel de la structure', cat: 'Finances' },
-  { id: 'D04', nom: 'Titre de propriété ou bail commercial', cat: 'Immobilier' },
-  { id: 'D05', nom: 'Attestation RC professionnelle', cat: 'Juridique' },
-  { id: 'D06', nom: 'Liste des professionnels (RPPS / ADELI)', cat: 'Équipe' },
-  { id: 'D07', nom: 'Projet de santé validé', cat: 'Projet' },
-  { id: 'D08', nom: 'Budget prévisionnel & plan de financement', cat: 'Finances' },
-  { id: 'D09', nom: 'Devis prestataires (travaux, équipement, logiciel)', cat: 'Finances' },
-  { id: 'D10', nom: 'Attestation de régularité fiscale et sociale', cat: 'Juridique' },
-  { id: 'D11', nom: 'Diagnostic accessibilité PMR / attestation ERP', cat: 'Immobilier' },
-  { id: 'D12', nom: "Lettre d'engagement de l'équipe", cat: 'Équipe' },
+  { id: 'D01', nom: 'Kbis ou récépissé de déclaration', cat: 'Juridique', par: 'client', pour: ['ARS', 'FIR', 'FEDER'],
+    aide: "Extrait Kbis pour une SISA, récépissé de déclaration en préfecture pour une association." },
+  { id: 'D02', nom: 'Statuts signés de la structure', cat: 'Juridique', par: 'expert', pour: ['ARS', 'FIR', 'FEDER'],
+    aide: "Rédigés par ElodiaTech, signés par les associés." },
+  { id: 'D03', nom: 'RIB professionnel de la structure', cat: 'Finances', par: 'client', pour: ['FIR', 'FEDER', 'ACI'],
+    aide: "Au nom de la structure, pas d'un professionnel à titre personnel." },
+  { id: 'D04', nom: 'Titre de propriété ou bail commercial', cat: 'Immobilier', par: 'client', pour: ['ARS', 'FEDER'],
+    aide: "Le bail doit couvrir la durée d'engagement demandée par le financeur." },
+  { id: 'D05', nom: 'Attestation RC professionnelle', cat: 'Juridique', par: 'client', pour: ['ARS'],
+    aide: "Attestation en cours de validité, délivrée par votre assureur." },
+  { id: 'D06', nom: 'Liste des professionnels (RPPS / ADELI)', cat: 'Équipe', par: 'client', pour: ['ARS', 'ACI'],
+    aide: "Nom, profession et numéro d'identification de chaque professionnel associé." },
+  { id: 'D07', nom: 'Projet de santé validé', cat: 'Projet', par: 'expert', pour: ['ARS', 'FIR', 'ACI'],
+    aide: "Produit par ElodiaTech, validé par votre équipe." },
+  { id: 'D08', nom: 'Budget prévisionnel & plan de financement', cat: 'Finances', par: 'expert', pour: ['FIR', 'FEDER'],
+    aide: "Monté par ElodiaTech à partir de vos devis." },
+  { id: 'D09', nom: 'Devis des prestataires', cat: 'Finances', par: 'client', pour: ['FIR', 'FEDER'],
+    aide: "Travaux, équipement médical, mobilier, logiciel métier." },
+  { id: 'D10', nom: 'Attestation de régularité fiscale et sociale', cat: 'Juridique', par: 'client', pour: ['FIR', 'FEDER'],
+    aide: "À demander à votre service des impôts et à l'URSSAF." },
+  { id: 'D11', nom: 'Diagnostic accessibilité PMR / attestation ERP', cat: 'Immobilier', par: 'client', pour: ['ARS', 'FEDER'],
+    aide: "Établi par le bureau de contrôle lors de la mise en conformité des locaux." },
+  { id: 'D12', nom: "Lettre d'engagement de l'équipe", cat: 'Équipe', par: 'client', pour: ['ARS', 'ACI'],
+    aide: "Signée par l'ensemble des professionnels engagés dans le projet." },
 ];
+
+/** Dossiers auxquels une pièce peut servir. */
+const DOSSIERS_AIDE = {
+  ARS:   { id: 'ARS',   label: "Autorisation ARS",       couleur: 'purple' },
+  FIR:   { id: 'FIR',   label: 'Subvention FIR',         couleur: 'brand' },
+  FEDER: { id: 'FEDER', label: 'Fonds européens FEDER',  couleur: 'info' },
+  ACI:   { id: 'ACI',   label: 'Contrat ACI',            couleur: 'ok' },
+};
 
 /** Cahier des charges ERP — 19 critères en 4 groupes. */
 const CAHIER_ERP = [

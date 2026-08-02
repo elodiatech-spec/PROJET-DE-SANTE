@@ -213,10 +213,10 @@ function demoDonnees() {
     projets,
     documents: {
       'msp-fort-de-france': [
-        { id: 'doc1', nom: 'Projet_de_sante_MSP_Caraibes_V4.pdf', cat: 'Projet', type: 'pdf', taille: '4,2 Mo', date: j(-26), auteur: 'ARNOBE Frédéric', url: '' },
-        { id: 'doc2', nom: 'Statuts_SISA_signes.pdf', cat: 'Juridique', type: 'pdf', taille: '1,1 Mo', date: j(-61), auteur: 'ARNOBE Frédéric', url: '' },
+        { id: 'doc1', nom: 'Projet_de_sante_MSP_Caraibes_V4.pdf', cat: 'Projet', type: 'pdf', taille: '4,2 Mo', date: j(-26), auteur: 'ARNOBE Frédéric', url: '', piece: 'D07' },
+        { id: 'doc2', nom: 'Statuts_SISA_signes.pdf', cat: 'Juridique', type: 'pdf', taille: '1,1 Mo', date: j(-61), auteur: 'ARNOBE Frédéric', url: '', piece: 'D02' },
         { id: 'doc3', nom: 'Dossier_ARS_depot.zip', cat: 'ARS', type: 'zip', taille: '18,4 Mo', date: j(-40), auteur: 'ARNOBE Frédéric', url: '' },
-        { id: 'doc4', nom: 'Plan_financement_triennal.xlsx', cat: 'Finances', type: 'xls', taille: '286 Ko', date: j(-18), auteur: 'ARNOBE Frédéric', url: '' },
+        { id: 'doc4', nom: 'Plan_financement_triennal.xlsx', cat: 'Finances', type: 'xls', taille: '286 Ko', date: j(-18), auteur: 'ARNOBE Frédéric', url: '', piece: 'D08' },
         { id: 'doc5', nom: 'Plans_execution_BPE.pdf', cat: 'Immobilier', type: 'pdf', taille: '12,7 Mo', date: j(-33), auteur: 'ArchiSanté Caraïbes', url: '' },
         { id: 'doc6', nom: 'Charte_graphique_MSP.pdf', cat: 'Identité', type: 'pdf', taille: '6,8 Mo', date: j(-9), auteur: 'Studio ElodiaTech', url: '' },
       ],
@@ -598,6 +598,25 @@ const Store = {
     return this.state[entite]?.[id] || [];
   },
 
+  /**
+   * État des pièces justificatives d'un projet.
+   * Une pièce est fournie dès qu'un document du coffre-fort lui est rattaché
+   * (champ `piece`). Les pièces ne concernant aucun dossier ouvert restent
+   * listées : elles seront demandées le moment venu.
+   */
+  pieces(projetId) {
+    const docs = this.liste('documents', projetId);
+    return PIECES_DOSSIER.map((p) => ({
+      ...p,
+      document: docs.find((d) => d.piece === p.id) || null,
+    }));
+  },
+
+  /** Pièces que le client doit fournir et qui manquent encore. */
+  piecesManquantes(projetId) {
+    return this.pieces(projetId).filter((p) => !p.document && p.par === 'client');
+  },
+
   /** Signatures en attente du client. */
   signaturesEnAttente(projetId) {
     return this.liste('signatures', projetId).filter((s) => s.statut === 'a_signer');
@@ -673,6 +692,20 @@ const Store = {
         texte: sigs.map((s) => s.titre).join(' · '),
         route: 'signatures',
       });
+    }
+
+    // Pièces à fournir : seulement si le projet a des financements en jeu.
+    const projetCourant = this.projet(projetId);
+    if (projetCourant && FORMULES[projetCourant.formule]?.lots.includes('LC')) {
+      const manquantes = this.piecesManquantes(projetId);
+      if (manquantes.length) {
+        n.push({
+          ton: 'warn', icone: 'fa-solid fa-file-arrow-up',
+          titre: `${manquantes.length} pièce${manquantes.length > 1 ? 's' : ''} à fournir`,
+          texte: manquantes.map((p) => p.nom).slice(0, 3).join(' · '),
+          route: 'financements',
+        });
+      }
     }
 
     const retard = this.enRetard(projetId);
@@ -1067,13 +1100,22 @@ const Store = {
   },
 
   ajouterDocument(doc) {
-    const item = { id: idUnique('doc'), date: Dates.today(), ...doc };
+    const item = { id: idUnique('doc'), date: Dates.today(), piece: '', ...doc };
     this.commit((s) => {
       const id = s.projetActifId;
       if (!s.documents[id]) s.documents[id] = [];
       s.documents[id].unshift(item);
     });
     this._pousserItem('documents', item);
+  },
+
+  majDocument(docId, champs) {
+    this.commit((s) => {
+      const d = (s.documents[s.projetActifId] || []).find((x) => x.id === docId);
+      if (d) Object.assign(d, champs);
+    });
+    const d = this.liste('documents').find((x) => x.id === docId);
+    if (d) this._pousserItem('documents', d);
   },
 
   supprimerDocument(docId) {

@@ -85,7 +85,8 @@ var ONGLETS = {
     "taille",
     "date",
     "auteur",
-    "url"
+    "url",
+    "piece"
   ],
   "Signatures": [
     "projet_id",
@@ -161,7 +162,7 @@ var ONGLETS = {
 };
 
 var ENTITES_PAR_PROJET = {
-  documents:     { onglet: 'Documents',     champs: ['id', 'nom', 'cat', 'type', 'taille', 'date', 'auteur', 'url'] },
+  documents:     { onglet: 'Documents',     champs: ['id', 'nom', 'cat', 'type', 'taille', 'date', 'auteur', 'url', 'piece'] },
   signatures:    { onglet: 'Signatures',    champs: ['id', 'titre', 'desc', 'statut', 'date', 'url'] },
   messages:      { onglet: 'Messages',      champs: ['id', 'auteur', 'role', 'texte', 'date'] },
   evenements:    { onglet: 'Evenements',    champs: ['id', 'titre', 'type', 'canal', 'date', 'heure', 'lieu', 'lien'] },
@@ -2652,7 +2653,7 @@ var ECRITURE = {
   },
   documents: {
     onglet: 'Documents', cles: ['projet_id', 'id'],
-    champs: { nom: 'nom', cat: 'cat', type: 'type', taille: 'taille', date: 'date', auteur: 'auteur', url: 'url' }
+    champs: { nom: 'nom', cat: 'cat', type: 'type', taille: 'taille', date: 'date', auteur: 'auteur', url: 'url', piece: 'piece' }
   },
   signatures: {
     onglet: 'Signatures', cles: ['projet_id', 'id'],

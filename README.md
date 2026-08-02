@@ -45,7 +45,7 @@ Publication sur GitHub Pages : poussez le dossier tel quel et activez Pages sur 
 | L0 | Cadrage & démarrage | ✅ | ✅ | ✅ |
 | LA | Projet de santé | ✅ | ✅ | ✅ |
 | LB | Structuration juridique & dossier ARS | — | ✅ | ✅ |
-| LC | Financements & subventions | — | ✅ | ✅ |
+| LC | Financements & subventions (dont ACI) | — | ✅ | ✅ |
 | LD | Conventions & partenariats | — | ✅ | ✅ |
 | LE | Prestataires & outils métier | — | ✅ | ✅ |
 | LF | Identité visuelle & digital | — | — | ✅ |
@@ -173,11 +173,14 @@ ou de `apps-script/Code.gs`.
 - Structuration juridique : SISA ou association loi 1901
 - Immobilier : carte, intervenants, cahier des charges ERP en 19 critères
 
-**Guichets & financements**
-- Portails Stars FIR, e-Synergie, Espace Pro Ameli
-- Suivi des 12 pièces obligatoires du dossier
-- Tableau des demandes de financement avec taux d'obtention
-- Conventions et annuaire de prestataires
+**Financements & partenaires**
+- **Financements & aides** — un seul écran pour tout ce qui touche à l'argent :
+  les guichets de dépôt (Stars FIR, e-Synergie, Espace Pro Ameli), les demandes
+  et leur statut, les douze pièces justificatives, et les prestations du lot.
+  Chaque pièce indique à quels dossiers elle sert et qui doit la fournir ;
+  le client rattache ses documents lui-même et est notifié de ce qui manque.
+- Conventions et partenariats
+- Annuaire des prestataires
 
 **Documents & validation**
 - Coffre-fort documentaire par catégorie
