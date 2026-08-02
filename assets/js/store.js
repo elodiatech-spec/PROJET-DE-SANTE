@@ -269,20 +269,20 @@ function demoDonnees() {
     },
     evenements: {
       'msp-fort-de-france': [
-        { id: 'e1', titre: 'Comité de pilotage mensuel', type: 'reunion', date: j(4), heure: '14:30', lieu: 'Visioconférence', lien: 'https://meet.google.com/exemple-copil' },
-        { id: 'e2', titre: 'Commission ARS — instruction du dossier', type: 'jalon', date: j(21), heure: '09:00', lieu: 'ARS Martinique', lien: '' },
-        { id: 'e3', titre: 'Livraison de la maquette du site internet', type: 'livrable', date: j(12), heure: '', lieu: '', lien: '' },
-        { id: 'e4', titre: 'Formation équipe — logiciel métier', type: 'formation', date: j(35), heure: '09:00', lieu: 'Sur site', lien: '' },
+        { id: 'e1', titre: 'Comité de pilotage mensuel', type: 'echange', canal: 'visio', date: j(4), heure: '14:30', lieu: '', lien: 'https://meet.google.com/exemple-copil' },
+        { id: 'e2', titre: 'Commission ARS — instruction du dossier', type: 'jalon', canal: '', date: j(21), heure: '09:00', lieu: 'ARS Martinique', lien: '' },
+        { id: 'e3', titre: 'Livraison de la maquette du site internet', type: 'livrable', canal: '', date: j(12), heure: '', lieu: '', lien: '' },
+        { id: 'e4', titre: 'Formation équipe — logiciel métier', type: 'formation', canal: '', date: j(35), heure: '09:00', lieu: 'Sur site', lien: '' },
       ],
       'msp-pointe-a-pitre': [
-        { id: 'e5', titre: 'Atelier rédaction — exercice coordonné', type: 'reunion', date: j(6), heure: '18:00', lieu: 'Visioconférence', lien: 'https://meet.google.com/exemple-atelier' },
-        { id: 'e6', titre: 'Clôture du dépôt FEDER', type: 'jalon', date: j(18), heure: '23:59', lieu: 'Portail e-Synergie', lien: '' },
+        { id: 'e5', titre: 'Atelier rédaction — exercice coordonné', type: 'echange', canal: 'visio', date: j(6), heure: '18:00', lieu: '', lien: 'https://meet.google.com/exemple-atelier' },
+        { id: 'e6', titre: 'Clôture du dépôt FEDER', type: 'jalon', canal: '', date: j(18), heure: '23:59', lieu: 'Portail e-Synergie', lien: '' },
       ],
       'cds-gros-morne': [
-        { id: 'e7', titre: 'Restitution du diagnostic territorial', type: 'reunion', date: j(9), heure: '10:00', lieu: 'Sur site', lien: '' },
+        { id: 'e7', titre: 'Restitution du diagnostic territorial', type: 'echange', canal: 'presentiel', date: j(9), heure: '10:00', lieu: 'Cabinet, Gros-Morne', lien: '' },
       ],
       'cds-cayenne': [
-        { id: 'e8', titre: 'Rendez-vous découverte', type: 'reunion', date: j(3), heure: '15:00', lieu: 'Visioconférence', lien: 'https://meet.google.com/exemple-decouverte' },
+        { id: 'e8', titre: 'Rendez-vous découverte', type: 'echange', canal: 'visio', date: j(3), heure: '15:00', lieu: '', lien: 'https://meet.google.com/exemple-decouverte' },
       ],
     },
     comptesRendus: {
@@ -402,7 +402,8 @@ const Store = {
 
     this.state = {
       // Session — `cle` et `jeton` sont les porte-clés envoyés au serveur.
-      session: { connecte: false, identifiant: '', cle: '', jeton: '' },
+      session: { connecte: false, identifiant: '', cle: '', jeton: '', expire: 0 },
+      chargement: false,
       role: 'client',            // 'client' | 'expert'
       theme: 'dark',
       projetActifId: donnees.projets[0].id,
@@ -429,10 +430,24 @@ const Store = {
       });
     }
 
+    // Une session expirée ramène à la page de connexion.
+    const s = this.state.session;
+    if (s.connecte && s.expire && Date.now() > s.expire) {
+      this.state.session = { connecte: false, identifiant: '', cle: '', jeton: '', expire: 0 };
+      this.state.role = 'client';
+    }
+
+    // Sur source réelle les données n'ont pas été conservées : il faudra les
+    // redemander au serveur avant d'afficher quoi que ce soit.
+    this.state.chargement = this.estConnecte() && this.state.reglages.source === 'sheets';
+
     // Sécurité : le projet actif doit exister.
     if (!this.projet()) this.state.projetActifId = this.state.projets[0].id;
     return this.state;
   },
+
+  /** Durée d'une session avant nouvelle authentification : 12 heures. */
+  DUREE_SESSION_MS: 12 * 60 * 60 * 1000,
 
   _lire() {
     try {
@@ -445,7 +460,19 @@ const Store = {
 
   sauvegarder() {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.state));
+      const aEnregistrer = { ...this.state };
+
+      // Sur source réelle, le portefeuille ne doit pas rester en clair dans le
+      // navigateur entre deux visites : il est redemandé au serveur à chaque
+      // ouverture, avec le porte-clés. Seuls les réglages et la session restent.
+      if (this.state.reglages.source === 'sheets') {
+        ['projets', 'documents', 'signatures', 'messages', 'evenements',
+         'comptesRendus', 'financements', 'partenaires'].forEach((cle) => {
+          delete aEnregistrer[cle];
+        });
+      }
+
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(aEnregistrer));
     } catch {
       /* quota dépassé ou mode privé : la session reste fonctionnelle en mémoire */
     }
@@ -580,7 +607,7 @@ const Store = {
       (this.state.evenements[p.id] || []).forEach((e) => {
         entrees.push({
           date: e.date, heure: e.heure || '', titre: e.titre, type: e.type,
-          lieu: e.lieu || '', lien: e.lien || '',
+          canal: e.canal || '', lieu: e.lieu || '', lien: e.lien || '',
           projetId: p.id, projetNom: p.nom, projetVille: p.ville,
         });
       });
@@ -651,17 +678,56 @@ const Store = {
       });
     }
 
-    this.echeances(projetId, 3).forEach((e) => {
-      const j = Dates.daysUntil(e.date);
-      if (j !== null && j >= 0 && j <= 14) {
+    // Échanges programmés : le client doit savoir quand et par quel moyen.
+    const aujourdhui = Dates.today();
+    this.liste('evenements', projetId)
+      .filter((e) => estUnEchange(e.type) && e.date >= aujourdhui)
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .slice(0, 3)
+      .forEach((e) => {
+        const j = Dates.daysUntil(e.date);
+        if (j === null || j > 14) return;
+        const canal = CANAUX[e.canal] || CANAUX.visio;
         n.push({
-          ton: j <= 5 ? 'warn' : 'ok', icone: 'fa-solid fa-calendar-day',
+          ton: j <= 2 ? 'warn' : 'ok',
+          icone: canal.icone,
           titre: e.titre,
-          texte: j === 0 ? "Aujourd'hui" : `Dans ${j} jour${j > 1 ? 's' : ''} · ${Dates.format(e.date)}`,
+          texte: `${canal.label} · ${j === 0 ? "aujourd'hui" : `dans ${j} jour${j > 1 ? 's' : ''}`}`
+                 + `${e.heure ? ' à ' + e.heure : ''} · ${Dates.format(e.date)}`,
           route: 'planning',
         });
-      }
-    });
+      });
+
+    // Autres échéances du planning et des prestations.
+    this.echeances(projetId, 3)
+      .filter((e) => e.type !== 'echange' && e.type !== 'reunion')
+      .forEach((e) => {
+        const j = Dates.daysUntil(e.date);
+        if (j !== null && j >= 0 && j <= 14) {
+          n.push({
+            ton: j <= 5 ? 'warn' : 'ok', icone: 'fa-solid fa-calendar-day',
+            titre: e.titre,
+            texte: j === 0 ? "Aujourd'hui" : `Dans ${j} jour${j > 1 ? 's' : ''} · ${Dates.format(e.date)}`,
+            route: 'planning',
+          });
+        }
+      });
+
+    // Comptes rendus récents : le client retrouve ce qui a été dit.
+    if (!this.estExpert()) {
+      this.liste('comptesRendus', projetId)
+        .filter((cr) => cr.date && Dates.daysUntil(cr.date) >= -14)
+        .slice(0, 2)
+        .forEach((cr) => {
+          const canal = CANAUX[cr.type] || CANAUX.visio;
+          n.push({
+            ton: 'ok', icone: 'fa-solid fa-clipboard-check',
+            titre: `Compte rendu — ${cr.objet}`,
+            texte: `${canal.label} du ${Dates.format(cr.date)}`,
+            route: 'comptes-rendus',
+          });
+        });
+    }
 
     return n;
   },
@@ -699,7 +765,9 @@ const Store = {
         identifiant: identifiant || '',
         cle: cle || '',
         jeton: jeton || '',
+        expire: Date.now() + this.DUREE_SESSION_MS,
       };
+      s.chargement = false;
       s.role = role === 'expert' ? 'expert' : 'client';
       if (projetId && s.projets.some((p) => p.id === projetId)) s.projetActifId = projetId;
       s.route = 'dashboard';
@@ -708,10 +776,45 @@ const Store = {
 
   deconnecter() {
     this.commit((s) => {
-      s.session = { connecte: false, identifiant: '', cle: '', jeton: '' };
+      s.session = { connecte: false, identifiant: '', cle: '', jeton: '', expire: 0 };
       s.role = 'client';
       s.route = 'dashboard';
+      s.chargement = false;
+      // Le portefeuille quitte la mémoire : l'écran suivant ne peut rien montrer.
+      if (s.reglages.source === 'sheets') {
+        const neuf = demoDonnees();
+        Object.keys(neuf).forEach((cle) => { s[cle] = neuf[cle]; });
+        s.projetActifId = neuf.projets[0].id;
+      }
     });
+  },
+
+  /**
+   * Redemande les données au serveur avec le porte-clés en mémoire.
+   * Appelée à chaque ouverture : c'est ce qui garantit qu'un code révoqué
+   * ferme réellement l'accès, et non seulement à la prochaine connexion.
+   */
+  async revalider() {
+    const { webAppUrl } = this.state.reglages;
+    const porteCles = this.porteCles();
+    if (!webAppUrl || !Object.keys(porteCles).length) {
+      throw new Error('session incomplète');
+    }
+
+    const data = await SheetsAdapter.chargerTout(webAppUrl, porteCles);
+
+    this.commit((s) => {
+      Object.keys(data).forEach((k) => { if (k in s) s[k] = data[k]; });
+      s.reglages.derniereSync = new Date().toISOString();
+      s.chargement = false;
+      s.role = porteCles.cle ? 'expert' : 'client';
+      if (!s.projets.some((p) => p.id === s.projetActifId)) {
+        s.projetActifId = data.projets[0].id;
+      }
+      if (!this.moduleAccessible(s.route)) s.route = 'dashboard';
+    });
+
+    return data.projets.length;
   },
 
   /**
@@ -732,7 +835,12 @@ const Store = {
       Object.keys(data).forEach((k) => { if (k in s) s[k] = data[k]; });
       s.reglages.source = 'sheets';
       s.reglages.derniereSync = new Date().toISOString();
-      s.session = { connecte: true, identifiant: identifiant || '', cle: cle || '', jeton: jeton || '' };
+      s.session = {
+        connecte: true, identifiant: identifiant || '',
+        cle: cle || '', jeton: jeton || '',
+        expire: Date.now() + this.DUREE_SESSION_MS,
+      };
+      s.chargement = false;
       s.role = role;
       s.projetActifId = data.projets[0].id;
       s.route = 'dashboard';
@@ -982,7 +1090,7 @@ const Store = {
   ajouterEvenement(evt) {
     const item = {
       id: idUnique('e'),
-      titre: '', type: 'reunion', date: Dates.today(), heure: '', lieu: '', lien: '',
+      titre: '', type: 'echange', canal: 'visio', date: Dates.today(), heure: '', lieu: '', lien: '',
       ...evt,
     };
     this.commit((s) => {

@@ -112,7 +112,8 @@ var ONGLETS = {
     "date",
     "heure",
     "lieu",
-    "lien"
+    "lien",
+    "canal"
   ],
   "ComptesRendus": [
     "projet_id",
@@ -147,7 +148,7 @@ var ENTITES_PAR_PROJET = {
   documents:     { onglet: 'Documents',     champs: ['id', 'nom', 'cat', 'type', 'taille', 'date', 'auteur', 'url'] },
   signatures:    { onglet: 'Signatures',    champs: ['id', 'titre', 'desc', 'statut', 'date', 'url'] },
   messages:      { onglet: 'Messages',      champs: ['id', 'auteur', 'role', 'texte', 'date'] },
-  evenements:    { onglet: 'Evenements',    champs: ['id', 'titre', 'type', 'date', 'heure', 'lieu', 'lien'] },
+  evenements:    { onglet: 'Evenements',    champs: ['id', 'titre', 'type', 'canal', 'date', 'heure', 'lieu', 'lien'] },
   comptesRendus: { onglet: 'ComptesRendus', champs: ['id', 'date', 'objet', 'type', 'participants', 'decisions', 'statut', 'lien_meet', 'lien_doc'] },
   financements:  { onglet: 'Financements',  champs: ['id', 'source', 'montant', 'statut', 'echeance'] },
   partenaires:   { onglet: 'Partenaires',   champs: ['id', 'nom', 'type', 'statut'] }
@@ -2538,7 +2539,7 @@ var ECRITURE = {
   },
   evenements: {
     onglet: 'Evenements', cles: ['projet_id', 'id'],
-    champs: { titre: 'titre', type: 'type', date: 'date', heure: 'heure', lieu: 'lieu', lien: 'lien' }
+    champs: { titre: 'titre', type: 'type', canal: 'canal', date: 'date', heure: 'heure', lieu: 'lieu', lien: 'lien' }
   },
   comptesRendus: {
     onglet: 'ComptesRendus', cles: ['projet_id', 'id'],

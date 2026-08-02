@@ -184,14 +184,19 @@ ou de `apps-script/Code.gs`.
 - Parapheurs de signature électronique administrés par l'expert
 - Bibliothèque des livrables par lot
 
-**Collaboration**
-- Messagerie
-- Planning du projet, et pour l'expert **planning général** cumulant les échéances
-  de tout le portefeuille, filtrable par client
-- Événements porteurs d'un lien Google Meet, rejoignable d'un clic par le client
-- Comptes rendus typés — visioconférence, entretien téléphonique, réunion sur site,
-  échange écrit — portant le lien de la réunion et celui du Google Doc de notes.
-  Un lien Meet collé crée le compte rendu ; la saisie manuelle reste possible.
+**Collaboration** — trois rôles distincts, sans recouvrement
+
+1. **Messagerie** — l'écrit au fil de l'eau.
+2. **Planning** — on y *programme* les échanges. Quatre canaux : visioconférence
+   Google Meet, entretien téléphonique, WhatsApp, rencontre sur site. Le client voit le
+   rendez-vous, reçoit une notification à l'approche et rejoint d'un clic — le bouton
+   s'adapte au canal (`tel:` pour un appel, `wa.me` pour WhatsApp). S'y ajoutent les
+   jalons réglementaires et les livraisons, qui n'appellent pas de rendez-vous.
+   Pour l'expert, une bascule ouvre le **planning général** de tout le portefeuille.
+3. **Comptes rendus** — on y *consigne* ce qui s'est dit. Les échanges passés sans compte
+   rendu sont listés en tête, prêts à être rédigés en un clic, pré-remplis depuis le
+   planning. Chaque compte rendu porte son canal, le lien de l'échange et celui du
+   Google Doc de notes. Le client en est notifié et les retrouve dans son espace.
 
 **Console expert**
 - Portefeuille en **étiquettes clients** : un clic ouvre la vue d'ensemble du projet

@@ -405,21 +405,67 @@ const FAQ = [
 /** Catégories de documents du coffre-fort. */
 const CATEGORIES_DOC = ['Projet', 'Juridique', 'ARS', 'Finances', 'Immobilier', 'Équipe', 'Partenariats', 'Identité'];
 
-/** Nature d'un échange donnant lieu à un compte rendu. */
-const TYPES_ECHANGE = {
-  visio:      { id: 'visio',      label: 'Visioconférence', icone: 'fa-solid fa-video',        couleur: 'info' },
-  telephone:  { id: 'telephone',  label: 'Entretien téléphonique', icone: 'fa-solid fa-phone', couleur: 'brand' },
-  presentiel: { id: 'presentiel', label: 'Réunion sur site', icone: 'fa-solid fa-users',       couleur: 'accent' },
-  ecrit:      { id: 'ecrit',      label: 'Échange écrit',    icone: 'fa-solid fa-envelope',    couleur: 'neutre' },
+/**
+ * Canaux d'échange avec le client.
+ * Un échange se programme dans le planning, puis se consigne dans les comptes
+ * rendus : le canal est le même de bout en bout.
+ *
+ * `lien` décrit ce qu'on attend dans le champ adresse, `action` le libellé du
+ * bouton proposé au client.
+ */
+const CANAUX = {
+  visio: {
+    id: 'visio', label: 'Visioconférence', court: 'Visio',
+    icone: 'fa-solid fa-video', couleur: 'info', action: 'Rejoindre',
+    lien: { requis: true, label: 'Lien Google Meet', exemple: 'https://meet.google.com/abc-defg-hij',
+            aide: 'Depuis Google Agenda ou Meet : « Copier le lien de la visioconférence ».' },
+  },
+  telephone: {
+    id: 'telephone', label: 'Entretien téléphonique', court: 'Téléphone',
+    icone: 'fa-solid fa-phone', couleur: 'brand', action: 'Appeler',
+    lien: { requis: false, label: 'Numéro à appeler', exemple: '0596 00 00 00',
+            aide: 'Le client verra le numéro et pourra le composer d\'un clic depuis son téléphone.' },
+  },
+  whatsapp: {
+    id: 'whatsapp', label: 'Échange WhatsApp', court: 'WhatsApp',
+    icone: 'fa-brands fa-whatsapp', couleur: 'ok', action: 'Ouvrir WhatsApp',
+    lien: { requis: false, label: 'Numéro WhatsApp', exemple: '0596 00 00 00',
+            aide: 'Numéro au format local ou international : le lien wa.me est construit automatiquement.' },
+  },
+  presentiel: {
+    id: 'presentiel', label: 'Rencontre sur site', court: 'Sur site',
+    icone: 'fa-solid fa-users', couleur: 'accent', action: 'Voir le lieu',
+    lien: { requis: false, label: 'Lien de la carte (facultatif)', exemple: 'https://maps.google.com/…',
+            aide: 'Le lieu se saisit dans le champ précédent ; ce lien est optionnel.' },
+  },
+  ecrit: {
+    id: 'ecrit', label: 'Échange écrit', court: 'Écrit',
+    icone: 'fa-solid fa-envelope', couleur: 'neutre', action: '',
+    lien: { requis: false, label: 'Lien (facultatif)', exemple: '', aide: '' },
+  },
 };
 
-/** Types d'événements du planning. */
+/** Conservé pour les comptes rendus : même référentiel que les canaux. */
+const TYPES_ECHANGE = CANAUX;
+
+/**
+ * Nature d'une entrée du planning.
+ * « echange » est le seul type qui porte un canal et concerne le client
+ * directement ; les autres jalonnent le projet.
+ */
 const TYPES_EVENEMENT = {
-  reunion:   { id: 'reunion',   label: 'Réunion',    icone: 'fa-solid fa-video' },
-  jalon:     { id: 'jalon',     label: 'Jalon',      icone: 'fa-solid fa-flag' },
-  livrable:  { id: 'livrable',  label: 'Livraison',  icone: 'fa-solid fa-box' },
-  formation: { id: 'formation', label: 'Formation',  icone: 'fa-solid fa-chalkboard-user' },
+  echange:   { id: 'echange',   label: 'Échange avec le client', icone: 'fa-solid fa-comments', avecCanal: true },
+  jalon:     { id: 'jalon',     label: 'Jalon réglementaire',    icone: 'fa-solid fa-flag' },
+  livrable:  { id: 'livrable',  label: 'Livraison',              icone: 'fa-solid fa-box' },
+  formation: { id: 'formation', label: 'Formation',              icone: 'fa-solid fa-chalkboard-user' },
+  // Ancien libellé, conservé pour les données déjà saisies.
+  reunion:   { id: 'reunion',   label: 'Échange avec le client', icone: 'fa-solid fa-comments', avecCanal: true, ancien: true },
 };
+
+/** Un événement de ce type est un échange avec le client. */
+function estUnEchange(type) {
+  return type === 'echange' || type === 'reunion';
+}
 
 /**
  * Champs de la fiche client.

@@ -166,6 +166,16 @@ img, svg { max-width: 100%; }
    l'application reste alors hors du DOM visible, sans clignotement au chargement.
    -------------------------------------------------------------------------- */
 .connexion { display: none; }
+
+/* Pendant la revalidation, on masque le formulaire : l'utilisateur n'a rien
+   à saisir, le porte-clés est déjà en mémoire. */
+body.en-chargement .connexion__contenu > *:not(.connexion__logo):not(.connexion__attente) { display: none; }
+.connexion__attente { display: none; }
+body.en-chargement .connexion__attente {
+  display: flex; align-items: center; gap: 12px;
+  font-size: .9rem; font-weight: 700; color: var(--text-soft);
+}
+.connexion__attente i { color: var(--brand-500); font-size: 1.1rem; }
 body.non-connecte > .topbar,
 body.non-connecte > .layout,
 body.non-connecte > .drawer,

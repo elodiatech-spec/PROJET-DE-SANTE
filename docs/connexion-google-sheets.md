@@ -135,6 +135,11 @@ dossier — comme un document Google partagé par lien. Transmettez-le par un ca
 Pour invalider un lien, videz la cellule `jeton` du projet et relancez « Générer les
 liens clients » : l'ancien lien cesse aussitôt de fonctionner.
 
+**La session dure douze heures**, puis l'application redemande le code ou le lien. À chaque
+ouverture, elle réinterroge le serveur : un code changé ferme donc l'accès immédiatement,
+sans attendre l'expiration. Le portefeuille n'est pas conservé dans le navigateur entre
+deux visites.
+
 Vérification à tout moment : `node tests/isolation.mjs` depuis le dépôt.
 
 ## Étape 3 — Publier l'application web et la relier

@@ -17,7 +17,18 @@ const App = {
     this.render();
 
     // Un lien client dans l'adresse ouvre directement la session.
-    await this.connexionParLien();
+    if (await this.connexionParLien()) return;
+
+    // Session en cours sur source réelle : les données n'ont pas été
+    // conservées localement, on les redemande au serveur.
+    if (Store.state.chargement) {
+      try {
+        await Store.revalider();
+      } catch (err) {
+        Store.deconnecter();
+        this.erreurConnexion(`Votre session a expiré (${err.message}). Reconnectez-vous.`);
+      }
+    }
   },
 
   /* ======================================================================
@@ -30,9 +41,11 @@ const App = {
     this.appliquerTheme();
 
     // Hors session, l'application n'est pas rendue du tout : rien à voir,
-    // rien à inspecter dans le DOM.
-    const connecte = Store.estConnecte();
+    // rien à inspecter dans le DOM. Idem pendant la revalidation, tant que
+    // le serveur n'a pas confirmé les droits.
+    const connecte = Store.estConnecte() && !Store.state.chargement;
     document.body.classList.toggle('non-connecte', !connecte);
+    document.body.classList.toggle('en-chargement', !!Store.state.chargement);
     if (!connecte) { this.renderConnexion(); return; }
 
     this.renderTopbar();
@@ -975,20 +988,50 @@ const App = {
       App.renderVue();
     },
 
-    'ajouter-evenement'() {
+    /**
+     * Programmer un échange avec le client : visio, téléphone, WhatsApp ou
+     * sur site. C'est le point d'entrée unique — le compte rendu se rédige
+     * ensuite, une fois l'échange passé.
+     */
+    'programmer-echange'() {
       Modal.formulaire({
-        titre: 'Nouvel événement',
-        soustitre: "Un lien de visioconférence rend l'événement rejoignable d'un clic, pour vous comme pour le client.",
+        titre: 'Programmer un échange',
+        soustitre: "Le client verra le rendez-vous dans son planning et sera prévenu à l'approche.",
         champs: [
-          { id: 'titre', label: 'Intitulé', type: 'text', requis: true, placeholder: 'Comité de pilotage' },
+          { id: 'titre', label: 'Objet de l\'échange', type: 'text', requis: true, placeholder: 'Point d\'avancement mensuel' },
+          { id: 'canal', label: 'Moyen', type: 'select', valeur: 'visio',
+            options: Object.values(CANAUX).filter((c) => c.action)
+              .map((c) => ({ v: c.id, l: c.label })) },
           { id: 'date', label: 'Date', type: 'date', requis: true, valeur: Dates.today() },
           { id: 'heure', label: 'Heure', type: 'text', placeholder: '14:30' },
-          { id: 'lieu', label: 'Lieu', type: 'text', placeholder: 'Visioconférence' },
-          { id: 'type', label: 'Type', type: 'select',
-            options: Object.values(TYPES_EVENEMENT).map((t) => ({ v: t.id, l: t.label })) },
-          { id: 'lien', label: 'Lien Google Meet (facultatif)', type: 'url', placeholder: 'https://meet.google.com/…' },
+          { id: 'lieu', label: 'Lieu ou précision', type: 'text', placeholder: 'Visioconférence, cabinet, …' },
+          { id: 'lien', label: 'Lien ou numéro', type: 'text',
+            placeholder: 'https://meet.google.com/… ou 0596 00 00 00' },
         ],
-        onSubmit: (v) => { Store.ajouterEvenement(v); toast('Événement ajouté au planning.', 'ok'); },
+        libelle: 'Programmer',
+        onSubmit: (v) => {
+          Store.ajouterEvenement({ ...v, type: 'echange' });
+          const canal = CANAUX[v.canal] || CANAUX.visio;
+          toast(`${canal.label} programmée le ${Dates.format(v.date)}.`, 'ok');
+        },
+      });
+    },
+
+    'ajouter-evenement'() {
+      Modal.formulaire({
+        titre: 'Jalon ou livraison',
+        soustitre: "Pour une échéance qui n'appelle pas de rendez-vous : commission, dépôt, livraison, formation.",
+        champs: [
+          { id: 'titre', label: 'Intitulé', type: 'text', requis: true, placeholder: 'Commission ARS' },
+          { id: 'type', label: 'Nature', type: 'select', valeur: 'jalon',
+            options: Object.values(TYPES_EVENEMENT)
+              .filter((t) => !t.avecCanal && !t.ancien)
+              .map((t) => ({ v: t.id, l: t.label })) },
+          { id: 'date', label: 'Date', type: 'date', requis: true, valeur: Dates.today() },
+          { id: 'heure', label: 'Heure', type: 'text', placeholder: '09:00' },
+          { id: 'lieu', label: 'Lieu', type: 'text', placeholder: 'ARS Martinique' },
+        ],
+        onSubmit: (v) => { Store.ajouterEvenement({ ...v, canal: '' }); toast('Ajouté au planning.', 'ok'); },
       });
     },
 
@@ -1005,39 +1048,15 @@ const App = {
 
     /* --- Comptes rendus --- */
 
-    /** Crée un compte rendu à partir du lien Meet saisi dans la vue. */
-    'enregistrer-meet'() {
-      const lien = document.getElementById('meet-lien').value.trim();
-      const objet = document.getElementById('meet-objet').value.trim();
-      const doc = document.getElementById('meet-doc').value.trim();
-      const date = document.getElementById('meet-date').value || Dates.today();
-
-      if (!lien) { toast('Collez d\'abord le lien de la réunion.', 'warn'); return; }
-      if (!/^https?:\/\//i.test(lien)) { toast('Le lien doit commencer par https://', 'warn'); return; }
-
-      Store.ajouterCompteRendu({
-        date, type: 'visio',
-        objet: objet || `Réunion du ${Dates.format(date)}`,
-        participants: '',
-        decisions: '',
-        lienMeet: lien,
-        lienDoc: doc,
-      });
-
-      ['meet-lien', 'meet-objet', 'meet-doc'].forEach((id) => {
-        const champ = document.getElementById(id);
-        if (champ) champ.value = '';
-      });
-      toast('Compte rendu de réunion créé.', 'ok');
-    },
-
-    /** Prépare un compte rendu à partir d'une réunion déjà planifiée. */
+    /** Rédige le compte rendu d'un échange déjà programmé, pré-rempli. */
     'cr-depuis-evenement'(el) {
       const evt = Store.liste('evenements').find((e) => e.id === el.dataset.id);
       if (!evt) return;
       App.actions['ajouter-cr'].call(App, null, null, {
-        date: evt.date, objet: evt.titre, lienMeet: evt.lien || '',
-        type: evt.lien ? 'visio' : 'presentiel',
+        date: evt.date,
+        objet: evt.titre,
+        type: evt.canal || 'visio',
+        lienMeet: /^https?:\/\//i.test(evt.lien || '') ? evt.lien : '',
       });
     },
 

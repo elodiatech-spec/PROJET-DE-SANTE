@@ -55,6 +55,37 @@ function tint(hex, alpha) {
   return `color-mix(in srgb, ${hex} ${alpha}%, transparent)`;
 }
 
+/**
+ * Bouton d'accès à un échange, selon son canal.
+ * Une visio ouvre le lien, un téléphone compose le numéro, WhatsApp ouvre la
+ * conversation. Renvoie une chaîne vide si rien n'est joignable.
+ */
+function boutonEchange(evt, taille = 'sm') {
+  const canal = CANAUX[evt.canal] || null;
+  const valeur = String(evt.lien || '').trim();
+  if (!canal || !valeur || !canal.action) return '';
+
+  let href = '';
+  if (/^https?:\/\//i.test(valeur)) {
+    href = valeur;
+  } else if (evt.canal === 'whatsapp') {
+    // wa.me attend un numéro international sans séparateur.
+    const chiffres = valeur.replace(/[^0-9]/g, '').replace(/^0/, '596');
+    href = chiffres.length >= 8 ? `https://wa.me/${chiffres}` : '';
+  } else if (evt.canal === 'telephone') {
+    const chiffres = valeur.replace(/[^0-9+]/g, '');
+    href = chiffres.length >= 6 ? `tel:${chiffres}` : '';
+  }
+
+  if (!href) return '';
+
+  const externe = href.startsWith('http');
+  return `<a class="btn btn--primary${taille === 'sm' ? ' btn--sm' : ''}" href="${esc(href)}"
+             ${externe ? 'target="_blank" rel="noopener noreferrer"' : ''}>
+            <i class="${esc(canal.icone)}"></i> ${esc(canal.action)}
+          </a>`;
+}
+
 function empty(titre, texte, icone) {
   return `<div class="empty">
       <i class="${esc(icone || 'fa-solid fa-inbox')}"></i>
@@ -1294,7 +1325,6 @@ const Views = {
       (parMois[cle] = parMois[cle] || []).push(e);
     });
 
-    const icones = { reunion: 'fa-video', jalon: 'fa-flag', livrable: 'fa-box', formation: 'fa-chalkboard-user' };
 
     return `
     <section class="view stack">
@@ -1306,7 +1336,13 @@ const Views = {
           </div>
           <div class="row-tight">
             ${expert ? Views._basculePortee('projet') : ''}
-            ${expert ? `<button class="btn btn--primary btn--sm" data-action="ajouter-evenement"><i class="fa-solid fa-plus"></i> Ajouter un événement</button>` : ''}
+            ${expert ? `
+              <button class="btn btn--primary btn--sm" data-action="programmer-echange">
+                <i class="fa-solid fa-comments"></i> Programmer un échange
+              </button>
+              <button class="btn btn--sm" data-action="ajouter-evenement">
+                <i class="fa-solid fa-flag"></i> Jalon ou livraison
+              </button>` : ''}
           </div>
         </div>
 
@@ -1320,15 +1356,26 @@ const Views = {
               ${parMois[mois].map((e) => {
                 const j = Dates.daysUntil(e.date);
                 const passe = j !== null && j < 0;
-                const meet = urlSure(e.lien);
-                return `<div class="file-row" ${passe ? 'style="opacity:.55"' : ''}>
-                    <div class="file-icon" style="color:var(--brand-500)"><i class="fa-solid ${icones[e.type] || 'fa-circle'}"></i></div>
-                    <div class="grow">
-                      <div class="text-sm fw-800">${esc(e.titre)}</div>
-                      <div class="text-xs text-muted">${esc(Dates.formatLong(e.date))}${e.heure ? ' · ' + esc(e.heure) : ''}${e.lieu ? ' · ' + esc(e.lieu) : ''}</div>
+                const echange = estUnEchange(e.type);
+                const canal = CANAUX[e.canal];
+                const typeEvt = TYPES_EVENEMENT[e.type] || TYPES_EVENEMENT.jalon;
+
+                return `<div class="file-row" ${passe ? 'style="opacity:.6"' : ''}>
+                    <div class="file-icon" style="color:var(--brand-500)">
+                      <i class="${esc(echange && canal ? canal.icone : typeEvt.icone)}"></i>
                     </div>
-                    ${meet ? `<a class="btn btn--sm btn--primary" href="${esc(meet)}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-video"></i> Rejoindre</a>` : ''}
+                    <div class="grow" style="min-width:0">
+                      <div class="text-sm fw-800">${esc(e.titre)}</div>
+                      <div class="text-xs text-muted">
+                        ${echange && canal ? esc(canal.label) + ' · ' : ''}${esc(Dates.formatLong(e.date))}${e.heure ? ' · ' + esc(e.heure) : ''}${e.lieu ? ' · ' + esc(e.lieu) : ''}
+                      </div>
+                    </div>
+                    ${passe ? '' : boutonEchange(e)}
                     ${passe ? badge('Passé', 'neutre') : badge(j === 0 ? "Aujourd'hui" : `J-${j}`, j <= 7 ? 'warn' : 'brand')}
+                    ${expert && passe && echange
+                      ? `<button class="btn btn--sm" data-action="cr-depuis-evenement" data-id="${esc(e.id)}">
+                           <i class="fa-solid fa-pen"></i> Compte rendu
+                         </button>` : ''}
                     ${expert ? `<button class="btn btn--ghost btn--sm" data-action="supprimer-evenement" data-id="${esc(e.id)}" aria-label="Supprimer ${esc(e.titre)}"><i class="fa-solid fa-trash"></i></button>` : ''}
                   </div>`;
               }).join('')}
@@ -1387,8 +1434,8 @@ const Views = {
     const couleurProjet = {};
     Store.state.projets.forEach((p) => { couleurProjet[p.id] = FORMULES[p.formule].couleur; });
 
-    const icones = { reunion: 'fa-video', jalon: 'fa-flag', livrable: 'fa-box',
-                     formation: 'fa-chalkboard-user', prestation: 'fa-list-check' };
+    const icones = { echange: 'fa-comments', reunion: 'fa-comments', jalon: 'fa-flag',
+                     livrable: 'fa-box', formation: 'fa-chalkboard-user', prestation: 'fa-list-check' };
 
     const sept = Dates.addDays(Dates.today(), 7);
     const trente = Dates.addDays(Dates.today(), 30);
@@ -1445,7 +1492,6 @@ const Views = {
             <div class="stack-xs">
               ${parMois[mois].map((e) => {
                 const j = Dates.daysUntil(e.date);
-                const meet = urlSure(e.lien);
                 return `
                 <div class="file-row" style="border-left:3px solid ${esc(couleurProjet[e.projetId] || 'var(--border)')}">
                   <div class="file-icon" style="color:${esc(couleurProjet[e.projetId] || 'var(--brand-500)')}">
@@ -1461,7 +1507,7 @@ const Views = {
                           title="Ouvrir ${esc(e.projetNom)}" style="cursor:pointer;max-width:180px">
                     <i class="fa-solid fa-hospital"></i> <span class="truncate">${esc(e.projetNom)}</span>
                   </button>
-                  ${meet ? `<a class="btn btn--sm btn--primary" href="${esc(meet)}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-video"></i> Rejoindre</a>` : ''}
+                  ${boutonEchange(e)}
                   ${badge(j === 0 ? "Aujourd'hui" : `J-${j}`, j <= 7 ? 'warn' : 'brand')}
                 </div>`;
               }).join('')}
@@ -1478,94 +1524,65 @@ const Views = {
     const liste = Store.liste('comptesRendus');
     const projet = Store.projet();
 
-    // Réunions à venir dépourvues de compte rendu : l'expert les traite d'un clic.
-    const aVenir = Store.liste('evenements')
-      .filter((e) => e.type === 'reunion')
-      .sort((a, b) => b.date.localeCompare(a.date))
-      .slice(0, 4);
+    // Échanges déjà passés qui n'ont pas encore de compte rendu.
+    const aujourdhui = Dates.today();
+    const aConsigner = Store.liste('evenements')
+      .filter((e) => estUnEchange(e.type)
+        && e.date <= aujourdhui
+        && !liste.some((cr) => cr.objet === e.titre))
+      .sort((a, b) => b.date.localeCompare(a.date));
 
     return `
     <section class="view stack">
-      ${expert ? `
-      <div class="card">
+      ${expert && aConsigner.length ? `
+      <div class="card" style="border-color:color-mix(in srgb, var(--warn-500) 40%, transparent)">
         <div class="card__head">
           <div>
-            <h3 class="card__title"><i class="fa-solid fa-video"></i> Réunion Google Meet</h3>
+            <h3 class="card__title"><i class="fa-solid fa-pen-to-square"></i> Échanges à consigner</h3>
             <p class="card__subtitle">
-              Collez le lien de la réunion : un compte rendu est créé, prêt à recevoir
-              le Google Doc de notes. Le lien reste accessible au client depuis son planning.
+              Ces échanges ont eu lieu et n'ont pas encore de compte rendu.
+              Le client les retrouvera dans son espace une fois rédigés.
             </p>
           </div>
+          <span class="badge badge--warn">${aConsigner.length} en attente</span>
         </div>
-
-        <div class="grid grid-sidebar">
-          <div class="field">
-            <label class="field__label" for="meet-lien">Lien de la réunion Google Meet</label>
-            <input type="url" id="meet-lien" class="input--mono" placeholder="https://meet.google.com/abc-defg-hij">
-            <span class="field__hint">Depuis Google Agenda ou Meet : « Copier le lien de la visioconférence ».</span>
-          </div>
-          <div class="field">
-            <label class="field__label" for="meet-objet">Objet de la réunion</label>
-            <input type="text" id="meet-objet" placeholder="Comité de pilotage — septembre">
-          </div>
+        <div class="stack-xs">
+          ${aConsigner.map((e) => {
+            const canal = CANAUX[e.canal] || CANAUX.visio;
+            return `<div class="file-row">
+                <div class="file-icon" style="color:var(--warn-500)"><i class="${esc(canal.icone)}"></i></div>
+                <div class="grow" style="min-width:0">
+                  <div class="text-sm fw-800 truncate">${esc(e.titre)}</div>
+                  <div class="text-xs text-muted">${esc(canal.label)} · ${esc(Dates.formatLong(e.date))}${e.heure ? ' · ' + esc(e.heure) : ''}</div>
+                </div>
+                <button class="btn btn--primary btn--sm" data-action="cr-depuis-evenement" data-id="${esc(e.id)}">
+                  <i class="fa-solid fa-pen"></i> Rédiger
+                </button>
+              </div>`;
+          }).join('')}
         </div>
-
-        <div class="grid grid-sidebar" style="margin-top:var(--sp-3)">
-          <div class="field">
-            <label class="field__label" for="meet-doc">Google Doc du compte rendu <span class="text-muted">(facultatif)</span></label>
-            <input type="url" id="meet-doc" class="input--mono" placeholder="https://docs.google.com/document/d/…">
-            <span class="field__hint">Le document de notes produit pendant la réunion, ou un document que vous créez ensuite.</span>
-          </div>
-          <div class="field">
-            <label class="field__label" for="meet-date">Date</label>
-            <input type="date" id="meet-date" value="${esc(Dates.today())}">
-          </div>
-        </div>
-
-        <div class="row-tight" style="margin-top:var(--sp-4)">
-          <button class="btn btn--primary" data-action="enregistrer-meet">
-            <i class="fa-solid fa-link"></i> Créer le compte rendu de réunion
-          </button>
-          <button class="btn" data-action="ajouter-cr">
-            <i class="fa-solid fa-pen"></i> Compte rendu manuel
-          </button>
-          <span class="text-xs text-muted">Entretien téléphonique, échange écrit, réunion sur site…</span>
-        </div>
-
-        ${aVenir.length ? `
-          <div style="margin-top:var(--sp-4);padding-top:var(--sp-4);border-top:1px solid var(--border)">
-            <div class="text-xs text-muted fw-800" style="text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">
-              Réunions du planning
-            </div>
-            <div class="stack-xs">
-              ${aVenir.map((e) => {
-                const traite = liste.some((cr) => cr.objet === e.titre);
-                const meet = urlSure(e.lien);
-                return `<div class="file-row">
-                    <div class="file-icon" style="color:var(--info-500)"><i class="fa-solid fa-video"></i></div>
-                    <div class="grow">
-                      <div class="text-sm fw-800">${esc(e.titre)}</div>
-                      <div class="text-xs text-muted">${esc(Dates.format(e.date))}${e.heure ? ' · ' + esc(e.heure) : ''}</div>
-                    </div>
-                    ${meet ? `<a class="btn btn--sm" href="${esc(meet)}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-video"></i> Rejoindre</a>` : ''}
-                    ${traite
-                      ? badge('Compte rendu fait', 'ok', 'fa-solid fa-circle-check')
-                      : `<button class="btn btn--sm btn--primary" data-action="cr-depuis-evenement" data-id="${esc(e.id)}">
-                           <i class="fa-solid fa-plus"></i> Compte rendu
-                         </button>`}
-                  </div>`;
-              }).join('')}
-            </div>
-          </div>` : ''}
       </div>` : ''}
 
       <div class="card">
         <div class="card__head">
           <div>
             <h2 class="card__title"><i class="fa-solid fa-clipboard-check"></i> Comptes rendus & relevés de décisions</h2>
-            <p class="card__subtitle">Traçabilité des échanges et des décisions prises tout au long du projet.</p>
+            <p class="card__subtitle">
+              ${expert
+                ? 'Les échanges se programment dans le planning ; ils se consignent ici.'
+                : 'Le relevé de chaque échange avec votre référent ElodiaTech.'}
+            </p>
           </div>
-          <span class="badge badge--neutre">${liste.length} compte${liste.length > 1 ? 's' : ''} rendu${liste.length > 1 ? 's' : ''}</span>
+          <div class="row-tight">
+            <span class="badge badge--neutre">${liste.length} compte${liste.length > 1 ? 's' : ''} rendu${liste.length > 1 ? 's' : ''}</span>
+            ${expert ? `
+              <button class="btn btn--sm" data-action="ajouter-cr">
+                <i class="fa-solid fa-plus"></i> Compte rendu libre
+              </button>
+              <button class="btn btn--sm" data-action="aller" data-route="planning">
+                <i class="fa-solid fa-calendar-days"></i> Programmer un échange
+              </button>` : ''}
+          </div>
         </div>
 
         ${liste.length ? `
