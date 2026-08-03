@@ -2096,9 +2096,34 @@ const Views = {
             <div class="field">
               <label class="field__label" for="sheets-url">URL de l'application web (/exec)</label>
               <input type="url" id="sheets-url" class="input input--mono" value="${esc(r.webAppUrl || '')}"
-                     placeholder="https://script.google.com/macros/s/…/exec">
+                     placeholder="https://script.google.com/macros/s/…/exec" ${WEB_APP_URL ? 'readonly' : ''}>
               <span class="field__hint">L'URL doit se terminer par <span class="mono">/exec</span> et le déploiement être accessible.</span>
             </div>
+
+            ${WEB_APP_URL ? `
+              <div class="card card--flat" style="margin-top:12px;border-left:3px solid var(--ok-500)">
+                <p class="text-sm text-soft">
+                  <i class="fa-solid fa-circle-check text-ok"></i>
+                  Cette adresse est inscrite dans le code de l'application
+                  (<span class="mono">WEB_APP_URL</span> dans <span class="mono">assets/js/config.js</span>).
+                  Elle vaut pour tous les navigateurs : vos clients accèdent à leur dossier
+                  sans aucun réglage de leur côté.
+                </p>
+              </div>`
+            : `
+              <div class="card card--flat" style="margin-top:12px;border-left:3px solid var(--warn-500)">
+                <p class="text-sm text-soft">
+                  <i class="fa-solid fa-triangle-exclamation text-warn"></i>
+                  <strong>Cette adresse n'est enregistrée que dans ce navigateur.</strong>
+                  Vos clients, eux, ne la connaissent pas : leurs liens transportent donc
+                  l'adresse, ce qui les allonge et les rend fragiles.
+                </p>
+                <p class="text-sm text-muted" style="margin-top:8px">
+                  Pour y remédier une fois pour toutes, reportez-la dans
+                  <span class="mono">assets/js/config.js</span>, à la constante
+                  <span class="mono">WEB_APP_URL</span>.
+                </p>
+              </div>`}
             <div class="row-tight" style="margin-top:12px">
               <button class="btn btn--primary" data-action="enregistrer-sheets"><i class="fa-solid fa-floppy-disk"></i> Enregistrer</button>
               <button class="btn" data-action="synchroniser" ${r.webAppUrl ? '' : 'disabled'}><i class="fa-solid fa-rotate"></i> Synchroniser maintenant</button>

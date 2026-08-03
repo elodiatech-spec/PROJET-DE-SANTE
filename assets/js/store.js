@@ -380,12 +380,18 @@ const SheetsAdapter = {
    *   { action:'batch',  operations:[ … ] }
    */
   async envoyer(webAppUrl, corps) {
-    // text/plain évite la requête préliminaire CORS refusée par Apps Script.
-    const rep = await fetch(webAppUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(corps),
-    });
+    let rep;
+    try {
+      // text/plain évite la requête préliminaire CORS refusée par Apps Script.
+      rep = await fetch(webAppUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(corps),
+      });
+    } catch {
+      // « Failed to fetch » ne dit rien à personne : on traduit.
+      throw new Error('la base est injoignable — vérifiez votre connexion');
+    }
     if (!rep.ok) throw new Error(`réponse ${rep.status} du script Google`);
     const data = await rep.json();
     if (data && data.erreur) throw new Error(data.erreur);
@@ -434,6 +440,14 @@ const Store = {
        'intervenantsImmo'].forEach((cle) => {
         if (sauvegarde[cle]) this.state[cle] = sauvegarde[cle];
       });
+    }
+
+    // L'adresse inscrite dans la configuration fait foi : elle vaut pour tous
+    // les navigateurs, alors que le réglage local ne vaut que pour celui-ci.
+    // Sans elle, les liens envoyés aux clients n'aboutiraient nulle part.
+    if (WEB_APP_URL) {
+      this.state.reglages.webAppUrl = WEB_APP_URL;
+      this.state.reglages.source = 'sheets';
     }
 
     // Une session expirée ramène à la page de connexion.

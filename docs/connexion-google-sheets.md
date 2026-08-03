@@ -166,9 +166,27 @@ Vérification à tout moment : `node tests/isolation.mjs` depuis le dépôt.
 3. Exécuter en tant que : **Moi**.
 4. Qui a accès : **Tout le monde**.
 5. Copiez l'URL fournie — elle se termine par `/exec`.
-6. Dans la plateforme : basculez sur l'**espace expert**, ouvrez
-   **Console expert → Paramètres & données**, collez l'URL, **Enregistrez**,
-   puis cliquez sur **Synchroniser maintenant**.
+6. **Inscrivez cette adresse dans l'application.** Ouvrez
+   `assets/js/config.js`, repérez la ligne `const WEB_APP_URL = '';`
+   et collez-y l'adresse :
+
+   ```js
+   const WEB_APP_URL = 'https://script.google.com/macros/s/VOTRE_ID/exec';
+   ```
+
+   Puis enregistrez et poussez sur GitHub.
+
+   **Cette étape est indispensable.** Sans elle, l'adresse n'est connue que du
+   navigateur où vous l'avez saisie : les liens envoyés à vos clients ouvrent le
+   jeu de démonstration au lieu de leur dossier, avec le message
+   « Cette adresse n'est rattachée à aucun dossier ».
+
+   La publier dans le dépôt ne présente aucun risque : le script ne livre rien
+   sans code expert ni jeton client valide.
+
+7. Dans la plateforme : basculez sur l'**espace expert**, ouvrez
+   **Console expert → Paramètres & données** et vérifiez que l'adresse est bien
+   reconnue, puis cliquez sur **Synchroniser maintenant**.
 
 Les données de la feuille remplacent alors le jeu de démonstration local.
 
@@ -240,7 +258,8 @@ Deux chemins, qui produisent le même résultat :
 | Le menu « ElodiaTech » n'apparaît pas | Rechargez la feuille après avoir enregistré le script. |
 | `Réponse 401` ou `403` | Le déploiement n'est pas accessible à « Tout le monde ». |
 | `Format inattendu : la clé 'projets' est absente` | L'onglet `Projets` est absent ou vide — relancez « Initialiser la base ». |
-| `Failed to fetch` | L'URL ne se termine pas par `/exec`, ou le déploiement a été supprimé. |
+| `Failed to fetch` ou « la base est injoignable » | L'URL ne se termine pas par `/exec`, ou le déploiement a été supprimé. |
+| Le client voit « Cette adresse n'est rattachée à aucun dossier » | `WEB_APP_URL` n'est pas renseignée dans `assets/js/config.js` — voir l'étape 3, point 6. |
 | Les modifications du script restent sans effet | **Déployer → Gérer les déploiements → Modifier → Nouvelle version**. |
 | Dates décalées d'un jour | Les colonnes de dates doivent être au format **Texte brut**. Le script s'en charge à l'initialisation. |
 | « Créer les dossiers Drive » ne fait rien | Tous les projets ont déjà une `drive_url`. Videz la cellule pour forcer la recréation. |

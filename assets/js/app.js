@@ -9,6 +9,10 @@ const App = {
 
   /* ---------------------------------------------------------------------- */
   async init() {
+    // Repéré avant le premier rendu : sans quoi les profils de démonstration
+    // apparaîtraient une fraction de seconde devant un client venu par lien.
+    this.lienPresente = new URLSearchParams(window.location.search).has('c');
+
     Store.init();
     Store.subscribe(() => this.render());
 
@@ -70,9 +74,11 @@ const App = {
     // Le champ « code expert » n'a de sens qu'avec une source réelle.
     document.getElementById('connexion-champ-code').hidden = demo;
 
+    // Les profils de démonstration nomment des clients : ils ne s'affichent
+    // qu'en démonstration, et jamais devant quelqu'un venu par un lien.
     const bloc = document.getElementById('connexion-bloc-profils');
-    bloc.hidden = !demo;
-    if (!demo) return;
+    bloc.hidden = !demo || this.lienPresente;
+    if (bloc.hidden) return;
 
     const profils = [];
 
@@ -559,10 +565,26 @@ const App = {
     const jeton = params.get('c');
     if (!jeton) return false;
 
+    // L'adresse de la passerelle peut voyager dans le lien lui-même.
+    const passerelle = params.get('s');
+    if (passerelle && /^https:\/\/script\.google\.com\//.test(passerelle)) {
+      Store.commit((s) => {
+        s.reglages.webAppUrl = passerelle;
+        s.reglages.source = 'sheets';
+      });
+    }
+
+    // Le jeton quitte la barre d'adresse aussitôt lu.
     history.replaceState(null, '', window.location.pathname);
 
+    // Un lien a été présenté : la liste des profils de démonstration n'a plus
+    // lieu d'être, même si la suite échoue.
+    this.lienPresente = true;
+
     if (!Store.state.reglages.webAppUrl) {
-      this.erreurConnexion("Ce lien nécessite une source de données configurée.");
+      this.erreurConnexion(
+        "Votre espace n'a pas pu être ouvert : l'application n'est pas reliée à sa base. "
+        + 'Signalez-le à votre référent ElodiaTech, il vous renverra un lien valide.');
       return false;
     }
 
@@ -571,7 +593,9 @@ const App = {
       toast('Bienvenue sur votre espace de suivi.', 'ok');
       return true;
     } catch (err) {
-      this.erreurConnexion(`Ce lien n'est plus valide (${err.message}). Demandez-en un nouveau à votre référent.`);
+      this.erreurConnexion(
+        `Ce lien ne fonctionne plus (${err.message}). `
+        + 'Demandez-en un nouveau à votre référent ElodiaTech.');
       return false;
     }
   },
@@ -614,8 +638,11 @@ const App = {
     // --- Jeu de démonstration : identification locale, sans secret ---
     const profil = Store.identifier(champEmail.value);
     if (!profil) {
-      this.erreurConnexion("Cette adresse n'est rattachée à aucun dossier. "
-        + 'Choisissez un profil ci-dessous ou contactez votre référent ElodiaTech.');
+      this.erreurConnexion(this.lienPresente
+        ? "L'application n'est pas reliée à sa base : votre dossier ne peut pas être ouvert "
+          + 'depuis ce navigateur. Signalez-le à votre référent ElodiaTech.'
+        : "Cette adresse n'est rattachée à aucun dossier. "
+          + 'Choisissez un profil ci-dessous ou contactez votre référent ElodiaTech.');
       champEmail.focus();
       return;
     }
@@ -633,7 +660,14 @@ const App = {
    */
   afficherLienClient(projet) {
     const base = window.location.origin + window.location.pathname;
-    const lien = `${base}?c=${projet.jeton}`;
+
+    // Tant que WEB_APP_URL n'est pas renseignée dans config.js, le lien
+    // transporte l'adresse de la passerelle : sans quoi le navigateur du
+    // client ne saurait pas où interroger la base.
+    const passerelle = Store.state.reglages.webAppUrl || '';
+    const complement = (!WEB_APP_URL && passerelle)
+      ? `&s=${encodeURIComponent(passerelle)}` : '';
+    const lien = `${base}?c=${projet.jeton}${complement}`;
     const formule = FORMULES[projet.formule];
     const referent = projet.consultant?.nom || 'votre référent ElodiaTech';
 

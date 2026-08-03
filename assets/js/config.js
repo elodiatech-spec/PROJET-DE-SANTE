@@ -11,6 +11,23 @@ const APP = {
   baseline: 'Pilotage des projets de santé — MSP & Centres de santé',
 };
 
+/**
+ * Adresse de la passerelle Google Sheets (application web Apps Script,
+ * terminée par /exec).
+ *
+ * ▸ À renseigner ici, une fois pour toutes.
+ *
+ * C'est l'adresse par laquelle l'application interroge la base. Tant qu'elle
+ * reste vide, seuls les navigateurs où elle a été saisie à la main savent où
+ * s'adresser : les liens envoyés aux clients ouvrent alors le jeu de
+ * démonstration au lieu de leur dossier.
+ *
+ * La publier ici ne présente pas de risque : le script ne livre aucune donnée
+ * sans code expert ni jeton client valide. C'est le porte-clés qui protège,
+ * pas le secret de l'adresse.
+ */
+const WEB_APP_URL = '';
+
 /* --------------------------------------------------------------------------
    Statuts d'avancement d'une prestation
    `poids` sert au calcul de l'avancement (0 → 1).
