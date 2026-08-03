@@ -92,8 +92,11 @@ plateforme-projet-sante/
 │       └── app.js                Navigation, interactions, modales, graphiques, carte
 ├── apps-script/
 │   └── Code.gs                   Passerelle Google Sheets & Drive (à coller dans Apps Script)
+├── outils/
+│   └── serveur-local.mjs         Serveur statique pour essayer en local
 ├── tests/
-│   └── aller-retour.mjs          Test d'intégration de la synchronisation
+│   ├── aller-retour.mjs          Test d'intégration de la synchronisation
+│   └── isolation.mjs             Test du cloisonnement des accès
 ├── docs/
 │   └── connexion-google-sheets.md
 └── README.md
@@ -141,6 +144,15 @@ documents, signatures, planning, financements, partenaires, messages — y est r
 automatiquement. Le détail figure dans la documentation de connexion.
 
 Un export JSON complet est disponible depuis **Console expert → Paramètres & données**.
+
+## Essayer en local
+
+```bash
+node outils/serveur-local.mjs
+```
+
+Sert le dépôt sur `http://localhost:4173`, sans dépendance. La mise en ligne réelle
+est assurée par GitHub Pages.
 
 ## Tests
 
@@ -205,8 +217,10 @@ ou de `apps-script/Code.gs`.
 - Portefeuille en **étiquettes clients** : un clic ouvre la vue d'ensemble du projet
 - **Fiche client** complète, créable et modifiable : structure, porteur, référent,
   cadrage, notes internes
-- **Lien d'accès** de chaque client, créé à la demande, transmissible par courriel
-  ou WhatsApp pré-rédigé
+- **Lien d'accès** de chaque client, créé à la demande, transmissible par Gmail
+  (depuis l'adresse ElodiaTech du référent), par la messagerie du poste ou par
+  WhatsApp. Le numéro est composé à partir de l'indicatif pays de la fiche client :
+  sans indicatif exploitable, aucun lien n'est proposé plutôt qu'un mauvais.
 - **Dossiers Drive** créés depuis l'application, pour un client ou pour tous
 - **Équipe ElodiaTech** : ajout et retrait d'experts ; le référent d'un projet se
   choisit dans cette liste. Un expert rattaché à des clients ne peut pas être retiré,

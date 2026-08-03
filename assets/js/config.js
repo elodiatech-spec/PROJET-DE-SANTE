@@ -328,6 +328,40 @@ const PIECES_DOSSIER = [
     aide: "Signée par l'ensemble des professionnels engagés dans le projet." },
 ];
 
+/**
+ * Indicatifs proposés dans la fiche client.
+ * Le premier de la liste sert de valeur par défaut.
+ */
+const INDICATIFS = [
+  { code: '596', label: 'Martinique (+596)' },
+  { code: '590', label: 'Guadeloupe, Saint-Martin, Saint-Barthélemy (+590)' },
+  { code: '594', label: 'Guyane (+594)' },
+  { code: '262', label: 'La Réunion, Mayotte (+262)' },
+  { code: '33',  label: 'France métropolitaine (+33)' },
+  { code: '1',   label: 'Amérique du Nord et Caraïbes (+1)' },
+];
+
+/**
+ * Numéro au format international, sans séparateur, pour un lien wa.me.
+ * Renvoie une chaîne vide si le numéro est inexploitable : mieux vaut ne rien
+ * proposer qu'un lien qui aboutit chez un inconnu.
+ */
+function numeroInternational(numero, indicatif) {
+  const brut = String(numero || '').trim();
+  if (!brut) return '';
+
+  // Déjà international : on le prend tel quel.
+  if (/^(\+|00)/.test(brut)) {
+    const chiffres = brut.replace(/^00/, '').replace(/[^0-9]/g, '');
+    return chiffres.length >= 8 ? chiffres : '';
+  }
+
+  const pays = String(indicatif || INDICATIFS[0].code).replace(/[^0-9]/g, '');
+  const national = brut.replace(/[^0-9]/g, '').replace(/^0+/, '');
+  if (!pays || national.length < 6) return '';
+  return pays + national;
+}
+
 /** Dossiers auxquels une pièce peut servir. */
 const DOSSIERS_AIDE = {
   ARS:   { id: 'ARS',   label: "Autorisation ARS",       couleur: 'purple' },
@@ -518,7 +552,10 @@ const FICHE_CLIENT = [
     { chemin: 'client.nom',      label: 'Nom et prénom', type: 'text', requis: true, placeholder: 'Dr Marie Léger' },
     { chemin: 'client.fonction', label: 'Fonction', type: 'text', placeholder: 'Médecin généraliste · porteur du projet' },
     { chemin: 'client.email',    label: 'Courriel', type: 'email', placeholder: 'contact@exemple.fr' },
-    { chemin: 'client.tel',      label: 'Téléphone', type: 'text', placeholder: '0596 00 00 00' },
+    // Sans indicatif, impossible de construire un lien WhatsApp valide :
+    // un 06 métropolitain et un 0696 martiniquais ne se préfixent pas pareil.
+    { chemin: 'client.indicatif', label: 'Indicatif pays', type: 'select', options: null },
+    { chemin: 'client.tel',      label: 'Téléphone', type: 'text', placeholder: '0696 00 00 00' },
   ]},
   { groupe: 'Accompagnement', champs: [
     // Les options de ces deux listes sont remplies à l'ouverture du formulaire :

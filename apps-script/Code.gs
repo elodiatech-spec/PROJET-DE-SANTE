@@ -45,6 +45,7 @@ var ONGLETS = {
     "client_fonction",
     "client_email",
     "client_tel",
+    "client_indicatif",
     "consultant_nom",
     "consultant_email",
     "equipe",
@@ -2538,7 +2539,8 @@ function construireDonnees(projetIdUnique) {
       dateDebut: iso(r.date_debut),
       client: {
         nom: r.client_nom || '', fonction: r.client_fonction || '',
-        email: r.client_email || '', tel: String(r.client_tel || '')
+        email: r.client_email || '', tel: String(r.client_tel || ''),
+        indicatif: String(r.client_indicatif || '596')
       },
       consultant: { nom: r.consultant_nom || '', email: r.consultant_email || '' },
       equipe: Number(r.equipe) || 0,
@@ -2641,6 +2643,7 @@ var ECRITURE = {
       modeleJuridique: 'modele_juridique', dateDebut: 'date_debut',
       clientNom: 'client_nom', clientFonction: 'client_fonction',
       clientEmail: 'client_email', clientTel: 'client_tel',
+      clientIndicatif: 'client_indicatif',
       consultantNom: 'consultant_nom', consultantEmail: 'consultant_email',
       equipe: 'equipe', surface: 'surface',
       gdocProjetSante: 'gdoc_projet_sante', driveUrl: 'drive_url', siteUrl: 'site_url',

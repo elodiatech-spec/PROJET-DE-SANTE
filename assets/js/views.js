@@ -1074,7 +1074,7 @@ const Views = {
           </div>
         </div>
 
-        <div class="grid grid-sidebar">
+        <div class="stack-sm">
           <div class="card card--flat">
             <h3 class="section-title"><i class="fa-solid fa-globe"></i> Site internet</h3>
             ${expert ? `
@@ -1094,16 +1094,34 @@ const Views = {
 
           <div class="card card--flat">
             <h3 class="section-title"><i class="fa-solid fa-swatchbook"></i> Livrables graphiques</h3>
+            <p class="text-xs text-muted" style="margin:-6px 0 12px">
+              ${expert
+                ? 'Déposez le lien du fichier depuis le Drive, puis soumettez-le à la validation du client.'
+                : 'Les fichiers sont consultables dès leur mise à disposition.'}
+            </p>
             <div class="stack-xs">
-              ${prestas.map((p) => `
+              ${prestas.map((p) => {
+                const lien = urlSure(p.etat.livrableUrl);
+                return `
                 <div class="file-row">
                   <div class="file-icon file-icon--img"><i class="fa-solid fa-image"></i></div>
-                  <div class="grow">
+                  <div class="grow" style="min-width:0">
                     <div class="text-sm fw-800">${esc(p.livrable)}</div>
                     <div class="text-xs text-muted">${esc(p.titre)}</div>
                   </div>
                   ${badgeStatut(p.etat.statut)}
-                </div>`).join('')}
+                  ${lien
+                    ? `<a class="btn btn--sm" href="${esc(lien)}" target="_blank" rel="noopener noreferrer">
+                         <i class="fa-solid fa-download"></i> Ouvrir
+                       </a>`
+                    : ''}
+                  ${expert
+                    ? `<button class="btn btn--sm ${lien ? '' : 'btn--primary'}" data-action="deposer-livrable" data-id="${esc(p.id)}">
+                         <i class="fa-solid fa-file-arrow-up"></i> ${lien ? 'Remplacer' : 'Déposer'}
+                       </button>`
+                    : ''}
+                </div>`;
+              }).join('')}
             </div>
           </div>
         </div>
@@ -1341,11 +1359,16 @@ const Views = {
                       <div class="text-xs text-muted">${esc(p.titre)}</div>
                     </div>
                     ${badgeStatut(p.etat.statut)}
-                    ${pret
-                      ? (lien
-                          ? `<a class="btn btn--sm" href="${esc(lien)}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-download"></i> Ouvrir</a>`
-                          : `<button class="btn btn--sm" data-action="telecharger-livrable" data-id="${esc(p.id)}"><i class="fa-solid fa-download"></i> Télécharger</button>`)
-                      : `<span class="text-xs text-muted nowrap">En production</span>`}
+                    ${lien
+                      ? `<a class="btn btn--sm" href="${esc(lien)}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-download"></i> Ouvrir</a>`
+                      : (pret && !Store.estExpert()
+                          ? `<button class="btn btn--sm" data-action="telecharger-livrable" data-id="${esc(p.id)}"><i class="fa-solid fa-download"></i> Télécharger</button>`
+                          : (!Store.estExpert() ? `<span class="text-xs text-muted nowrap">En production</span>` : ''))}
+                    ${Store.estExpert()
+                      ? `<button class="btn btn--sm ${lien ? '' : 'btn--primary'}" data-action="deposer-livrable" data-id="${esc(p.id)}">
+                           <i class="fa-solid fa-file-arrow-up"></i> ${lien ? 'Remplacer' : 'Déposer'}
+                         </button>`
+                      : ''}
                   </div>`;
               }).join('')}
             </div>

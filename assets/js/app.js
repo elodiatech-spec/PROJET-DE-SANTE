@@ -652,14 +652,23 @@ const App = {
       + `Je reste à votre disposition.\n\n`
       + `${referent}\nElodiaTech — Ingénierie médicale`;
 
-    const mailto = `mailto:${encodeURIComponent(projet.client?.email || '')}`
+    const destinataire = projet.client?.email || '';
+    const mailto = `mailto:${encodeURIComponent(destinataire)}`
       + `?subject=${encodeURIComponent(objet)}&body=${encodeURIComponent(corpsMail)}`;
 
-    const numero = String(projet.client?.tel || '').replace(/[^0-9]/g, '').replace(/^0/, '596');
+    // Gmail permet de désigner le compte expéditeur : l'invitation part bien
+    // de l'adresse professionnelle, pas du compte personnel du navigateur.
+    const expediteur = Store.expertParNom(projet.consultant?.nom)?.email
+      || projet.consultant?.email || '';
+    const gmail = 'https://mail.google.com/mail/'
+      + (expediteur ? `?authuser=${encodeURIComponent(expediteur)}&` : '?')
+      + `view=cm&fs=1&to=${encodeURIComponent(destinataire)}`
+      + `&su=${encodeURIComponent(objet)}&body=${encodeURIComponent(corpsMail)}`;
+
+    // Sans indicatif fiable, aucun lien : mieux vaut rien qu'un mauvais numéro.
+    const numero = numeroInternational(projet.client?.tel, projet.client?.indicatif);
     const texteWa = `Bonjour, voici votre espace de suivi ElodiaTech pour ${projet.nom} : ${lien}`;
-    const whatsapp = numero.length >= 8
-      ? `https://wa.me/${numero}?text=${encodeURIComponent(texteWa)}`
-      : '';
+    const whatsapp = numero ? `https://wa.me/${numero}?text=${encodeURIComponent(texteWa)}` : '';
 
     Modal.open({
       titre: `Accès de ${projet.client?.nom || projet.nom}`,
@@ -675,13 +684,25 @@ const App = {
 
         <h4 class="section-title" style="margin:18px 0 10px"><i class="fa-solid fa-paper-plane"></i> Le lui transmettre</h4>
         <div class="stack-xs">
+          <a class="file-row" href="${esc(gmail)}" target="_blank" rel="noopener noreferrer" style="text-decoration:none">
+            <span class="file-icon" style="color:var(--danger-500)"><i class="fa-solid fa-envelope-open-text"></i></span>
+            <span class="grow">
+              <span class="text-sm fw-800" style="display:block">Par Gmail${expediteur ? '' : ' (compte par défaut)'}</span>
+              <span class="text-xs text-muted">
+                ${expediteur ? `Depuis ${esc(expediteur)}` : 'Aucune adresse dans votre fiche expert'}
+                ${destinataire ? ` vers ${esc(destinataire)}` : ''}
+              </span>
+            </span>
+            <i class="fa-solid fa-arrow-up-right-from-square text-muted text-xs"></i>
+          </a>
+
           <a class="file-row" href="${esc(mailto)}" style="text-decoration:none">
             <span class="file-icon" style="color:var(--brand-500)"><i class="fa-solid fa-envelope"></i></span>
             <span class="grow">
-              <span class="text-sm fw-800" style="display:block">Par courriel</span>
-              <span class="text-xs text-muted">${projet.client?.email
-                ? `Message pré-rédigé à ${esc(projet.client.email)}`
-                : 'Aucune adresse dans la fiche — le message s\'ouvrira sans destinataire'}</span>
+              <span class="text-sm fw-800" style="display:block">Par votre logiciel de messagerie</span>
+              <span class="text-xs text-muted">${destinataire
+                ? `Message pré-rédigé à ${esc(destinataire)}`
+                : "Aucune adresse dans la fiche — le message s'ouvrira sans destinataire"}</span>
             </span>
             <i class="fa-solid fa-arrow-up-right-from-square text-muted text-xs"></i>
           </a>
@@ -691,10 +712,23 @@ const App = {
             <span class="file-icon" style="color:var(--ok-500)"><i class="fa-brands fa-whatsapp"></i></span>
             <span class="grow">
               <span class="text-sm fw-800" style="display:block">Par WhatsApp</span>
-              <span class="text-xs text-muted">Message pré-rédigé au ${esc(projet.client.tel)}</span>
+              <span class="text-xs text-muted">Message pré-rédigé au +${esc(numero)}</span>
             </span>
             <i class="fa-solid fa-arrow-up-right-from-square text-muted text-xs"></i>
-          </a>` : ''}
+          </a>`
+          : `
+          <div class="file-row" style="opacity:.7">
+            <span class="file-icon" style="color:var(--text-muted)"><i class="fa-brands fa-whatsapp"></i></span>
+            <span class="grow">
+              <span class="text-sm fw-800" style="display:block">Par WhatsApp — indisponible</span>
+              <span class="text-xs text-muted">
+                ${projet.client?.tel
+                  ? "Le numéro est incomplet. Vérifiez l'indicatif pays dans la fiche client."
+                  : 'Aucun téléphone dans la fiche client.'}
+              </span>
+            </span>
+            <button class="btn btn--sm" data-action="fiche-client" data-id="${esc(projet.id)}">Ouvrir la fiche</button>
+          </div>`}
         </div>
 
         <div class="card card--flat" style="margin-top:16px;border-left:3px solid var(--warn-500)">
@@ -1125,6 +1159,44 @@ const App = {
       toast(`Aucun fichier n'est encore rattaché au livrable « ${p?.livrable || ''} ».`, 'warn');
     },
 
+    /**
+     * Dépose le livrable d'une prestation : logo, charte graphique, kit de
+     * déclinaisons, rapport… Le fichier reste sur le Drive, on enregistre son
+     * lien. Valider la prestation la rend consultable par le client.
+     */
+    'deposer-livrable'(el) {
+      const presta = Store.prestations().find((x) => x.id === el.dataset.id);
+      if (!presta) return;
+      const projet = Store.projet();
+
+      Modal.formulaire({
+        titre: `Déposer — ${presta.livrable}`,
+        soustitre: `${presta.titre} · ${LOTS[presta.lot].nom}`,
+        champs: [
+          { id: 'livrableUrl', label: 'Lien du fichier sur le Drive', type: 'url',
+            valeur: presta.etat.livrableUrl || '',
+            placeholder: 'https://drive.google.com/file/d/…' },
+          { id: 'note', label: 'Note pour le client (facultatif)', type: 'textarea',
+            valeur: presta.etat.note || '',
+            placeholder: 'Trois propositions, celle du milieu a notre préférence…' },
+          { id: 'statut', label: 'Statut', type: 'select', valeur: presta.etat.statut,
+            options: Object.values(STATUTS).map((s) => ({ v: s.id, l: s.label })) },
+        ],
+        libelle: 'Enregistrer',
+        onSubmit: (v) => {
+          Store.majPrestation(presta.id, v);
+          toast(v.statut === 'a_valider'
+            ? `« ${presta.livrable} » soumis à la validation du client.`
+            : `« ${presta.livrable} » enregistré.`, 'ok');
+        },
+      });
+
+      // Rappel discret : sans dossier Drive, l'expert n'a nulle part où poser le fichier.
+      if (!urlSure(projet.driveUrl)) {
+        toast("Ce projet n'a pas encore de dossier Drive — créez-le depuis le portefeuille.", 'warn');
+      }
+    },
+
     /* --- Planning --- */
     'portee-planning'(el) {
       App.filtres = { ...App.filtres, portee: el.dataset.portee, projet: '' };
@@ -1505,6 +1577,9 @@ const App = {
           }
           if (c.chemin === 'consultant.nom') {
             return { ...c, options: optionsExperts };
+          }
+          if (c.chemin === 'client.indicatif') {
+            return { ...c, options: INDICATIFS.map((i) => ({ v: i.code, l: i.label })) };
           }
           return c;
         }),
