@@ -52,11 +52,18 @@ const Dates = {
    Génération du jeu de démonstration
    -------------------------------------------------------------------------- */
 
-/** Prestations actives pour une formule donnée. */
-function prestationsDeFormule(codeFormule) {
+/**
+ * Prestations actives pour une formule donnée.
+ *
+ * `typeStructure` ('MSP' ou 'CDS') écarte les formalités propres à l'autre
+ * type — l'engagement de conformité ne concerne que les centres de santé.
+ * Omis, aucun filtrage n'est appliqué : le catalogue complet du périmètre.
+ */
+function prestationsDeFormule(codeFormule, typeStructure) {
   const formule = FORMULES[codeFormule];
   if (!formule) return [];
-  return PRESTATIONS.filter((p) => formule.lots.includes(p.lot));
+  return PRESTATIONS.filter((p) => formule.lots.includes(p.lot)
+    && (!p.types || !typeStructure || p.types.includes(typeStructure)));
 }
 
 /**
@@ -547,7 +554,7 @@ const Store = {
   prestations(projetId) {
     const p = this.projet(projetId);
     if (!p) return [];
-    return prestationsDeFormule(p.formule).map((presta) => ({
+    return prestationsDeFormule(p.formule, p.type).map((presta) => ({
       ...presta,
       etat: p.prestations[presta.id] || { statut: 'a_faire', echeance: '', note: '', livrableUrl: '' },
     }));
@@ -976,7 +983,7 @@ const Store = {
       if (!p || !FORMULES[codeFormule]) return;
       p.formule = codeFormule;
       let curseur = 0;
-      prestationsDeFormule(codeFormule).forEach((presta) => {
+      prestationsDeFormule(codeFormule, p.type).forEach((presta) => {
         curseur += presta.jours;
         if (!p.prestations[presta.id]) {
           p.prestations[presta.id] = {
@@ -1382,6 +1389,31 @@ const Store = {
     });
 
     return rep.dossiers || [];
+  },
+
+  /**
+   * Dépose un fichier du poste dans le Drive du projet et renvoie sa
+   * référence : { id, nom, url, taille, dossier }.
+   *
+   * C'est le script qui choisit le sous-dossier d'après la catégorie —
+   * le navigateur n'a pas à connaître l'arborescence Drive. Le fichier est
+   * créé par le compte propriétaire du script : un client dépose ses pièces
+   * sans qu'aucun dossier ne lui soit partagé.
+   */
+  async televerserFichier({ nom, mimeType, categorie, base64 }) {
+    if (!this.ecritureActive()) {
+      throw new Error('la source Google Sheets doit être connectée');
+    }
+    const rep = await SheetsAdapter.envoyer(this.state.reglages.webAppUrl, {
+      action: 'televerser',
+      projetId: this.state.projetActifId,
+      nom, mimeType, categorie, contenu: base64,
+      ...this.porteCles(),
+    });
+    if (!rep.fichier || !rep.fichier.url) {
+      throw new Error("le script n'a pas renvoyé l'adresse du fichier");
+    }
+    return rep.fichier;
   },
 
   /* ---- Équipe ElodiaTech ---- */

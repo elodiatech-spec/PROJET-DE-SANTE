@@ -55,6 +55,87 @@ function tint(hex, alpha) {
   return `color-mix(in srgb, ${hex} ${alpha}%, transparent)`;
 }
 
+/* --------------------------------------------------------------------------
+   Fichiers — format, icône et taille
+   Partagés par le coffre-fort, les livrables et la modale de dépôt.
+   -------------------------------------------------------------------------- */
+
+/** Extension → famille de format retenue par l'application. */
+const FORMATS_FICHIER = {
+  pdf: 'pdf',
+  doc: 'doc', docx: 'doc', odt: 'doc', rtf: 'doc', txt: 'doc', md: 'doc',
+  xls: 'xls', xlsx: 'xls', ods: 'xls', csv: 'xls',
+  png: 'img', jpg: 'img', jpeg: 'img', gif: 'img', webp: 'img', svg: 'img', heic: 'img',
+  zip: 'zip', rar: 'zip', '7z': 'zip',
+};
+
+const ICONES_FICHIER = {
+  pdf: 'fa-file-pdf', doc: 'fa-file-word', xls: 'fa-file-excel',
+  zip: 'fa-file-zipper', img: 'fa-file-image',
+};
+
+const CLASSES_FICHIER = {
+  pdf: 'file-icon--pdf', doc: 'file-icon--doc', xls: 'file-icon--xls', img: 'file-icon--img',
+};
+
+/** Famille de format d'après l'extension. Chaîne vide si elle est inconnue. */
+function formatFichier(nom) {
+  return FORMATS_FICHIER[String(nom).split('.').pop().toLowerCase()] || '';
+}
+
+function iconeFichier(format) {
+  return ICONES_FICHIER[format] || 'fa-file';
+}
+
+/** Taille lisible. Même découpage que côté script Google, pour un affichage cohérent. */
+function formaterOctets(octets) {
+  const n = Number(octets) || 0;
+  if (n < 1024) return `${n} o`;
+  if (n < 1048576) return `${Math.round(n / 1024)} Ko`;
+  return `${(n / 1048576).toFixed(1).replace('.', ',')} Mo`;
+}
+
+/* --------------------------------------------------------------------------
+   Aperçu intégré des liens
+   -------------------------------------------------------------------------- */
+
+/**
+ * Adresse à donner à la visionneuse intégrée.
+ *
+ * Drive et Docs refusent d'être affichés dans un cadre sur leurs pages de
+ * consultation et d'édition, mais l'acceptent sur leur variante « /preview ».
+ * Sans cette conversion, l'aperçu de vos propres documents resterait blanc.
+ * Toute autre adresse est rendue telle quelle.
+ *
+ * Les dossiers Drive ne sont volontairement pas convertis : leur affichage
+ * intégré exige un partage public, ce que les dossiers de projet ne sont pas.
+ */
+function lienIntegrable(url) {
+  const s = urlSure(url);
+  if (!s) return '';
+
+  const fichier = s.match(/^https:\/\/drive\.google\.com\/file\/d\/([-\w]+)/);
+  if (fichier) return `https://drive.google.com/file/d/${fichier[1]}/preview`;
+
+  const docGoogle = s.match(/^(https:\/\/docs\.google\.com\/(?:document|spreadsheets|presentation)\/d\/[-\w]+)/);
+  if (docGoogle) return `${docGoogle[1]}/preview`;
+
+  return s;
+}
+
+/**
+ * Bouton d'aperçu intégré. Rien n'est rendu si l'adresse n'est pas exploitable.
+ * `titre` sert d'en-tête à la visionneuse.
+ */
+function boutonApercu(url, titre, label = 'Aperçu') {
+  const s = urlSure(url);
+  if (!s) return '';
+  return `<button class="btn btn--sm" data-action="apercu-lien"
+             data-url="${esc(s)}" data-titre="${esc(titre || '')}">
+            <i class="fa-solid fa-eye"></i> ${esc(label)}
+          </button>`;
+}
+
 /**
  * Bouton d'accès à un échange, selon son canal.
  * Une visio ouvre le lien, un téléphone compose le numéro, WhatsApp ouvre la
@@ -578,8 +659,12 @@ const Views = {
             </div>` : ''}
           <div class="row-tight" style="margin-top:12px">
             ${gdoc
-              ? `<a class="btn btn--primary" href="${esc(gdoc)}" target="_blank" rel="noopener noreferrer">
-                   <i class="fa-solid fa-arrow-up-right-from-square"></i> Ouvrir le projet de santé
+              ? `<button class="btn btn--primary" data-action="apercu-lien"
+                    data-url="${esc(gdoc)}" data-titre="Projet de santé — ${esc(projet.nom)}">
+                   <i class="fa-solid fa-eye"></i> Lire le projet de santé
+                 </button>
+                 <a class="btn" href="${esc(gdoc)}" target="_blank" rel="noopener noreferrer">
+                   <i class="fa-solid fa-arrow-up-right-from-square"></i> Modifier dans Google Docs
                  </a>`
               : `<span class="badge badge--neutre"><i class="fa-solid fa-link-slash"></i> Aucun lien renseigné pour l'instant</span>`}
             ${urlSure(projet.driveUrl) ? `<a class="btn" href="${esc(urlSure(projet.driveUrl))}" target="_blank" rel="noopener noreferrer"><i class="fa-brands fa-google-drive"></i> Dossier Drive</a>` : ''}
@@ -850,7 +935,11 @@ const Views = {
               </div>
 
               ${fournie && lien
-                ? `<a class="btn btn--sm" href="${esc(lien)}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-eye"></i> Voir</a>`
+                ? `${boutonApercu(lien, p.nom, 'Voir')}
+                   <a class="btn btn--ghost btn--sm" href="${esc(lien)}" target="_blank" rel="noopener noreferrer"
+                      aria-label="Ouvrir ${esc(p.nom)} dans un nouvel onglet" title="Ouvrir dans un nouvel onglet">
+                     <i class="fa-solid fa-arrow-up-right-from-square"></i>
+                   </a>`
                 : ''}
               ${fournie && expert
                 ? `<button class="btn btn--ghost btn--sm" data-action="detacher-piece" data-piece="${esc(p.id)}" title="Détacher ce document"><i class="fa-solid fa-link-slash"></i></button>`
@@ -1153,8 +1242,9 @@ const Views = {
     if (filtres.cat) docs = docs.filter((d) => d.cat === filtres.cat);
     if (filtres.q) docs = docs.filter((d) => d.nom.toLowerCase().includes(filtres.q.toLowerCase()));
 
-    const iconeType = { pdf: 'fa-file-pdf', doc: 'fa-file-word', xls: 'fa-file-excel', zip: 'fa-file-zipper', img: 'fa-file-image' };
-    const classeType = { pdf: 'file-icon--pdf', doc: 'file-icon--doc', xls: 'file-icon--xls', img: 'file-icon--img' };
+    // Le dépôt direct suppose un script relié : sans lui, aucun dossier Drive
+    // où écrire. Le référencement par lien, lui, marche toujours.
+    const depotDirect = Store.ecritureActive();
 
     return `
     <section class="view stack">
@@ -1170,9 +1260,13 @@ const Views = {
                    <i class="fa-brands fa-google-drive"></i> Ouvrir le Drive du projet
                  </a>`
               : ''}
-            <button class="btn btn--primary btn--sm" data-action="ajouter-document">
-              <i class="fa-solid fa-plus"></i> Déposer un document
+            <button class="btn btn--sm" data-action="ajouter-document">
+              <i class="fa-solid fa-link"></i> Référencer un lien
             </button>
+            ${depotDirect ? `
+              <button class="btn btn--primary btn--sm" data-action="televerser-documents">
+                <i class="fa-solid fa-cloud-arrow-up"></i> Déposer des fichiers
+              </button>` : ''}
           </div>
         </div>
 
@@ -1180,10 +1274,14 @@ const Views = {
           <div class="row">
             <i class="fa-brands fa-google-drive" style="font-size:1.3rem;color:var(--info-500)"></i>
             <p class="text-sm text-soft grow">
-              ${urlSure(projet.driveUrl)
-                ? `Déposez vos fichiers dans le dossier Drive du projet, dans le sous-dossier correspondant à leur catégorie,
-                   puis référencez-les ici pour qu'ils apparaissent dans le suivi. ${expert ? 'Le client dispose des mêmes accès.' : "Votre référent ElodiaTech reçoit la notification du dépôt."}`
-                : "Le dossier Drive de ce projet n'est pas encore renseigné. Vous pouvez déjà référencer un document en collant son lien de partage."}
+              ${depotDirect
+                ? `« Déposer des fichiers » ouvre l'explorateur de votre ordinateur : les fichiers choisis
+                   partent directement dans le sous-dossier Drive de leur catégorie, et sont référencés ici
+                   dans le même geste. ${expert ? 'Le client dispose du même bouton.' : "Votre référent ElodiaTech y a accès aussitôt."}`
+                : (urlSure(projet.driveUrl)
+                    ? `Déposez vos fichiers dans le dossier Drive du projet, dans le sous-dossier correspondant à leur catégorie,
+                       puis référencez-les ici pour qu'ils apparaissent dans le suivi. ${expert ? 'Le client dispose des mêmes accès.' : "Votre référent ElodiaTech reçoit la notification du dépôt."}`
+                    : "Le dossier Drive de ce projet n'est pas encore renseigné. Vous pouvez déjà référencer un document en collant son lien de partage.")}
             </p>
           </div>
         </div>
@@ -1202,13 +1300,17 @@ const Views = {
           <div class="stack-xs">
             ${docs.map((d) => `
               <div class="file-row">
-                <div class="file-icon ${classeType[d.type] || ''}"><i class="fa-solid ${iconeType[d.type] || 'fa-file'}"></i></div>
+                <div class="file-icon ${CLASSES_FICHIER[d.type] || ''}"><i class="fa-solid ${iconeFichier(d.type)}"></i></div>
                 <div class="grow">
                   <div class="text-sm fw-800 truncate">${esc(d.nom)}</div>
                   <div class="text-xs text-muted">${esc(d.cat)} · ${esc(d.taille || '')} · déposé le ${esc(Dates.format(d.date))} par ${esc(d.auteur || '—')}</div>
                 </div>
                 ${urlSure(d.url)
-                  ? `<a class="btn btn--sm" href="${esc(urlSure(d.url))}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-arrow-up-right-from-square"></i> Ouvrir</a>`
+                  ? `${boutonApercu(d.url, d.nom)}
+                     <a class="btn btn--ghost btn--sm" href="${esc(urlSure(d.url))}" target="_blank" rel="noopener noreferrer"
+                        aria-label="Ouvrir ${esc(d.nom)} dans un nouvel onglet" title="Ouvrir dans un nouvel onglet">
+                       <i class="fa-solid fa-arrow-up-right-from-square"></i>
+                     </a>`
                   : `<button class="btn btn--sm" data-action="apercu-document" data-id="${esc(d.id)}"><i class="fa-solid fa-eye"></i> Aperçu</button>`}
                 ${expert ? `<button class="btn btn--ghost btn--sm" data-action="supprimer-document" data-id="${esc(d.id)}" aria-label="Supprimer ${esc(d.nom)}"><i class="fa-solid fa-trash"></i></button>` : ''}
               </div>`).join('')}
@@ -1245,10 +1347,16 @@ const Views = {
           <div class="row-tight">
             ${s.statut === 'a_signer'
               ? (lien
+                  // La signature elle-même s'ouvre en propre : un parapheur a
+                  // besoin de toute la fenêtre pour authentifier le signataire.
                   ? `<a class="btn btn--primary btn--sm" href="${esc(lien)}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-pen-nib"></i> Signer le document</a>`
                   : badge('Parapheur en préparation', 'neutre', 'fa-solid fa-hourglass-half'))
               : (lien
-                  ? `<a class="btn btn--sm" href="${esc(lien)}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-eye"></i> Consulter l'original signé</a>`
+                  ? `${boutonApercu(lien, s.titre, "Consulter l'original signé")}
+                     <a class="btn btn--ghost btn--sm" href="${esc(lien)}" target="_blank" rel="noopener noreferrer"
+                        aria-label="Ouvrir ${esc(s.titre)} dans un nouvel onglet" title="Ouvrir dans un nouvel onglet">
+                       <i class="fa-solid fa-arrow-up-right-from-square"></i>
+                     </a>`
                   : `<button class="btn btn--sm" data-action="apercu-signature" data-id="${esc(s.id)}"><i class="fa-solid fa-eye"></i> Consulter</button>`)}
             ${expert && s.statut === 'a_signer'
               ? `<button class="btn btn--ok btn--sm" data-action="marquer-signe" data-id="${esc(s.id)}"><i class="fa-solid fa-check"></i> Marquer comme signé</button>` : ''}
@@ -1273,6 +1381,34 @@ const Views = {
             ${badge(`${signes.length} signé${signes.length > 1 ? 's' : ''}`, 'ok')}
           </div>
         </div>
+
+        ${expert ? `
+          <div class="card card--flat" style="border-left:3px solid var(--brand-500);margin-bottom:var(--sp-4)">
+            <div class="row" style="align-items:flex-start">
+              <div class="file-icon" style="color:var(--brand-500);width:44px;height:44px;font-size:1.1rem">
+                <i class="${esc(PARAPHEUR.icone)}"></i>
+              </div>
+              <div class="grow" style="min-width:0">
+                <div class="row-tight" style="margin-bottom:2px">
+                  <strong class="text-sm">Parapheur — ${esc(PARAPHEUR.nom)}</strong>
+                  ${badge('Réservé à ElodiaTech', 'neutre', 'fa-solid fa-lock')}
+                </div>
+                <p class="text-xs text-muted">${esc(PARAPHEUR.desc)}</p>
+                <div class="row-tight" style="margin-top:10px">
+                  <a class="btn btn--primary btn--sm" href="${esc(urlSure(PARAPHEUR.url))}" target="_blank" rel="noopener noreferrer">
+                    <i class="fa-solid fa-arrow-up-right-from-square"></i> Ouvrir le parapheur
+                  </a>
+                  <span class="text-xs text-muted">
+                    S'ouvre dans un onglet : le parapheur interdit l'affichage intégré.
+                  </span>
+                </div>
+                <p class="text-xs text-muted" style="margin-top:10px">
+                  Une fois la demande créée, collez le lien de signature dans l'acte correspondant
+                  ci-dessous : il apparaît aussitôt dans l'espace du client.
+                </p>
+              </div>
+            </div>
+          </div>` : ''}
 
         <div class="card card--flat" style="border-color:color-mix(in srgb, var(--info-500) 35%, transparent);margin-bottom:var(--sp-4)">
           <div class="row">
@@ -1334,7 +1470,11 @@ const Views = {
                     </div>
                     ${badgeStatut(p.etat.statut)}
                     ${lien
-                      ? `<a class="btn btn--sm" href="${esc(lien)}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-download"></i> Ouvrir</a>`
+                      ? `${boutonApercu(lien, p.livrable)}
+                         <a class="btn btn--ghost btn--sm" href="${esc(lien)}" target="_blank" rel="noopener noreferrer"
+                            aria-label="Ouvrir ${esc(p.livrable)} dans un nouvel onglet" title="Ouvrir dans un nouvel onglet">
+                           <i class="fa-solid fa-arrow-up-right-from-square"></i>
+                         </a>`
                       : (pret && !Store.estExpert()
                           ? `<button class="btn btn--sm" data-action="telecharger-livrable" data-id="${esc(p.id)}"><i class="fa-solid fa-download"></i> Télécharger</button>`
                           : (!Store.estExpert() ? `<span class="text-xs text-muted nowrap">En production</span>` : ''))}

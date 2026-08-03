@@ -86,7 +86,7 @@ plateforme-projet-sante/
 │   ├── css/app.css               Design system : thèmes clair/sombre, composants, responsive
 │   ├── img/                      Logo ElodiaTech (complet, wordmark, marque carrée)
 │   └── js/
-│       ├── config.js             Référentiels : formules, lots, 34 prestations, modules, FAQ, ERP
+│       ├── config.js             Référentiels : formules, lots, 37 prestations, modules, FAQ, ERP
 │       ├── store.js              État, persistance, sélecteurs calculés, adaptateur Google Sheets
 │       ├── views.js              Rendu des 21 vues
 │       └── app.js                Navigation, interactions, modales, graphiques, carte
@@ -96,7 +96,8 @@ plateforme-projet-sante/
 │   └── serveur-local.mjs         Serveur statique pour essayer en local
 ├── tests/
 │   ├── aller-retour.mjs          Test d'intégration de la synchronisation
-│   └── isolation.mjs             Test du cloisonnement des accès
+│   ├── isolation.mjs             Test du cloisonnement des accès
+│   └── televersement.mjs         Test du dépôt de fichiers dans le Drive
 ├── docs/
 │   └── connexion-google-sheets.md
 └── README.md
@@ -135,8 +136,14 @@ l'arborescence Drive de chaque projet et sert les données à l'application.
 Procédure complète : [docs/connexion-google-sheets.md](docs/connexion-google-sheets.md).
 
 Chaque projet dispose d'un dossier Drive à huit sous-dossiers correspondant aux catégories
-documentaires. Client et expert y déposent leurs pièces, puis les référencent dans le
-coffre-fort de l'application.
+documentaires. Depuis le coffre-fort, **« Déposer des fichiers » ouvre l'explorateur du poste**
+(ou accepte un glisser-déposer) : les fichiers partent dans le sous-dossier de leur catégorie
+et sont référencés dans le même geste. Le nom, le format et la taille sont lus sur le fichier.
+
+C'est le compte propriétaire du script qui écrit dans le Drive : un client dépose ses pièces
+sans qu'aucun dossier ne lui soit partagé, et sans jamais pouvoir écrire ailleurs que chez lui.
+Au-delà de 10 Mo, le bouton **« Référencer un lien »** reste la voie : on dépose dans le Drive,
+puis on colle l'adresse de partage.
 
 Une fois la feuille reliée, la synchronisation est **bidirectionnelle** : la lecture recharge
 tout depuis la feuille, et chaque modification faite dans l'interface — formule, prestations,
@@ -159,6 +166,7 @@ est assurée par GitHub Pages.
 ```bash
 node tests/aller-retour.mjs
 node tests/isolation.mjs
+node tests/televersement.mjs
 ```
 
 Le premier vérifie l'intégration Google Sheets de bout en bout : les actions de l'interface
@@ -167,9 +175,12 @@ produisent-elles les bonnes écritures, et une relecture rend-elle l'état atten
 Le second éprouve le cloisonnement : un jeton client ne rapporte-t-il que son dossier,
 peut-il écrire ailleurs, une requête sans secret est-elle refusée.
 
-Les deux s'exécutent sur un classeur simulé en mémoire, avec le vrai code du script.
-Aucune donnée réelle n'est touchée. À relancer après toute modification de `store.js`
-ou de `apps-script/Code.gs`.
+Le troisième couvre le dépôt de fichiers : le fichier atterrit-il dans le sous-dossier de sa
+catégorie, un jeton client peut-il déposer chez un autre, un refus est-il toujours motivé.
+
+Les trois s'exécutent sur un classeur — et pour le dernier un Drive — simulés en mémoire,
+avec le vrai code du script. Aucune donnée réelle n'est touchée. À relancer après toute
+modification de `store.js` ou de `apps-script/Code.gs`.
 
 ---
 

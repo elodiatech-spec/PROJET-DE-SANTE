@@ -173,16 +173,36 @@ const PRESTATIONS = [
     desc: "Mise en forme, relecture, validation par l'équipe et production du document définitif transmissible à l'ARS.",
     livrable: 'Projet de santé finalisé (PDF)' },
 
-  /* --- LOT B : Structuration juridique & dossier ARS (F2, F3) --- */
+  /* --- LOT B : Structuration juridique & dossier ARS (F2, F3) ---
+     Les prestations suivent l'ordre réel des formalités : on constitue la
+     personne morale, on écrit ses règles, puis on se déclare à l'ARS et on
+     obtient son immatriculation.
+
+     `types` restreint une prestation à un type de structure. L'engagement de
+     conformité est propre aux centres de santé : il n'a pas à encombrer le
+     suivi d'une maison de santé. */
   { id: 'P17', lot: 'LB', titre: 'Structuration SISA ou association 1901', acteur: 'expert', jours: 10,
     desc: "Choix du véhicule juridique, rédaction des statuts, règlement intérieur, formalités d'immatriculation.",
     livrable: 'Statuts & règlement intérieur' },
+  { id: 'P35', lot: 'LB', titre: 'Règlement de fonctionnement', acteur: 'expert', jours: 5,
+    desc: "Rédaction du règlement de fonctionnement : organisation interne, droits et obligations des usagers, "
+        + "fonctionnement des instances, modalités d'accueil et de prise en charge.",
+    livrable: 'Règlement de fonctionnement' },
+  { id: 'P36', lot: 'LB', titre: "Engagement de conformité d'un centre de santé", acteur: 'expert', jours: 6,
+    types: ['CDS'],
+    desc: "Constitution et dépôt de l'engagement de conformité au référentiel national, préalable obligatoire "
+        + "à l'ouverture d'un centre de santé, accompagné du projet de santé et du règlement de fonctionnement.",
+    livrable: 'Engagement de conformité déposé' },
   { id: 'P18', lot: 'LB', titre: 'Préparation du dossier ARS', acteur: 'expert', jours: 8,
     desc: "Constitution du dossier complet, vérification des pièces obligatoires, cohérence avec le cahier des charges régional.",
     livrable: 'Dossier ARS complet' },
   { id: 'P19', lot: 'LB', titre: 'Accompagnement au dépôt', acteur: 'expert', jours: 4,
     desc: "Dépôt sur le portail dédié, suivi de l'instruction, réponses aux demandes de compléments.",
     livrable: 'Accusé de dépôt ARS' },
+  { id: 'P37', lot: 'LB', titre: "Demande d'immatriculation ARS (FINESS / labellisation)", acteur: 'expert', jours: 5,
+    desc: "Demande d'inscription au répertoire FINESS, suivi de l'attribution du numéro et des démarches "
+        + "de labellisation applicables à la structure.",
+    livrable: 'Numéro FINESS attribué' },
   /* --- LOT C : Financements & subventions (F2, F3) ---
      L'ACI est une rémunération d'équipe versée par l'Assurance Maladie :
      sa place est parmi les financements, non dans la structuration juridique. */
@@ -436,6 +456,24 @@ const PORTAILS = [
     ]},
 ];
 
+/**
+ * Parapheur électronique d'ElodiaTech.
+ * L'expert y prépare la demande de signature, puis colle le lien obtenu dans
+ * l'acte correspondant ci-dessous : le client le voit alors dans son espace.
+ * Réservé à l'expert — un client n'a jamais à connaître cet outil.
+ *
+ * Vérifié le 3 août 2026 : le site répond `x-frame-options: sameorigin`, donc
+ * l'aperçu intégré (`boutonApercu`) ne peut pas l'afficher. Il s'ouvre en
+ * onglet, et ce n'est pas un défaut à corriger côté application.
+ */
+const PARAPHEUR = {
+  nom: 'WM Goodflag',
+  url: 'https://wm.goodflag.community/#/home/',
+  desc: "Espace de préparation des demandes de signature électronique : on y dépose l'acte, "
+      + "on désigne les signataires, et l'on récupère le lien de signature à transmettre.",
+  icone: 'fa-solid fa-file-signature',
+};
+
 /** Modèles juridiques proposés. */
 const MODELES_JURIDIQUES = {
   sisa: {
@@ -486,6 +524,14 @@ const FAQ = [
 
 /** Catégories de documents du coffre-fort. */
 const CATEGORIES_DOC = ['Projet', 'Juridique', 'ARS', 'Finances', 'Immobilier', 'Équipe', 'Partenariats', 'Identité'];
+
+/**
+ * Plafond du dépôt direct, en octets.
+ * Doit rester égal à `TAILLE_MAX_OCTETS` dans `apps-script/Code.gs` : le script
+ * refuse de toute façon au-delà, autant l'annoncer avant l'envoi. Un fichier
+ * plus lourd se dépose dans le Drive, puis se référence par son lien.
+ */
+const TAILLE_MAX_DEPOT = 10 * 1024 * 1024;
 
 /**
  * Canaux d'échange avec le client.

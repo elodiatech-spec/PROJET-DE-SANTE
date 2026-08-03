@@ -26,7 +26,7 @@ function chargerApplication() {
   const source = [
     readFileSync(join(RACINE, 'assets/js/config.js'), 'utf8'),
     readFileSync(join(RACINE, 'assets/js/store.js'), 'utf8'),
-    'globalThis.__EXPORT = { Store };',
+    'globalThis.__EXPORT = { Store, prestationsDeFormule };',
   ].join('\n');
 
   const memoire = new Map();
@@ -46,7 +46,11 @@ function chargerApplication() {
   });
 
   vm.runInContext(source, contexte);
-  return { Store: contexte.__EXPORT.Store, requetes };
+  return {
+    Store: contexte.__EXPORT.Store,
+    prestationsDeFormule: contexte.__EXPORT.prestationsDeFormule,
+    requetes,
+  };
 }
 
 /* ==========================================================================
@@ -120,7 +124,12 @@ function chargerScript() {
 /* ==========================================================================
    Scénario
    ========================================================================== */
-const { Store, requetes } = chargerApplication();
+const { Store, prestationsDeFormule, requetes } = chargerApplication();
+
+// Attendu calculé sur le catalogue, non figé : un ajout de prestation ne doit
+// pas faire échouer ce test, seulement en déplacer le décompte. « cds-gros-morne »
+// est un centre de santé, donc soumis aux formalités propres aux CDS.
+const NB_PRESTATIONS_F3_CDS = prestationsDeFormule('F3', 'CDS').length;
 
 Store.init();
 Store.state.reglages.source = 'sheets';
@@ -207,7 +216,8 @@ const controles = [
   ['compte rendu : nature « visio »', crMeet && crMeet.type === 'visio', crMeet && crMeet.type],
   ['événement : lien de visioconférence enregistré', evtMeet && evtMeet.lien === 'https://meet.google.com/test-hebdo', evtMeet && evtMeet.lien],
   ['l\'option immobilier vaut OUI', projet.option_immobilier === 'OUI', projet.option_immobilier],
-  ['le projet compte 34 prestations', sesPrestations.length === 34, sesPrestations.length],
+  [`le projet compte ${NB_PRESTATIONS_F3_CDS} prestations`,
+    sesPrestations.length === NB_PRESTATIONS_F3_CDS, sesPrestations.length],
   ['P34 a été créée par la montée de formule', !!sesPrestations.find((p) => p.prestation_id === 'P34'), 'absente'],
   ['P08 est validée', p08.statut === 'valide', p08.statut],
   ['la note de P08 est écrite', p08.note === 'Validé en réunion.', p08.note],
@@ -225,7 +235,9 @@ const controles = [
   ['aucune cellule indéfinie', !script.feuilles.Projets._grille.flat().includes(undefined), 'undefined présent'],
   ['relecture : formule F3', projetRelu.formule === 'F3', projetRelu.formule],
   ['relecture : option immobilier active', projetRelu.options.immobilier === true, projetRelu.options.immobilier],
-  ['relecture : 34 prestations', Object.keys(projetRelu.prestations).length === 34, Object.keys(projetRelu.prestations).length],
+  [`relecture : ${NB_PRESTATIONS_F3_CDS} prestations`,
+    Object.keys(projetRelu.prestations).length === NB_PRESTATIONS_F3_CDS,
+    Object.keys(projetRelu.prestations).length],
   ['relecture : P08 validée', projetRelu.prestations.P08.statut === 'valide', projetRelu.prestations.P08.statut],
   ['relecture : projet supprimé absent', !relu.projets.find((p) => p.id === 'cds-cayenne'), 'présent'],
   ['relecture : nom du porteur corrigé', projetRelu.client.nom === 'Mme Sophie Rivière-Martin', projetRelu.client.nom],

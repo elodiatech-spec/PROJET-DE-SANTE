@@ -671,6 +671,28 @@ select { cursor: pointer; }
 .input-group { display: flex; gap: var(--sp-2); }
 .input-group .input, .input-group input { flex: 1; min-width: 0; }
 
+/* Zone de dépôt de fichiers — bouton plein cadre, aussi cible du glisser-déposer.
+   `is-active` est posée pendant le survol d'un glissement. */
+.dropzone {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  width: 100%; padding: var(--sp-6) var(--sp-4);
+  border: 1px dashed var(--border-strong); border-radius: var(--r-md);
+  background: var(--bg); color: var(--text-muted);
+  cursor: pointer; text-align: center;
+  transition: border-color .15s var(--ease), background .15s var(--ease), color .15s var(--ease);
+}
+[data-theme='light'] .dropzone { background: var(--surface); }
+.dropzone:hover:not(:disabled), .dropzone.is-active {
+  border-color: var(--brand-500);
+  background: color-mix(in srgb, var(--brand-500) 8%, transparent);
+  color: var(--text-soft);
+}
+.dropzone.is-active { border-style: solid; }
+.dropzone:disabled { cursor: default; opacity: .55; }
+.dropzone > i { font-size: 1.5rem; color: var(--brand-500); margin-bottom: 4px; }
+.dropzone__titre { font-size: .84rem; font-weight: 800; color: var(--text); }
+.dropzone__aide { font-size: .74rem; }
+
 /* --------------------------------------------------------------------------
    12. Tableaux
    -------------------------------------------------------------------------- */
@@ -948,6 +970,24 @@ select { cursor: pointer; }
   animation: pop-in .2s var(--ease);
 }
 .modal--lg { max-width: 760px; }
+
+/* Visionneuse de liens : la modale prend l'écran, le cadre prend la modale. */
+.modal--viewer { max-width: 1180px; max-height: 94vh; }
+.viewer { display: flex; flex-direction: column; gap: var(--sp-2); }
+.viewer__barre { display: flex; align-items: center; gap: var(--sp-3); }
+.viewer__url {
+  flex: 1; min-width: 0; font-size: .72rem; color: var(--text-muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  padding: 7px 10px; border-radius: var(--r-sm);
+  background: var(--surface-2); border: 1px solid var(--border);
+}
+.viewer__cadre {
+  width: 100%; height: min(68vh, 760px);
+  border: 1px solid var(--border); border-radius: var(--r-md);
+  background: var(--surface);
+}
+.viewer__aide { font-size: .72rem; color: var(--text-muted); }
+.viewer__aide i { color: var(--info-500); }
 .modal__close { position: absolute; top: 16px; right: 16px; color: var(--text-muted); font-size: 1rem; }
 .modal__close:hover { color: var(--text); }
 .modal__title { font-size: 1.05rem; font-weight: 900; padding-right: 32px; }

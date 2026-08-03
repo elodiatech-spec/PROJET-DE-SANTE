@@ -198,7 +198,7 @@ var AMORCE = {
    "Onglet Prestations — une ligne par prestation et par projet. Statuts : a_faire, en_cours, a_valider, valide, bloque."
   ],
   [
-   "Onglet Catalogue   — référence en lecture seule des 34 prestations et de leur rattachement aux formules."
+   "Onglet Catalogue   — référence en lecture seule des 37 prestations et de leur rattachement aux formules."
   ],
   [
    "Autres onglets     — documents, signatures, messages, événements, comptes rendus, financements, partenaires."
@@ -1621,6 +1621,45 @@ var AMORCE = {
    "",
    "",
    "OUI"
+  ],
+  [
+   "P35",
+   "LB",
+   "Structuration juridique & dossier ARS",
+   "Règlement de fonctionnement",
+   "Rédaction du règlement de fonctionnement : organisation interne, droits et obligations des usagers, fonctionnement des instances, modalités d'accueil et de prise en charge.",
+   "Règlement de fonctionnement",
+   "expert",
+   5,
+   "",
+   "OUI",
+   "OUI"
+  ],
+  [
+   "P36",
+   "LB",
+   "Structuration juridique & dossier ARS",
+   "Engagement de conformité d'un centre de santé",
+   "Constitution et dépôt de l'engagement de conformité au référentiel national, préalable obligatoire à l'ouverture d'un centre de santé, accompagné du projet de santé et du règlement de fonctionnement.",
+   "Engagement de conformité déposé",
+   "expert",
+   6,
+   "",
+   "OUI",
+   "OUI"
+  ],
+  [
+   "P37",
+   "LB",
+   "Structuration juridique & dossier ARS",
+   "Demande d'immatriculation ARS (FINESS / labellisation)",
+   "Demande d'inscription au répertoire FINESS, suivi de l'attribution du numéro et des démarches de labellisation applicables à la structure.",
+   "Numéro FINESS attribué",
+   "expert",
+   5,
+   "",
+   "OUI",
+   "OUI"
   ]
  ],
  "Documents": [
@@ -2740,6 +2779,13 @@ function doPost(e) {
       return json({ ok: true, dossiers: creerDossiers(String(requete.projetId || '')) });
     }
 
+    // --- Dépôt d'un fichier dans le Drive du projet ---
+    // Aucun verrou : rien n'est écrit dans la feuille, et un téléversement
+    // ne doit pas retarder les écritures des autres.
+    if (requete.action === 'televerser') {
+      return json({ ok: true, fichier: televerserFichier(requete, acces) });
+    }
+
     // --- Écriture ---
     verrou.waitLock(25000);   // deux écritures simultanées décaleraient les lignes
 
@@ -2939,6 +2985,112 @@ function creerTousLesDossiers() {
       ? crees.length + ' dossier(s) de projet créé(s) avec leurs sous-dossiers.'
       : 'Tous les projets disposent déjà de leur dossier.',
     SpreadsheetApp.getUi().ButtonSet.OK);
+}
+
+/* ==========================================================================
+   TÉLÉVERSEMENT DE FICHIERS
+   Le navigateur envoie le contenu encodé et la catégorie ; le script décide
+   du sous-dossier. L'arborescence Drive reste ainsi connue du serveur seul.
+
+   Le déploiement s'exécutant « en tant que moi », c'est le compte
+   propriétaire qui crée le fichier : un client dépose ses pièces sans qu'on
+   ait à lui partager quoi que ce soit dans le Drive.
+   ========================================================================== */
+
+/**
+ * Sous-dossier de destination pour chaque catégorie du coffre-fort.
+ * Le repérage se fait sur le numéro d'ordre et non sur le libellé complet :
+ * renommer « 03 — Dossier ARS » en « 03 — ARS » reste donc sans effet.
+ */
+var DOSSIERS_CATEGORIE = {
+  'Projet': '01', 'Juridique': '02', 'ARS': '03', 'Finances': '04',
+  'Immobilier': '05', 'Équipe': '06', 'Partenariats': '07', 'Identité': '08'
+};
+
+/** Au-delà, le dépôt direct dans le Drive reste la bonne voie. */
+var TAILLE_MAX_OCTETS = 10 * 1024 * 1024;
+
+/**
+ * Crée un fichier dans le Drive du projet et renvoie sa référence.
+ * @returns {{id:string, nom:string, url:string, taille:string, dossier:string}}
+ */
+function televerserFichier(requete, acces) {
+  var projetId = String(requete.projetId || '');
+  if (!projetId) throw new Error('Projet non précisé.');
+
+  // Un jeton client ne dépose que dans son propre dossier.
+  if (acces.role === 'client' && projetId !== acces.projetId) {
+    throw new Error('Dépôt refusé : ce projet ne vous appartient pas.');
+  }
+
+  // Une barre oblique dans le nom ferait croire à Drive à un chemin.
+  var nom = String(requete.nom || '').replace(/[\/\\]/g, '-').trim();
+  if (!nom) throw new Error('Nom de fichier manquant.');
+
+  var contenu = String(requete.contenu || '');
+  if (!contenu) throw new Error('Fichier vide.');
+
+  var octets = Utilities.base64Decode(contenu);
+  if (octets.length > TAILLE_MAX_OCTETS) {
+    throw new Error('« ' + nom + ' » pèse ' + formaterOctets(octets.length)
+      + '. Au-delà de ' + formaterOctets(TAILLE_MAX_OCTETS)
+      + ', déposez le fichier directement dans le Drive puis référencez son lien.');
+  }
+
+  var cible = sousDossierCategorie(dossierDuProjet(projetId), String(requete.categorie || ''));
+  var fichier = cible.createFile(
+    Utilities.newBlob(octets, String(requete.mimeType || 'application/octet-stream'), nom));
+
+  return {
+    id: fichier.getId(),
+    nom: fichier.getName(),
+    url: fichier.getUrl(),
+    taille: formaterOctets(octets.length),
+    dossier: cible.getName()
+  };
+}
+
+/** Dossier Drive d'un projet, d'après la colonne « drive_url » de l'onglet Projets. */
+function dossierDuProjet(projetId) {
+  var feuille = SpreadsheetApp.getActive().getSheetByName('Projets');
+  if (!feuille) throw new Error("Onglet 'Projets' introuvable");
+
+  var valeurs = feuille.getDataRange().getValues();
+  var entetes = valeurs[0].map(String);
+  var iId = entetes.indexOf('id');
+  var iUrl = entetes.indexOf('drive_url');
+  if (iUrl < 0) throw new Error("colonne « drive_url » absente de l'onglet Projets");
+
+  for (var l = 1; l < valeurs.length; l++) {
+    if (String(valeurs[l][iId] || '') !== projetId) continue;
+    // Dans « …/drive/folders/<ID>?usp=sharing », l'identifiant est la seule
+    // longue suite de caractères d'adresse : aucun segment fixe ne l'égale.
+    var trouve = String(valeurs[l][iUrl] || '').match(/[-\w]{25,}/);
+    if (trouve) return DriveApp.getFolderById(trouve[0]);
+    break;
+  }
+
+  throw new Error("Ce projet n'a pas encore de dossier Drive. Créez-le depuis "
+    + 'Console expert → Portefeuille clients, bouton « Créer les dossiers Drive ».');
+}
+
+/** Sous-dossier correspondant à la catégorie ; à défaut, la racine du projet. */
+function sousDossierCategorie(dossierProjet, categorie) {
+  var prefixe = DOSSIERS_CATEGORIE[categorie];
+  if (!prefixe) return dossierProjet;
+
+  var it = dossierProjet.getFolders();
+  while (it.hasNext()) {
+    var d = it.next();
+    if (d.getName().indexOf(prefixe) === 0) return d;
+  }
+  return dossierProjet;   // arborescence remaniée : le dossier du projet fait l'affaire
+}
+
+function formaterOctets(octets) {
+  if (octets < 1024) return octets + ' o';
+  if (octets < 1048576) return Math.round(octets / 1024) + ' Ko';
+  return (octets / 1048576).toFixed(1).replace('.', ',') + ' Mo';
 }
 
 /* ==========================================================================

@@ -1080,6 +1080,28 @@ const App = {
     },
 
     /* --- Documents --- */
+    /**
+     * Dépôt direct : le fichier choisi sur le poste part dans le sous-dossier
+     * Drive de sa catégorie, et son nom, son format et sa taille sont lus sur
+     * le fichier lui-même — plus rien à ressaisir à la main.
+     */
+    'televerser-documents'() {
+      const projet = Store.projet();
+      Modal.televersement({
+        categorie: App.filtres.cat || 'Projet',
+        onFichier: (reference, categorie) => {
+          Store.ajouterDocument({
+            nom: reference.nom,
+            cat: categorie,
+            type: formatFichier(reference.nom),
+            url: reference.url,
+            taille: reference.taille,
+            auteur: Store.estExpert() ? projet.consultant?.nom : projet.client?.nom,
+          });
+        },
+      });
+    },
+
     'ajouter-document'() {
       Modal.formulaire({
         titre: 'Référencer un document',
@@ -1165,6 +1187,15 @@ const App = {
         libelle: 'Supprimer',
         danger: true,
         onConfirm: () => { Store.supprimerDocument(el.dataset.id); toast('Référence supprimée.', 'ok'); },
+      });
+    },
+
+    /** Aperçu d'un lien dans l'application, sans ouvrir d'onglet. */
+    'apercu-lien'(el) {
+      Modal.apercuLien({
+        titre: el.dataset.titre || 'Aperçu',
+        url: el.dataset.url,
+        soustitre: el.dataset.soustitre || '',
       });
     },
 
@@ -1728,12 +1759,12 @@ const App = {
 const Modal = {
   _onCancel: null,
 
-  open({ titre, soustitre, corps, actions, large }) {
+  open({ titre, soustitre, corps, actions, large, viewer }) {
     this.close(true);
     const racine = document.getElementById('modal-root');
     racine.innerHTML = `
       <div class="modal-backdrop" data-modal-backdrop>
-        <div class="modal ${large ? 'modal--lg' : ''}" role="dialog" aria-modal="true" aria-label="${esc(titre)}">
+        <div class="modal ${large ? 'modal--lg' : ''} ${viewer ? 'modal--viewer' : ''}" role="dialog" aria-modal="true" aria-label="${esc(titre)}">
           <button class="modal__close" data-action="fermer-modal" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button>
           <h3 class="modal__title">${esc(titre)}</h3>
           ${soustitre ? `<p class="modal__subtitle">${esc(soustitre)}</p>` : ''}
@@ -1818,6 +1849,196 @@ const Modal = {
   },
 
   /**
+   * Visionneuse intégrée : affiche un lien dans l'application, sans ouvrir
+   * d'onglet.
+   *
+   * Aucun navigateur ne permet de savoir de façon fiable si un site distant
+   * refuse d'être affiché dans un cadre : `onload` se déclenche dans les deux
+   * cas et le contenu est inaccessible depuis une autre origine. Plutôt que
+   * de prétendre le détecter, la visionneuse annonce le repli d'emblée et
+   * garde « Ouvrir dans un nouvel onglet » sous la main.
+   */
+  apercuLien({ titre, url, soustitre }) {
+    const direct = urlSure(url);
+    if (!direct) { toast('Aucune adresse exploitable pour ce lien.', 'warn'); return; }
+    const integrable = lienIntegrable(direct);
+
+    this.open({
+      titre: titre || 'Aperçu',
+      soustitre,
+      viewer: true,
+      corps: `
+        <div class="viewer">
+          <div class="viewer__barre">
+            <span class="viewer__url mono" title="${esc(direct)}">${esc(direct)}</span>
+            <a class="btn btn--sm" href="${esc(direct)}" target="_blank" rel="noopener noreferrer">
+              <i class="fa-solid fa-arrow-up-right-from-square"></i> Nouvel onglet
+            </a>
+          </div>
+          <iframe class="viewer__cadre" src="${esc(integrable)}" title="${esc(titre || 'Aperçu du lien')}"
+                  referrerpolicy="no-referrer" loading="eager"></iframe>
+          <p class="viewer__aide">
+            <i class="fa-solid fa-circle-info"></i>
+            Cadre vide ? Certains sites — portails officiels, dossiers Drive — interdisent
+            l'affichage intégré. Utilisez « Nouvel onglet ».
+          </p>
+        </div>`,
+      actions: `<button class="btn" data-action="fermer-modal">Fermer</button>`,
+    });
+  },
+
+  /**
+   * Dépôt de fichiers pris sur le poste — explorateur natif ou glisser-déposer —
+   * vers le sous-dossier Drive de la catégorie choisie.
+   *
+   * Les envois sont séquentiels et chacun rend compte de son sort dans la liste :
+   * l'échec de l'un n'empêche pas les suivants. `onFichier(reference, categorie)`
+   * est appelé après chaque succès.
+   */
+  televersement({ categorie, onFichier }) {
+    this.open({
+      titre: 'Déposer des fichiers',
+      soustitre: `Les fichiers partent dans le dossier Drive du projet, puis sont référencés `
+               + `dans le coffre-fort. ${formaterOctets(TAILLE_MAX_DEPOT)} au maximum par fichier.`,
+      corps: `
+        <div class="stack-sm">
+          <div class="field">
+            <label class="field__label" for="tv-cat">Catégorie</label>
+            <select id="tv-cat">
+              ${CATEGORIES_DOC.map((c) => `<option value="${esc(c)}" ${c === categorie ? 'selected' : ''}>${esc(c)}</option>`).join('')}
+            </select>
+            <span class="field__hint">Détermine le sous-dossier Drive de destination.</span>
+          </div>
+
+          <input type="file" id="tv-champ" multiple hidden>
+          <button type="button" class="dropzone" id="tv-zone">
+            <i class="fa-solid fa-cloud-arrow-up"></i>
+            <span class="dropzone__titre">Parcourir cet ordinateur</span>
+            <span class="dropzone__aide">ou glissez vos fichiers dans ce cadre</span>
+          </button>
+
+          <div class="stack-xs" id="tv-liste"></div>
+        </div>`,
+      actions: `
+        <button class="btn" data-action="fermer-modal" id="tv-fermer">Annuler</button>
+        <button class="btn btn--primary" id="tv-envoyer" disabled>
+          <i class="fa-solid fa-cloud-arrow-up"></i> Déposer
+        </button>`,
+    });
+
+    const champ = document.getElementById('tv-champ');
+    const zone = document.getElementById('tv-zone');
+    const liste = document.getElementById('tv-liste');
+    const envoyer = document.getElementById('tv-envoyer');
+    const fermer = document.getElementById('tv-fermer');
+    let fichiers = [];
+
+    const rendre = () => {
+      liste.innerHTML = fichiers.map((f, i) => {
+        const format = formatFichier(f.name);
+        return `
+        <div class="file-row" data-ligne="${i}">
+          <div class="file-icon ${CLASSES_FICHIER[format] || ''}"><i class="fa-solid ${iconeFichier(format)}"></i></div>
+          <div class="grow" style="min-width:0">
+            <div class="text-sm fw-800 truncate">${esc(f.name)}</div>
+            <div class="text-xs text-muted" data-etat>${esc(formaterOctets(f.size))}</div>
+          </div>
+          <button class="btn btn--ghost btn--sm" data-retirer="${i}" aria-label="Retirer ${esc(f.name)}">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>`;
+      }).join('');
+
+      envoyer.disabled = !fichiers.length;
+      envoyer.innerHTML = '<i class="fa-solid fa-cloud-arrow-up"></i> Déposer'
+        + (fichiers.length ? ` ${fichiers.length} fichier${fichiers.length > 1 ? 's' : ''}` : '');
+    };
+
+    // Le plafond est annoncé avant l'envoi plutôt que subi après : inutile de
+    // faire monter treize méga-octets pour s'entendre dire non.
+    const ajouter = (nouveaux) => {
+      const trop = [];
+      Array.from(nouveaux).forEach((f) => {
+        if (f.size > TAILLE_MAX_DEPOT) { trop.push(f.name); return; }
+        if (!fichiers.some((d) => d.name === f.name && d.size === f.size)) fichiers.push(f);
+      });
+      if (trop.length) {
+        toast(`Trop volumineux pour le dépôt direct : ${trop.join(', ')}. `
+          + 'À placer dans le Drive, puis à référencer par son lien.', 'warn');
+      }
+      rendre();
+    };
+
+    zone.addEventListener('click', () => champ.click());
+    champ.addEventListener('change', () => { ajouter(champ.files); champ.value = ''; });
+
+    ['dragenter', 'dragover'].forEach((nom) => zone.addEventListener(nom, (ev) => {
+      ev.preventDefault();
+      zone.classList.add('is-active');
+    }));
+    ['dragleave', 'drop'].forEach((nom) => zone.addEventListener(nom, (ev) => {
+      ev.preventDefault();
+      zone.classList.remove('is-active');
+    }));
+    zone.addEventListener('drop', (ev) => {
+      if (ev.dataTransfer?.files?.length) ajouter(ev.dataTransfer.files);
+    });
+
+    liste.addEventListener('click', (ev) => {
+      const bouton = ev.target.closest('[data-retirer]');
+      if (!bouton) return;
+      fichiers.splice(Number(bouton.dataset.retirer), 1);
+      rendre();
+    });
+
+    envoyer.addEventListener('click', async () => {
+      const categorieChoisie = document.getElementById('tv-cat').value;
+      [envoyer, fermer, zone, champ].forEach((el) => { el.disabled = true; });
+      envoyer.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Dépôt en cours…';
+
+      let reussis = 0;
+      const echecs = [];
+
+      for (let i = 0; i < fichiers.length; i++) {
+        const f = fichiers[i];
+        // La modale a pu être fermée entre-temps : on n'écrit que si la ligne est là.
+        const etat = liste.querySelector(`[data-ligne="${i}"] [data-etat]`);
+        const marquer = (html) => { if (etat) etat.innerHTML = html; };
+
+        marquer('<i class="fa-solid fa-circle-notch fa-spin"></i> envoi…');
+        try {
+          const reference = await Store.televerserFichier({
+            nom: f.name,
+            mimeType: f.type || 'application/octet-stream',
+            categorie: categorieChoisie,
+            base64: await lireEnBase64(f),
+          });
+          marquer(`<span class="text-ok"><i class="fa-solid fa-circle-check"></i> déposé dans ${esc(reference.dossier)}</span>`);
+          onFichier(reference, categorieChoisie);
+          reussis += 1;
+        } catch (err) {
+          marquer(`<span class="text-danger"><i class="fa-solid fa-circle-xmark"></i> ${esc(err.message)}</span>`);
+          echecs.push(f.name);
+        }
+      }
+
+      if (echecs.length) {
+        // La modale reste ouverte : le motif de chaque échec doit rester lisible.
+        fermer.disabled = false;
+        fermer.textContent = 'Fermer';
+        envoyer.innerHTML = '<i class="fa-solid fa-cloud-arrow-up"></i> Déposer';
+        toast(`${echecs.length} fichier${echecs.length > 1 ? 's' : ''} non déposé${echecs.length > 1 ? 's' : ''}`
+          + (reussis ? `, ${reussis} réussi${reussis > 1 ? 's' : ''}.` : '.'), 'warn');
+        return;
+      }
+
+      this.close(true);
+      toast(`${reussis} fichier${reussis > 1 ? 's' : ''} déposé${reussis > 1 ? 's' : ''} dans le Drive `
+        + `et référencé${reussis > 1 ? 's' : ''} dans le coffre-fort.`, 'ok');
+    });
+  },
+
+  /**
    * Formulaire structuré en sections, alimenté par des chemins pointés
    * (« client.nom »). Sert à la fiche client, en création comme en modification.
    */
@@ -1897,8 +2118,22 @@ function toast(message, ton = 'info') {
 }
 
 /* ==========================================================================
-   Utilitaire
+   Utilitaires
    ========================================================================== */
+
+/**
+ * Lit un fichier du poste et renvoie son contenu encodé en base64, débarrassé
+ * du préfixe « data:…;base64, » que le script Google n'attend pas.
+ */
+function lireEnBase64(fichier) {
+  return new Promise((resoudre, rejeter) => {
+    const lecteur = new FileReader();
+    lecteur.onload = () => resoudre(String(lecteur.result).split(',')[1] || '');
+    lecteur.onerror = () => rejeter(new Error('fichier illisible'));
+    lecteur.readAsDataURL(fichier);
+  });
+}
+
 function debounce(fn, delai) {
   let t;
   return (...args) => {

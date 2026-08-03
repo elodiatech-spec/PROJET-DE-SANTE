@@ -51,10 +51,30 @@ Les 11 onglets sont créés, mis en forme et remplis :
 | `Lisez-moi` | Consignes d'utilisation |
 | `Projets` | Un projet par ligne — fiche client, formule (F1/F2/F3), notes internes |
 | `Prestations` | Une ligne par prestation et par projet, avec statut et échéance |
-| `Catalogue` | Référence des 34 prestations et de leur rattachement aux formules |
+| `Catalogue` | Référence des 37 prestations et de leur rattachement aux formules |
 | `Documents`, `Signatures`, `Messages`, `Evenements`, `ComptesRendus`, `Financements`, `Partenaires` | Données de suivi |
 
 > Pour partir d'une base vierge, choisissez plutôt **« Créer les onglets vides seulement »**.
+
+### Publier une nouvelle version du script — le piège à connaître
+
+**Enregistrer le code ne suffit pas.** L'adresse `/exec` sert la *version déployée*, pas le code
+que vous venez de coller. Sans republication, une nouveauté du script reste invisible à
+l'application, et rien ne signale l'écart : les anciennes fonctions continuent de répondre
+normalement.
+
+Pour publier **en conservant la même adresse** — c'est indispensable, l'adresse est inscrite en
+dur dans `assets/js/config.js` et dans les liens déjà envoyés aux clients :
+
+1. Collez le nouveau `Code.gs`, puis enregistrez (💾).
+2. **Déployer → Gérer les déploiements**.
+3. Sur le déploiement existant, cliquez l'icône **crayon** (Modifier).
+4. Version : choisissez **« Nouvelle version »**.
+5. **Déployer**.
+
+> N'utilisez pas « Nouveau déploiement » pour une mise à jour : il crée une **autre** adresse
+> `/exec`, et il faudrait alors corriger `config.js` et regénérer tous les liens clients.
+> « Gérer les déploiements → crayon → Nouvelle version » garde l'adresse intacte.
 
 ### Mettre à jour la structure après une évolution du script
 
@@ -85,9 +105,34 @@ Pour chaque projet dépourvu d'adresse Drive, le script :
 L'application affiche alors, dans le coffre-fort documentaire, un bouton
 **« Ouvrir le Drive du projet »** accessible **au client comme à l'expert**.
 
-Pour que le client puisse déposer ses pièces : partagez-lui son dossier de projet
-(clic droit sur le dossier → **Partager** → droit **Éditeur**). Ne partagez que le dossier
-du projet concerné, jamais le dossier racine.
+### Déposer des fichiers depuis l'application
+
+Une fois le dossier créé, le coffre-fort propose **« Déposer des fichiers »** : le bouton ouvre
+l'explorateur de l'ordinateur (le cadre accepte aussi le glisser-déposer), et chaque fichier
+part dans le sous-dossier correspondant à la catégorie choisie — `Juridique` dans
+`02 — Juridique`, `ARS` dans `03 — Dossier ARS`, et ainsi de suite. Le nom, le format et la
+taille sont lus sur le fichier : plus rien à ressaisir. Le document est référencé dans le
+coffre-fort dans le même geste.
+
+Le repérage du sous-dossier se fait sur le **numéro d'ordre** : renommer
+« 03 — Dossier ARS » en « 03 — ARS » reste sans effet. En revanche, un sous-dossier dont le
+numéro disparaît fait retomber les dépôts de cette catégorie à la racine du dossier de projet —
+rien n'est perdu, mais le rangement ne se fait plus.
+
+Deux limites à connaître :
+
+- **10 Mo par fichier.** Au-delà, l'application refuse avant l'envoi et invite à déposer le
+  fichier dans le Drive puis à le référencer avec **« Référencer un lien »**. Le plafond est
+  fixé par `TAILLE_MAX_OCTETS` dans le script et `TAILLE_MAX_DEPOT` dans
+  `assets/js/config.js` — les deux valeurs doivent rester égales, un test le vérifie.
+- **Le dossier Drive doit exister.** Sans lui, le dépôt est refusé avec le message qui indique
+  quel bouton actionner.
+
+> **Pas besoin de partager le Drive au client.** Le déploiement s'exécutant « en tant que moi »,
+> c'est votre compte qui crée le fichier. Un client muni de son lien dépose ses pièces dans son
+> propre dossier sans y avoir aucun droit Drive, et le script refuse tout dépôt visant le
+> dossier d'un autre client. Vous pouvez néanmoins partager un dossier de projet en **Éditeur**
+> si le client doit y travailler directement — jamais le dossier racine.
 
 ---
 
