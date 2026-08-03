@@ -26,7 +26,7 @@ const APP = {
  * sans code expert ni jeton client valide. C'est le porte-clés qui protège,
  * pas le secret de l'adresse.
  */
-const WEB_APP_URL = '';
+const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbwUO5M22-R5McLGVcUEByfZ3uC1h7GBDozAlotRfWvfUQpPGGSiRN7KVQnKYIUOQp2X6A/exec';
 
 /* --------------------------------------------------------------------------
    Statuts d'avancement d'une prestation
