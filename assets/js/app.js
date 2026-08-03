@@ -818,6 +818,28 @@ const App = {
     /* --- Rôles --- */
     'changer-role'() {
       const projet = Store.projet();
+
+      // Une session cliente réelle n'a qu'un espace : rien à choisir, pas de
+      // bouton qui suggérerait le contraire. Juste son compte et la sortie.
+      if (Store.estClientReel()) {
+        Modal.open({
+          titre: projet.client.nom,
+          soustitre: projet.client.fonction || 'Votre espace de suivi',
+          corps: `
+            <div class="file-row">
+              <div class="avatar avatar--lg">${esc(initiales(projet.client.nom))}</div>
+              <div class="grow">
+                <div class="text-sm fw-800">${esc(projet.nom)}</div>
+                <div class="text-xs text-muted">${esc(projet.ville)}</div>
+              </div>
+            </div>`,
+          actions: `<button class="btn btn--danger" data-action="se-deconnecter">
+                      <i class="fa-solid fa-arrow-right-from-bracket"></i> Se déconnecter
+                    </button>`,
+        });
+        return;
+      }
+
       Modal.open({
         titre: 'Changer d\'espace',
         soustitre: 'Cette bascule permet de visualiser la plateforme telle que la voit chaque profil.',

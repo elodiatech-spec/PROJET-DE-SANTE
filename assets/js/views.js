@@ -1074,61 +1074,35 @@ const Views = {
           </div>
         </div>
 
-        <div class="stack-sm">
-          <div class="card card--flat">
-            <h3 class="section-title"><i class="fa-solid fa-globe"></i> Site internet</h3>
-            ${expert ? `
-              <div class="field">
-                <label class="field__label" for="site-url">Adresse du site publié</label>
-                <div class="input-group">
-                  <input type="url" id="site-url" class="input input--mono" value="${esc(projet.siteUrl || '')}" placeholder="https://…">
-                  <button class="btn btn--primary" data-action="enregistrer-site"><i class="fa-solid fa-floppy-disk"></i> Enregistrer</button>
-                </div>
-              </div>` : ''}
-            <div class="row-tight" style="margin-top:12px">
-              ${urlSure(projet.siteUrl)
-                ? `<a class="btn btn--primary" href="${esc(urlSure(projet.siteUrl))}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-arrow-up-right-from-square"></i> Visiter le site</a>`
-                : badge('Site non encore publié', 'neutre', 'fa-solid fa-hourglass-half')}
-            </div>
-          </div>
-
-          <div class="card card--flat">
-            <h3 class="section-title"><i class="fa-solid fa-swatchbook"></i> Livrables graphiques</h3>
-            <p class="text-xs text-muted" style="margin:-6px 0 12px">
-              ${expert
-                ? 'Déposez le lien du fichier depuis le Drive, puis soumettez-le à la validation du client.'
-                : 'Les fichiers sont consultables dès leur mise à disposition.'}
-            </p>
-            <div class="stack-xs">
-              ${prestas.map((p) => {
-                const lien = urlSure(p.etat.livrableUrl);
-                return `
-                <div class="file-row">
-                  <div class="file-icon file-icon--img"><i class="fa-solid fa-image"></i></div>
-                  <div class="grow" style="min-width:0">
-                    <div class="text-sm fw-800">${esc(p.livrable)}</div>
-                    <div class="text-xs text-muted">${esc(p.titre)}</div>
-                  </div>
-                  ${badgeStatut(p.etat.statut)}
-                  ${lien
-                    ? `<a class="btn btn--sm" href="${esc(lien)}" target="_blank" rel="noopener noreferrer">
-                         <i class="fa-solid fa-download"></i> Ouvrir
-                       </a>`
-                    : ''}
-                  ${expert
-                    ? `<button class="btn btn--sm ${lien ? '' : 'btn--primary'}" data-action="deposer-livrable" data-id="${esc(p.id)}">
-                         <i class="fa-solid fa-file-arrow-up"></i> ${lien ? 'Remplacer' : 'Déposer'}
-                       </button>`
-                    : ''}
-                </div>`;
-              }).join('')}
-            </div>
+        <div class="card card--flat">
+          <h3 class="section-title"><i class="fa-solid fa-globe"></i> Site internet</h3>
+          ${expert ? `
+            <div class="field">
+              <label class="field__label" for="site-url">Adresse du site publié</label>
+              <div class="input-group">
+                <input type="url" id="site-url" class="input input--mono" value="${esc(projet.siteUrl || '')}" placeholder="https://…">
+                <button class="btn btn--primary" data-action="enregistrer-site"><i class="fa-solid fa-floppy-disk"></i> Enregistrer</button>
+              </div>
+            </div>` : ''}
+          <div class="row-tight" style="margin-top:12px">
+            ${urlSure(projet.siteUrl)
+              ? `<a class="btn btn--primary" href="${esc(urlSure(projet.siteUrl))}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-arrow-up-right-from-square"></i> Visiter le site</a>`
+              : badge('Site non encore publié', 'neutre', 'fa-solid fa-hourglass-half')}
           </div>
         </div>
       </div>
 
       <div class="card">
-        <div class="card__head"><h3 class="card__title"><i class="fa-solid fa-list-check"></i> Prestations du lot identité</h3></div>
+        <div class="card__head">
+          <div>
+            <h3 class="card__title"><i class="fa-solid fa-swatchbook"></i> Livrables graphiques & prestations du lot identité</h3>
+            <p class="card__subtitle">
+              ${expert
+                ? "Faites évoluer le statut, puis déposez ou remplacez le lien du fichier depuis « Détail »."
+                : "Le lien du livrable est accessible depuis « Détail » dès sa mise à disposition."}
+            </p>
+          </div>
+        </div>
         <div class="stack-sm">${prestas.map((p) => cartePrestation(p, ++n)).join('')}</div>
       </div>
     </section>`;

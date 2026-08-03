@@ -532,6 +532,17 @@ const Store = {
 
   estExpert() { return this.state.role === 'expert'; },
 
+  /**
+   * Vrai pour une session cliente réelle : ouverte par jeton auprès du
+   * serveur, jamais par code expert. Sert de garde-fou local — le serveur
+   * refuse de toute façon toute écriture hors du seul projet du jeton, mais
+   * l'interface ne doit même pas suggérer qu'un basculement est possible.
+   */
+  estClientReel() {
+    const s = this.state.session || {};
+    return this.state.reglages.source === 'sheets' && !!s.jeton && !s.cle;
+  },
+
   /** Prestations actives du projet, enrichies de leur état. */
   prestations(projetId) {
     const p = this.projet(projetId);
@@ -904,6 +915,11 @@ const Store = {
   },
 
   setRole(role) {
+    // Une session cliente réelle reste cliente, quoi que demande l'interface :
+    // le serveur trancherait de toute façon dans ce sens à la prochaine
+    // écriture, mais autant ne jamais afficher un rôle qu'on ne peut pas tenir.
+    if (role === 'expert' && this.estClientReel()) return;
+
     this.commit((s) => {
       s.role = role;
       // Un client ne doit jamais rester sur une route réservée à l'expert.
