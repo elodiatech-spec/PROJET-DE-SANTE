@@ -144,6 +144,15 @@ var ONGLETS = {
     "type",
     "statut"
   ],
+  "Pieces": [
+    "projet_id",
+    "id",
+    "nom",
+    "cat",
+    "par",
+    "aide",
+    "pour"
+  ],
   "Experts": [
     "id",
     "nom",
@@ -158,6 +167,7 @@ var ONGLETS = {
     "metier",
     "specialite",
     "contact",
+    "tel",
     "lot"
   ]
 };
@@ -169,7 +179,9 @@ var ENTITES_PAR_PROJET = {
   evenements:    { onglet: 'Evenements',    champs: ['id', 'titre', 'type', 'canal', 'date', 'heure', 'lieu', 'lien'] },
   comptesRendus: { onglet: 'ComptesRendus', champs: ['id', 'date', 'objet', 'type', 'participants', 'decisions', 'statut', 'lien_meet', 'lien_doc'] },
   financements:  { onglet: 'Financements',  champs: ['id', 'source', 'montant', 'statut', 'echeance'] },
-  partenaires:   { onglet: 'Partenaires',   champs: ['id', 'nom', 'type', 'statut'] }
+  partenaires:   { onglet: 'Partenaires',   champs: ['id', 'nom', 'type', 'statut'] },
+  // Demandes de pièces ajoutées par l'expert, en plus du socle du catalogue.
+  pieces:        { onglet: 'Pieces',        champs: ['id', 'nom', 'cat', 'par', 'aide', 'pour'] }
 };
 
 /** Colonnes de la feuille exposées à l'application sous un autre nom. */
@@ -2616,7 +2628,8 @@ function construireDonnees(projetIdUnique) {
   donnees.prestataires = lireOnglet('Prestataires').map(function (r) {
     return {
       id: r.id, nom: r.nom || '', metier: r.metier || '',
-      specialite: r.specialite || '', contact: r.contact || '', lot: r.lot || 'LE'
+      specialite: r.specialite || '', contact: r.contact || '',
+      tel: r.tel ? String(r.tel) : '', lot: r.lot || 'LE'
     };
   });
 
@@ -2724,6 +2737,10 @@ var ECRITURE = {
     onglet: 'Partenaires', cles: ['projet_id', 'id'],
     champs: { nom: 'nom', type: 'type', statut: 'statut' }
   },
+  pieces: {
+    onglet: 'Pieces', cles: ['projet_id', 'id'],
+    champs: { nom: 'nom', cat: 'cat', par: 'par', aide: 'aide', pour: 'pour' }
+  },
 
   // Référentiels communs : pas de colonne projet_id, la clé est l'identifiant.
   experts: {
@@ -2732,7 +2749,7 @@ var ECRITURE = {
   },
   prestataires: {
     onglet: 'Prestataires', cles: ['id'],
-    champs: { nom: 'nom', metier: 'metier', specialite: 'specialite', contact: 'contact', lot: 'lot' }
+    champs: { nom: 'nom', metier: 'metier', specialite: 'specialite', contact: 'contact', tel: 'tel', lot: 'lot' }
   }
 };
 

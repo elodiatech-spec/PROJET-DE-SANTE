@@ -231,14 +231,19 @@ const PRESTATIONS = [
     desc: "Analyse d'éligibilité aux fonds européens, montage du dossier et dépôt sur le portail e-Synergie.",
     livrable: 'Dossier FEDER déposé' },
 
-  /* --- LOT D : Conventions & partenariats (F2, F3) --- */
+  /* --- LOT D : Conventions & partenariats (F2, F3) ---
+     Une convention se signe, se relit et se conserve : les trois prestations
+     portent donc les mêmes gestes que les actes juridiques. */
   { id: 'P23', lot: 'LD', titre: 'Conventions CCAS', acteur: 'expert', jours: 4,
+    actes: true,
     desc: "Conventionnement avec le centre communal d'action sociale et les collectivités du territoire.",
     livrable: 'Convention CCAS signée' },
   { id: 'P24', lot: 'LD', titre: 'Conventions partenaires médicaux', acteur: 'expert', jours: 5,
+    actes: true,
     desc: "Conventions avec les établissements hospitaliers, HAD, SSIAD, laboratoires et pharmacies partenaires.",
     livrable: 'Conventions partenaires' },
   { id: 'P25', lot: 'LD', titre: 'Partenariats prévention', acteur: 'expert', jours: 4,
+    actes: true,
     desc: "Partenariats avec les acteurs de la prévention, associations de patients et réseaux de santé publique.",
     livrable: 'Conventions prévention' },
 

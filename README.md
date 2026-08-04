@@ -209,8 +209,11 @@ l'**engagement de conformité** ne s'affiche que pour un centre de santé. C'est
 - **Financements & aides** — un seul écran pour tout ce qui touche à l'argent :
   les guichets de dépôt (Stars FIR, e-Synergie, Espace Pro Ameli), les demandes
   et leur statut, les douze pièces justificatives, et les prestations du lot.
-  Chaque pièce indique à quels dossiers elle sert et qui doit la fournir ;
-  le client rattache ses documents lui-même et est notifié de ce qui manque.
+  Chaque pièce indique à quels dossiers elle sert et qui doit la fournir.
+  Le client **téléverse** sa pièce depuis l'explorateur de son ordinateur : le fichier part
+  dans le sous-dossier Drive de la catégorie de la pièce, sans qu'il ait à ranger quoi que ce
+  soit ni à recevoir de droit Drive. L'expert peut par ailleurs **demander une pièce** propre
+  à un dossier, en plus du socle commun — le client ne peut ni en créer ni en retirer.
 - Conventions et partenariats
 - Annuaire des prestataires
 

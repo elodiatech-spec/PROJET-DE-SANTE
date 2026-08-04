@@ -44,7 +44,7 @@ Un document déposé dans `03 — Dossier ARS` se référence dans le coffre-for
    **« Initialiser la base (onglets + données de démonstration) »**.
 5. Autorisez le script lorsque Google le demande (première exécution uniquement).
 
-Les 11 onglets sont créés, mis en forme et remplis :
+Les 14 onglets sont créés, mis en forme et remplis :
 
 | Onglet | Contenu |
 |---|---|
@@ -53,6 +53,8 @@ Les 11 onglets sont créés, mis en forme et remplis :
 | `Prestations` | Une ligne par prestation et par projet, avec statut et échéance |
 | `Catalogue` | Référence des 37 prestations et de leur rattachement aux formules |
 | `Documents`, `Signatures`, `Messages`, `Evenements`, `ComptesRendus`, `Financements`, `Partenaires` | Données de suivi |
+| `Pieces` | Demandes de pièces propres à un dossier, ajoutées par l'expert |
+| `Experts`, `Prestataires` | Référentiels communs à tous les dossiers |
 
 > Pour partir d'une base vierge, choisissez plutôt **« Créer les onglets vides seulement »**.
 
@@ -75,6 +77,21 @@ dur dans `assets/js/config.js` et dans les liens déjà envoyés aux clients :
 > N'utilisez pas « Nouveau déploiement » pour une mise à jour : il crée une **autre** adresse
 > `/exec`, et il faudrait alors corriger `config.js` et regénérer tous les liens clients.
 > « Gérer les déploiements → crayon → Nouvelle version » garde l'adresse intacte.
+
+### Onglet `Pieces` — à créer une fois
+
+L'expert peut demander une pièce propre à un dossier, en plus du socle commun. Ces demandes
+vivent dans un onglet `Pieces` qui n'existait pas dans les premières versions.
+
+Après avoir republié le script, lancez **ElodiaTech → Mettre à jour la structure (sans perte
+de données)** : la commande crée l'onglet manquant et ajoute la colonne `tel` à l'onglet
+`Prestataires`. Elle ne touche à rien d'autre, et se relance sans risque.
+
+Sans cet onglet, les demandes de pièces s'affichent dans le navigateur mais ne sont pas
+conservées d'une visite à l'autre — le script refuse d'écrire dans un onglet absent.
+
+> Le client ne peut ni créer ni retirer une demande de pièce : le script le refuse, quoi que
+> prétende le navigateur. Il peut en revanche téléverser la pièce demandée.
 
 ### Mettre à jour la structure après une évolution du script
 

@@ -933,10 +933,10 @@ const App = {
                 <label class="field__label" for="pd-echeance">Échéance</label>
                 <input type="date" id="pd-echeance" value="${esc(p.etat.echeance || '')}">
               </div>
-              <div class="field">
-                <label class="field__label" for="pd-lien">Lien du livrable</label>
-                <input type="url" id="pd-lien" class="input--mono" value="${esc(p.etat.livrableUrl || '')}" placeholder="https://…">
-              </div>
+              <!-- Le « Lien du livrable » a été retiré : les pièces se déposent
+                   désormais depuis la prestation ou le coffre-fort, et le fichier
+                   part dans le bon sous-dossier Drive. Coller une adresse à la
+                   main ne rangeait rien. -->
               <div class="field">
                 <label class="field__label" for="pd-note">Note de suivi</label>
                 <textarea id="pd-note" placeholder="Point d'avancement, blocage, prochaine étape…">${esc(p.etat.note || '')}</textarea>
@@ -956,9 +956,10 @@ const App = {
     },
 
     'enregistrer-prestation'(el) {
+      // `livrableUrl` n'est plus saisissable ici, et n'est donc pas écrit :
+      // l'envoyer à vide effacerait les adresses déjà enregistrées.
       Store.majPrestation(el.dataset.id, {
         echeance: document.getElementById('pd-echeance')?.value || '',
-        livrableUrl: document.getElementById('pd-lien')?.value.trim() || '',
         note: document.getElementById('pd-note')?.value.trim() || '',
       });
       Modal.close();
@@ -1004,28 +1005,32 @@ const App = {
     },
 
     /**
-     * Enregistre le lien du document d'un chapitre du projet de santé.
-     * Le chapitre est porté par l'entité documents, sous « CHAP01 » : vider le
-     * champ retire donc la pièce plutôt que d'enregistrer une adresse vide.
+     * Enregistre le lien du document et la date de livraison d'un chapitre.
+     *
+     * Le chapitre est porté par l'entité documents sous « CHAP01 », et sa date
+     * de livraison par le champ `date` de cette ligne. Une date peut donc être
+     * annoncée avant que le document n'existe. Vider les deux champs retire la
+     * ligne : un chapitre sans lien ni date n'a rien à dire.
      */
     'enregistrer-chapitre'(el) {
       const num = el.dataset.num;
-      const champ = document.querySelector(`[data-chapitre-url="${num}"]`);
-      if (!champ) return;
+      const champUrl = document.querySelector(`[data-chapitre-url="${num}"]`);
+      if (!champUrl) return;
 
-      const url = champ.value.trim();
+      const url = champUrl.value.trim();
+      const date = document.querySelector(`[data-chapitre-date="${num}"]`)?.value || '';
       const existant = documentDeChapitre(num);
 
-      if (!url) {
-        if (existant) {
-          Store.supprimerDocument(existant.id);
-          toast(`Lien du chapitre ${num} retiré.`, 'ok');
-        }
+      if (url && !urlSure(url)) {
+        toast('Adresse invalide : elle doit commencer par http:// ou https://', 'warn');
         return;
       }
 
-      if (!urlSure(url)) {
-        toast('Adresse invalide : elle doit commencer par http:// ou https://', 'warn');
+      if (!url && !date) {
+        if (existant) {
+          Store.supprimerDocument(existant.id);
+          toast(`Chapitre ${num} : lien et date retirés.`, 'ok');
+        }
         return;
       }
 
@@ -1033,19 +1038,18 @@ const App = {
       const nom = `Chapitre ${num} — ${chapitre?.titre || ''}`;
 
       if (existant) {
-        Store.majDocument(existant.id, { url, nom });
-        toast(`Lien du chapitre ${num} mis à jour.`, 'ok');
-        return;
+        Store.majDocument(existant.id, { url, nom, date, type: formatFichier(url) || 'doc' });
+      } else {
+        Store.ajouterDocument({
+          nom, url, date, cat: 'Projet',
+          type: formatFichier(url) || 'doc',
+          taille: '—',
+          piece: `CHAP${num}`,
+          auteur: Store.projet().consultant?.nom || '',
+        });
       }
 
-      Store.ajouterDocument({
-        nom, url, cat: 'Projet',
-        type: formatFichier(url) || 'doc',
-        taille: '—',
-        piece: `CHAP${num}`,
-        auteur: Store.projet().consultant?.nom || '',
-      });
-      toast(`Lien du chapitre ${num} enregistré.`, 'ok');
+      toast(`Chapitre ${num} enregistré${date ? ` — livraison le ${Dates.format(date)}` : ''}.`, 'ok');
     },
 
     'enregistrer-site'() {
@@ -1177,8 +1181,118 @@ const App = {
      * Le fichier reste sur le Drive : on n'enregistre que sa référence, et
      * l'identifiant de la pièce qu'il satisfait.
      */
+    /**
+     * Téléverse une pièce du dossier depuis le poste, directement dans le
+     * sous-dossier Drive de sa catégorie. C'est le chemin que suit le client :
+     * il n'a rien à ranger lui-même, ni aucun droit Drive à recevoir.
+     */
+    'televerser-piece'(el) {
+      const piece = Store.pieces().find((p) => p.id === el.dataset.piece);
+      if (!piece) return;
+
+      if (!Store.ecritureActive()) {
+        toast('Le téléversement demande la connexion Google Sheets. '
+          + 'Sans elle, utilisez « Référencer ».', 'warn');
+        return;
+      }
+
+      const projet = Store.projet();
+
+      Modal.televersement({
+        categorie: piece.cat,
+        titre: `Téléverser — ${piece.nom}`,
+        soustitre: `${piece.aide ? piece.aide + ' ' : ''}Le fichier part dans le sous-dossier `
+                 + `« ${piece.cat} » du Drive du projet. ${formaterOctets(TAILLE_MAX_DEPOT)} au maximum par fichier.`,
+        onFichier: (reference, categorieChoisie) => {
+          Store.ajouterDocument({
+            nom: reference.nom,
+            cat: categorieChoisie,
+            type: formatFichier(reference.nom),
+            url: reference.url,
+            taille: reference.taille,
+            piece: piece.id,
+            auteur: Store.estExpert() ? projet.consultant?.nom : projet.client?.nom,
+          });
+        },
+      });
+    },
+
+    /**
+     * Demande de pièce propre à un dossier : création si aucun identifiant,
+     * modification sinon. Le socle du catalogue n'est pas modifiable ici — il
+     * vaut pour tous les clients.
+     */
+    'fiche-piece'(el) {
+      const pieceId = el.dataset.piece;
+      const piece = pieceId ? Store.pieces().find((p) => p.id === pieceId) : null;
+
+      if (piece && !piece.sur_mesure) {
+        toast('Cette pièce fait partie du socle commun : elle ne se modifie pas dossier par dossier.', 'warn');
+        return;
+      }
+
+      Modal.formulaire({
+        titre: piece ? `Modifier — ${piece.nom}` : 'Demander une pièce',
+        soustitre: piece
+          ? 'Cette demande ne concerne que ce dossier.'
+          : "La pièce apparaîtra dans le dossier du client, qui pourra la téléverser directement.",
+        champs: [
+          { id: 'nom', label: 'Pièce demandée', type: 'text', requis: true,
+            valeur: piece?.nom || '', placeholder: 'Attestation URSSAF de vigilance' },
+          { id: 'aide', label: 'Précision pour le client', type: 'textarea',
+            valeur: piece?.aide || '',
+            placeholder: 'À demander sur votre espace URSSAF, datée de moins de six mois.' },
+          { id: 'cat', label: 'Catégorie — décide du sous-dossier Drive', type: 'select',
+            valeur: piece?.cat || 'Juridique',
+            options: CATEGORIES_DOC.map((c) => ({ v: c, l: c })) },
+          { id: 'par', label: 'Qui la fournit', type: 'select',
+            valeur: piece?.par || 'client',
+            options: [
+              { v: 'client', l: 'Le client' },
+              { v: 'expert', l: 'ElodiaTech' },
+            ] },
+          { id: 'pour', label: 'Dossiers concernés (facultatif)', type: 'text',
+            valeur: (piece?.pour || []).join(', '),
+            placeholder: 'ARS, FIR, FEDER' },
+        ],
+        libelle: piece ? 'Enregistrer' : 'Ajouter la demande',
+        onSubmit: (v) => {
+          const donnees = {
+            ...v,
+            pour: v.pour.split(',').map((x) => x.trim()).filter(Boolean),
+          };
+          if (piece) {
+            Store.majPiece(piece.id, donnees);
+            toast('Demande mise à jour.', 'ok');
+          } else {
+            Store.ajouterPiece(donnees);
+            toast(`« ${donnees.nom} » demandée au dossier.`, 'ok');
+          }
+        },
+      });
+    },
+
+    'supprimer-piece'(el) {
+      const piece = Store.pieces().find((p) => p.id === el.dataset.piece);
+      if (!piece || !piece.sur_mesure) return;
+
+      Modal.confirmer({
+        titre: 'Retirer la demande',
+        texte: `« ${piece.nom} » ne sera plus demandée dans ce dossier.`
+             + (piece.document
+                 ? ` Le document déjà fourni reste dans le coffre-fort, simplement détaché.`
+                 : ''),
+        libelle: 'Retirer',
+        danger: true,
+        onConfirm: () => {
+          Store.supprimerPiece(piece.id);
+          toast('Demande retirée.', 'ok');
+        },
+      });
+    },
+
     'deposer-piece'(el) {
-      const piece = PIECES_DOSSIER.find((p) => p.id === el.dataset.piece);
+      const piece = Store.pieces().find((p) => p.id === el.dataset.piece);
       if (!piece) return;
 
       const projet = Store.projet();
@@ -1395,48 +1509,10 @@ const App = {
       });
     },
 
-    'telecharger-livrable'(el) {
-      const p = Store.prestations().find((x) => x.id === el.dataset.id);
-      toast(`Aucun fichier n'est encore rattaché au livrable « ${p?.livrable || ''} ».`, 'warn');
-    },
-
-    /**
-     * Dépose le livrable d'une prestation : logo, charte graphique, kit de
-     * déclinaisons, rapport… Le fichier reste sur le Drive, on enregistre son
-     * lien. Valider la prestation la rend consultable par le client.
-     */
-    'deposer-livrable'(el) {
-      const presta = Store.prestations().find((x) => x.id === el.dataset.id);
-      if (!presta) return;
-      const projet = Store.projet();
-
-      Modal.formulaire({
-        titre: `Déposer — ${presta.livrable}`,
-        soustitre: `${presta.titre} · ${LOTS[presta.lot].nom}`,
-        champs: [
-          { id: 'livrableUrl', label: 'Lien du fichier sur le Drive', type: 'url',
-            valeur: presta.etat.livrableUrl || '',
-            placeholder: 'https://drive.google.com/file/d/…' },
-          { id: 'note', label: 'Note pour le client (facultatif)', type: 'textarea',
-            valeur: presta.etat.note || '',
-            placeholder: 'Trois propositions, celle du milieu a notre préférence…' },
-          { id: 'statut', label: 'Statut', type: 'select', valeur: presta.etat.statut,
-            options: Object.values(STATUTS).map((s) => ({ v: s.id, l: s.label })) },
-        ],
-        libelle: 'Enregistrer',
-        onSubmit: (v) => {
-          Store.majPrestation(presta.id, v);
-          toast(v.statut === 'a_valider'
-            ? `« ${presta.livrable} » soumis à la validation du client.`
-            : `« ${presta.livrable} » enregistré.`, 'ok');
-        },
-      });
-
-      // Rappel discret : sans dossier Drive, l'expert n'a nulle part où poser le fichier.
-      if (!urlSure(projet.driveUrl)) {
-        toast("Ce projet n'a pas encore de dossier Drive — créez-le depuis le portefeuille.", 'warn');
-      }
-    },
+    /* « telecharger-livrable » et « deposer-livrable » ont été retirés avec la
+       vue Livrables et le champ « Lien du livrable » : plus aucun bouton ne les
+       appelait. Le dépôt passe désormais par la prestation ou le coffre-fort,
+       qui rangent le fichier dans le bon sous-dossier Drive. */
 
     /* --- Planning --- */
     'portee-planning'(el) {
@@ -1725,6 +1801,8 @@ const App = {
             valeur: presta?.specialite || '', placeholder: 'SISA, paie et fiscalité des structures de santé' },
           { id: 'contact', label: 'Courriel de contact', type: 'email',
             valeur: presta?.contact || '', placeholder: 'contact@exemple.fr' },
+          { id: 'tel', label: 'Téléphone', type: 'text',
+            valeur: presta?.tel || '', placeholder: '0596 00 00 00' },
           { id: 'lot', label: 'Rattachement', type: 'select', valeur: presta?.lot || 'LE',
             options: [
               { v: 'LE', l: LOTS.LE.nom },

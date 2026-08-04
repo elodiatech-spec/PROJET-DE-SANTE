@@ -171,6 +171,24 @@ const finance = s.appel({
 });
 verifier('client : ne peut pas toucher aux financements', !!finance.erreur, finance.erreur);
 
+// Les demandes de pièces relèvent de l'expert : le client fournit, il ne réclame pas.
+const demandePiece = s.appel({
+  action: 'upsert', entite: 'pieces', jeton: JETON_CLIENT,
+  id: `${s.projetDuJeton}:demtest`, payload: { nom: 'Pièce inventée', cat: 'Juridique', par: 'expert' },
+});
+verifier('client : ne peut pas créer de demande de pièce', !!demandePiece.erreur, demandePiece.erreur);
+
+const supprimeDemande = s.appel({
+  action: 'delete', entite: 'pieces', jeton: JETON_CLIENT, id: `${s.projetDuJeton}:dem1`,
+});
+verifier('client : ne peut pas retirer une demande de pièce', !!supprimeDemande.erreur, supprimeDemande.erreur);
+
+const demandeExpert = s.appel({
+  action: 'upsert', entite: 'pieces', cle: CODE_EXPERT,
+  id: `${s.projetDuJeton}:demtest`, payload: { nom: 'Attestation URSSAF', cat: 'Juridique', par: 'client', aide: 'Moins de six mois.', pour: 'ARS,FIR' },
+});
+verifier('expert : peut créer une demande de pièce', !demandeExpert.erreur, demandeExpert.erreur);
+
 // Champ hors liste blanche : silencieusement ignoré, la ligne n'est pas altérée
 const avantEcheance = s.feuilles.Prestations._grille
   .find((l) => l[0] === s.projetDuJeton && l[1] === 'P09')?.[3];

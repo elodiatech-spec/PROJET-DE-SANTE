@@ -384,13 +384,20 @@ function annexesPrestation(p) {
           : (secours
               ? boutonApercu(secours, p.livrable, 'Visualiser')
               : `<span class="text-xs text-muted"><i class="fa-solid fa-circle-info"></i> Aucun justificatif déposé</span>`)}
+        ${pieces.length
+          ? `<a class="btn btn--sm" href="${esc(lienTelechargement(pieces[0].url))}" download>
+               <i class="fa-solid fa-download"></i> Télécharger
+             </a>`
+          : ''}
         ${expert ? `
           <button class="btn btn--sm" data-action="deposer-justificatif" data-id="${esc(p.id)}">
             <i class="fa-solid fa-cloud-arrow-up"></i> Déposer le justificatif
           </button>` : ''}
       </div>`);
 
-    if (pieces.length) lignes.push(chipsFichiers(pieces));
+    // Le téléchargement direct vaut aussi pour un acte : une convention signée
+    // se conserve, elle ne se regarde pas seulement.
+    if (pieces.length) lignes.push(chipsFichiers(pieces, true));
   }
 
   // Livrables graphiques : posts réseaux sociaux, supports, déclinaisons.
@@ -838,6 +845,8 @@ const Views = {
             const pctC = liees.length ? Math.round((somme / liees.length) * 100) : 0;
             const doc = documentDeChapitre(c.num);
             const lien = doc ? urlSure(doc.url) : '';
+            // La ligne du chapitre porte sa date de livraison dans son champ date.
+            const livraison = doc?.date || '';
 
             return `<div class="card card--flat">
                 <div class="row-tight" style="justify-content:space-between">
@@ -851,16 +860,31 @@ const Views = {
                 ${expert ? `
                   <div class="field" style="margin-top:12px">
                     <label class="field__label" for="chap-${esc(c.num)}">Lien du document</label>
+                    <input type="url" id="chap-${esc(c.num)}" class="input input--mono"
+                           data-chapitre-url="${esc(c.num)}" value="${esc(lien)}"
+                           placeholder="https://docs.google.com/…">
+                  </div>
+                  <div class="field" style="margin-top:8px">
+                    <label class="field__label" for="chap-date-${esc(c.num)}">Date de livraison</label>
                     <div class="input-group">
-                      <input type="url" id="chap-${esc(c.num)}" class="input input--mono"
-                             data-chapitre-url="${esc(c.num)}" value="${esc(lien)}"
-                             placeholder="https://docs.google.com/…">
+                      <input type="date" id="chap-date-${esc(c.num)}"
+                             data-chapitre-date="${esc(c.num)}" value="${esc(livraison)}">
                       <button class="btn btn--sm" data-action="enregistrer-chapitre" data-num="${esc(c.num)}"
-                              title="Enregistrer le lien du chapitre">
+                              title="Enregistrer le lien et la date">
                         <i class="fa-solid fa-floppy-disk"></i>
                       </button>
                     </div>
                   </div>` : ''}
+
+                ${!expert && livraison ? `
+                  <p class="text-xs text-muted" style="margin-top:10px">
+                    <i class="fa-solid fa-calendar-day"></i> Livraison prévue le ${esc(Dates.format(livraison))}
+                  </p>` : ''}
+
+                ${expert && livraison ? `
+                  <p class="text-xs text-muted" style="margin-top:8px">
+                    <i class="fa-solid fa-calendar-day"></i> Annoncée au client : ${esc(Dates.format(livraison))}
+                  </p>` : ''}
 
                 <div class="row-tight" style="margin-top:${expert ? '8' : '12'}px">
                   ${lien
@@ -924,10 +948,9 @@ const Views = {
             <p class="text-sm text-soft" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
               <i class="fa-solid fa-circle-info text-brand"></i> ${esc(modele.repere)}
             </p>` : ''}
-          <div class="row-tight" style="margin-top:12px">
-            <button class="btn btn--sm" data-action="aller" data-route="signatures"><i class="fa-solid fa-file-signature"></i> Actes à signer</button>
-            <button class="btn btn--sm" data-action="aller" data-route="documents"><i class="fa-solid fa-folder-open"></i> Pièces juridiques</button>
-          </div>
+          <!-- « Actes à signer » et « Pièces juridiques » ne sont plus ici : la
+               prestation « Structuration SISA ou association 1901 » porte déjà
+               ces mêmes accès, au plus près de l'acte concerné. -->
         </div>
       </div>
 
@@ -959,6 +982,9 @@ const Views = {
 
     const fournies = pieces.filter((p) => p.document).length;
     const manquantesClient = pieces.filter((p) => !p.document && p.par === 'client');
+    // Le téléversement suppose un script relié : sans lui, pas de dossier Drive
+    // où écrire, et le référencement par lien reste la seule voie.
+    const depotDirect = Store.ecritureActive();
     let n = 0;
 
     return `
@@ -1063,9 +1089,15 @@ const Views = {
                 : "Ces documents nous sont demandés par les financeurs. Déposez ceux qui relèvent de votre structure."}
             </p>
           </div>
-          <span class="badge badge--${fournies === pieces.length ? 'ok' : 'warn'}">
-            ${fournies} / ${pieces.length} réunies
-          </span>
+          <div class="row-tight">
+            <span class="badge badge--${fournies === pieces.length ? 'ok' : 'warn'}">
+              ${fournies} / ${pieces.length} réunies
+            </span>
+            ${expert ? `
+              <button class="btn btn--primary btn--sm" data-action="fiche-piece">
+                <i class="fa-solid fa-plus"></i> Demander une pièce
+              </button>` : ''}
+          </div>
         </div>
 
         ${!expert && manquantesClient.length ? `
@@ -1073,8 +1105,11 @@ const Views = {
             <p class="text-sm text-soft">
               <i class="fa-solid fa-circle-info text-warn"></i>
               <strong>${manquantesClient.length} document${manquantesClient.length > 1 ? 's' : ''} à nous transmettre.</strong>
-              Déposez le fichier dans votre dossier Drive, puis rattachez-le à la ligne correspondante
-              avec le bouton « Déposer ».
+              ${depotDirect
+                ? `Le bouton « Téléverser » ouvre l'explorateur de votre ordinateur : le fichier part
+                   directement dans le bon sous-dossier de votre Drive, rien à ranger vous-même.`
+                : `Déposez le fichier dans votre dossier Drive, puis rattachez-le à la ligne correspondante
+                   avec le bouton « Référencer ».`}
             </p>
           </div>` : ''}
 
@@ -1095,6 +1130,7 @@ const Views = {
                 <div class="text-xs text-muted">${esc(p.aide)}</div>
                 <div class="row-tight" style="margin-top:6px">
                   ${p.pour.map((d) => badge(DOSSIERS_AIDE[d]?.label || d, DOSSIERS_AIDE[d]?.couleur || 'neutre')).join('')}
+                  ${p.sur_mesure && expert ? badge('Demande de ce dossier', 'brand', 'fa-solid fa-user-pen') : ''}
                   ${fournie
                     ? `<span class="text-xs text-muted">${esc(p.document.nom)} · ${esc(Dates.format(p.document.date))}</span>`
                     : badge(p.par === 'client' ? 'À fournir par le client' : 'Produit par ElodiaTech',
@@ -1104,20 +1140,30 @@ const Views = {
 
               ${fournie && lien
                 ? `${boutonApercu(lien, p.nom, 'Voir')}
-                   <a class="btn btn--ghost btn--sm" href="${esc(lien)}" target="_blank" rel="noopener noreferrer"
-                      aria-label="Ouvrir ${esc(p.nom)} dans un nouvel onglet" title="Ouvrir dans un nouvel onglet">
-                     <i class="fa-solid fa-arrow-up-right-from-square"></i>
+                   <a class="btn btn--ghost btn--sm" href="${esc(lienTelechargement(lien))}" download
+                      aria-label="Télécharger ${esc(p.nom)}" title="Télécharger">
+                     <i class="fa-solid fa-download"></i>
                    </a>`
                 : ''}
               ${fournie && expert
                 ? `<button class="btn btn--ghost btn--sm" data-action="detacher-piece" data-piece="${esc(p.id)}" title="Détacher ce document"><i class="fa-solid fa-link-slash"></i></button>`
                 : ''}
-              ${!fournie && aMoi
-                ? `<button class="btn btn--primary btn--sm" data-action="deposer-piece" data-piece="${esc(p.id)}">
-                     <i class="fa-solid fa-file-arrow-up"></i> Déposer
-                   </button>`
-                : ''}
+              ${!fournie && aMoi ? `
+                ${depotDirect ? `
+                  <button class="btn btn--primary btn--sm" data-action="televerser-piece" data-piece="${esc(p.id)}">
+                    <i class="fa-solid fa-cloud-arrow-up"></i> Téléverser
+                  </button>` : ''}
+                <button class="btn btn--sm" data-action="deposer-piece" data-piece="${esc(p.id)}">
+                  <i class="fa-solid fa-link"></i> Référencer
+                </button>` : ''}
               ${!fournie && !aMoi ? badge('En attente', 'neutre') : ''}
+              ${expert && p.sur_mesure ? `
+                <button class="btn btn--ghost btn--sm" data-action="fiche-piece" data-piece="${esc(p.id)}" title="Modifier la demande">
+                  <i class="fa-solid fa-pen"></i>
+                </button>
+                <button class="btn btn--ghost btn--sm" data-action="supprimer-piece" data-piece="${esc(p.id)}" title="Retirer la demande">
+                  <i class="fa-solid fa-trash"></i>
+                </button>` : ''}
             </div>`;
           }).join('')}
         </div>
@@ -1254,10 +1300,16 @@ const Views = {
                 </div>
                 <h4>${esc(v.nom)}</h4>
                 <p class="text-xs text-muted" style="margin-top:4px">${esc(v.specialite)}</p>
-                ${v.contact ? `
-                  <a class="text-xs mt-auto" href="mailto:${esc(v.contact)}" style="padding-top:10px">
-                    <i class="fa-solid fa-envelope"></i> ${esc(v.contact)}
-                  </a>` : ''}
+                <div class="mt-auto" style="padding-top:10px">
+                  ${v.contact ? `
+                    <a class="text-xs" href="mailto:${esc(v.contact)}" style="display:block">
+                      <i class="fa-solid fa-envelope"></i> ${esc(v.contact)}
+                    </a>` : ''}
+                  ${v.tel ? `
+                    <a class="text-xs" href="tel:${esc(String(v.tel).replace(/[^0-9+]/g, ''))}" style="display:block;margin-top:4px">
+                      <i class="fa-solid fa-phone"></i> ${esc(v.tel)}
+                    </a>` : ''}
+                </div>
               </div>`).join('')}
           </div>`
           : empty('Annuaire vide',

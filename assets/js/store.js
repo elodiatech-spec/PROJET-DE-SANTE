@@ -334,6 +334,14 @@ function demoDonnees() {
       'cds-gros-morne': [],
       'cds-cayenne': [],
     },
+    // Demandes de pièces propres à un dossier, ajoutées par l'expert en plus
+    // du socle de PIECES_DOSSIER.
+    pieces: {
+      'msp-fort-de-france': [],
+      'msp-pointe-a-pitre': [],
+      'cds-gros-morne': [],
+      'cds-cayenne': [],
+    },
     // Équipe ElodiaTech. Le référent d'un projet est choisi dans cette liste.
     experts: [
       { id: 'exp1', nom: 'ARNOBE Frédéric', fonction: 'Expert projets de santé · fondateur',
@@ -443,7 +451,7 @@ const Store = {
         reglages: { ...this.state.reglages, ...(sauvegarde.reglages || {}) },
       });
       ['projets', 'documents', 'signatures', 'messages', 'evenements',
-       'comptesRendus', 'financements', 'partenaires', 'prestataires',
+       'comptesRendus', 'financements', 'partenaires', 'pieces', 'prestataires',
        'intervenantsImmo'].forEach((cle) => {
         if (sauvegarde[cle]) this.state[cle] = sauvegarde[cle];
       });
@@ -494,7 +502,7 @@ const Store = {
       // ouverture, avec le porte-clés. Seuls les réglages et la session restent.
       if (this.state.reglages.source === 'sheets') {
         ['projets', 'documents', 'signatures', 'messages', 'evenements',
-         'comptesRendus', 'financements', 'partenaires',
+         'comptesRendus', 'financements', 'partenaires', 'pieces',
          'experts', 'prestataires'].forEach((cle) => {
           delete aEnregistrer[cle];
         });
@@ -642,10 +650,73 @@ const Store = {
    */
   pieces(projetId) {
     const docs = this.liste('documents', projetId);
-    return PIECES_DOSSIER.map((p) => ({
+
+    // Socle commun du catalogue, puis les demandes propres à ce dossier.
+    // `sur_mesure` distingue celles que l'expert peut modifier ou retirer.
+    const surMesure = this.liste('pieces', projetId).map((p) => ({
+      id: p.id,
+      nom: p.nom || '',
+      cat: p.cat || 'Projet',
+      par: p.par === 'expert' ? 'expert' : 'client',
+      aide: p.aide || '',
+      // La feuille ne stocke qu'une chaîne : on la rend à l'interface en liste.
+      pour: String(p.pour || '').split(',').map((x) => x.trim()).filter(Boolean),
+      sur_mesure: true,
+    }));
+
+    return [...PIECES_DOSSIER, ...surMesure].map((p) => ({
       ...p,
       document: docs.find((d) => d.piece === p.id) || null,
     }));
+  },
+
+  /* ---- Demandes de pièces ajoutées par l'expert ---- */
+
+  ajouterPiece(donnees) {
+    const item = {
+      id: idUnique('dem'),
+      nom: donnees.nom || '',
+      cat: donnees.cat || 'Projet',
+      par: donnees.par === 'expert' ? 'expert' : 'client',
+      aide: donnees.aide || '',
+      pour: Array.isArray(donnees.pour) ? donnees.pour.join(',') : (donnees.pour || ''),
+    };
+    this.commit((s) => {
+      const id = s.projetActifId;
+      if (!s.pieces[id]) s.pieces[id] = [];
+      s.pieces[id].push(item);
+    });
+    this._pousserItem('pieces', item);
+    return item;
+  },
+
+  majPiece(pieceId, champs) {
+    const normalise = { ...champs };
+    if (Array.isArray(normalise.pour)) normalise.pour = normalise.pour.join(',');
+
+    this.commit((s) => {
+      const p = (s.pieces[s.projetActifId] || []).find((x) => x.id === pieceId);
+      if (p) Object.assign(p, normalise);
+    });
+    const p = this.liste('pieces').find((x) => x.id === pieceId);
+    if (p) this._pousserItem('pieces', p);
+  },
+
+  /**
+   * Retire une demande de pièce.
+   * Le document déjà rattaché n'est pas supprimé — il reste au coffre-fort,
+   * simplement détaché : retirer une demande ne doit pas détruire une pièce
+   * que le client a réellement fournie.
+   */
+  supprimerPiece(pieceId) {
+    const rattache = this.liste('documents').find((d) => d.piece === pieceId);
+    if (rattache) this.majDocument(rattache.id, { piece: '' });
+
+    this.commit((s) => {
+      const id = s.projetActifId;
+      s.pieces[id] = (s.pieces[id] || []).filter((p) => p.id !== pieceId);
+    });
+    this._pousserItem('pieces', { id: pieceId }, 'delete');
   },
 
   /** Pièces que le client doit fournir et qui manquent encore. */
@@ -1090,7 +1161,7 @@ const Store = {
       projet.surface = Number(projet.surface) || 0;
 
       s.projets.push(projet);
-      ['documents', 'signatures', 'messages', 'evenements', 'comptesRendus', 'financements', 'partenaires']
+      ['documents', 'signatures', 'messages', 'evenements', 'comptesRendus', 'financements', 'partenaires', 'pieces']
         .forEach((cle) => { s[cle][id] = []; });
       s.projetActifId = id;
       s.route = 'dashboard';
@@ -1114,7 +1185,7 @@ const Store = {
     this.commit((s) => {
       if (s.projets.length <= 1) return;
       s.projets = s.projets.filter((p) => p.id !== projetId);
-      ['documents', 'signatures', 'messages', 'evenements', 'comptesRendus', 'financements', 'partenaires']
+      ['documents', 'signatures', 'messages', 'evenements', 'comptesRendus', 'financements', 'partenaires', 'pieces']
         .forEach((cle) => { delete s[cle][projetId]; });
       if (s.projetActifId === projetId) s.projetActifId = s.projets[0].id;
       supprime = true;
@@ -1480,6 +1551,7 @@ const Store = {
       metier: donnees.metier || '',
       specialite: donnees.specialite || '',
       contact: donnees.contact || '',
+      tel: donnees.tel || '',
       lot: donnees.lot || 'LE',
     };
     this.commit((s) => { s.prestataires.push(item); });
