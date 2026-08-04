@@ -124,16 +124,42 @@ function lienIntegrable(url) {
 }
 
 /**
- * Bouton d'aperçu intégré. Rien n'est rendu si l'adresse n'est pas exploitable.
- * `titre` sert d'en-tête à la visionneuse.
+ * Vrai pour les adresses dont on a vérifié qu'elles s'affichent dans un cadre.
+ *
+ * Beaucoup de sites l'interdisent (Canva, WM Goodflag, les portails officiels
+ * — vérifié par leurs en-têtes `x-frame-options`), et rien côté navigateur ne
+ * permet de le détecter à l'usage : mieux vaut ne pas promettre un aperçu qui
+ * restera vide que de laisser l'utilisateur devant un cadre blanc.
+ */
+function probablementCadrable(url) {
+  const s = urlSure(url);
+  return /^https:\/\/drive\.google\.com\/file\/d\//.test(s)
+      || /^https:\/\/docs\.google\.com\/(document|spreadsheets|presentation)\/d\//.test(s);
+}
+
+/**
+ * Bouton d'ouverture d'un lien. Rien n'est rendu si l'adresse n'est pas exploitable.
+ *
+ * S'il s'agit d'une adresse dont on sait qu'elle s'affiche dans un cadre (Drive,
+ * Google Docs), le bouton ouvre la visionneuse intégrée. Sinon — Canva et la
+ * plupart des outils tiers refusent le cadre — il ouvre franchement un nouvel
+ * onglet : mieux vaut ça qu'une promesse d'aperçu qui reste blanche.
+ * `titre` sert d'en-tête à la visionneuse quand elle s'ouvre.
  */
 function boutonApercu(url, titre, label = 'Aperçu') {
   const s = urlSure(url);
   if (!s) return '';
-  return `<button class="btn btn--sm" data-action="apercu-lien"
-             data-url="${esc(s)}" data-titre="${esc(titre || '')}">
-            <i class="fa-solid fa-eye"></i> ${esc(label)}
-          </button>`;
+
+  if (probablementCadrable(s)) {
+    return `<button class="btn btn--sm" data-action="apercu-lien"
+               data-url="${esc(s)}" data-titre="${esc(titre || '')}">
+              <i class="fa-solid fa-eye"></i> ${esc(label)}
+            </button>`;
+  }
+
+  return `<a class="btn btn--sm" href="${esc(s)}" target="_blank" rel="noopener noreferrer">
+            <i class="fa-solid fa-arrow-up-right-from-square"></i> ${esc(label)}
+          </a>`;
 }
 
 /**
@@ -818,10 +844,7 @@ const Views = {
             </div>` : ''}
           <div class="row-tight" style="margin-top:12px">
             ${gdoc
-              ? `<button class="btn btn--primary" data-action="apercu-lien"
-                    data-url="${esc(gdoc)}" data-titre="Projet de santé — ${esc(projet.nom)}">
-                   <i class="fa-solid fa-eye"></i> Lire le projet de santé
-                 </button>`
+              ? boutonApercu(gdoc, `Projet de santé — ${projet.nom}`, 'Lire le projet de santé')
               : `<span class="badge badge--neutre"><i class="fa-solid fa-link-slash"></i> Aucun lien renseigné pour l'instant</span>`}
             ${urlSure(projet.driveUrl) ? `<a class="btn" href="${esc(urlSure(projet.driveUrl))}" target="_blank" rel="noopener noreferrer"><i class="fa-brands fa-google-drive"></i> Dossier Drive</a>` : ''}
           </div>
@@ -1047,6 +1070,23 @@ const Views = {
                   </a>`).join('')}
               </div>
             </div>`).join('')}
+
+          <!-- Pas un guichet à proprement parler : un rappel que d'autres
+               sources existent, et que leur recherche revient à l'expert. -->
+          <div class="card card--flat" style="border-top:3px solid var(--border-strong)">
+            <h4><i class="fa-solid fa-magnifying-glass-dollar"></i> Autres sources de financements</h4>
+            <p class="text-xs text-muted" style="margin:6px 0 12px">
+              Selon le profil et les paramètres de la structure, d'autres sources — ponctuelles ou
+              récurrentes — peuvent être mobilisables en complément des guichets ci-contre.
+              ${expert
+                ? "Cette recherche vous revient : ajoutez-les au fil de vos découvertes."
+                : "Votre référent ElodiaTech identifie ces opportunités au fil du dossier."}
+            </p>
+            ${expert ? `
+              <button class="btn btn--sm" data-action="ajouter-financement" data-autre="1">
+                <i class="fa-solid fa-plus"></i> Autres financements
+              </button>` : ''}
+          </div>
         </div>
       </div>
 

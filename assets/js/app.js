@@ -1087,9 +1087,12 @@ const App = {
       });
     },
 
-    'ajouter-financement'() {
+    'ajouter-financement'(el) {
       Modal.formulaire({
-        titre: 'Nouvelle demande de financement',
+        titre: el?.dataset.autre ? 'Autres sources de financements' : 'Nouvelle demande de financement',
+        soustitre: el?.dataset.autre
+          ? "Une source repérée en dehors des guichets habituels : elle rejoint le même suivi ci-dessous."
+          : undefined,
         champs: [
           { id: 'source', label: 'Guichet / source', type: 'text', requis: true, placeholder: 'FIR — ARS Martinique' },
           { id: 'montant', label: 'Montant sollicité (€)', type: 'number', requis: true, placeholder: '120000' },
