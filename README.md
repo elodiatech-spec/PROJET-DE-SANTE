@@ -192,9 +192,18 @@ modification de `store.js` ou de `apps-script/Code.gs`.
 - Rétroplanning recalculable à partir de la charge indicative de chaque prestation
 
 **Ingénierie**
-- Projet de santé : document collaboratif, 5 chapitres réglementaires alimentés par les prestations
-- Structuration juridique : SISA ou association loi 1901
+- Projet de santé : document collaboratif, 5 chapitres réglementaires alimentés par les
+  prestations, chacun portant le lien de son document et sa lecture intégrée
+- Structuration juridique : SISA ou association loi 1901, formalités de la constitution
+  jusqu'à l'immatriculation FINESS. Chaque acte porte ses trois gestes — acte à signer,
+  visualisation, dépôt du justificatif dans le sous-dossier Drive — et les dépôts qui se
+  font par courriel affichent l'adresse du guichet, préremplie
 - Immobilier : carte, intervenants, cahier des charges ERP en 19 critères
+
+Certaines prestations changent de nom selon le type de structure : un centre de santé tient
+un **règlement de fonctionnement** là où une maison de santé tient une **charte interne**, et
+l'**engagement de conformité** ne s'affiche que pour un centre de santé. C'est le champ
+`variantes` du catalogue qui le porte, et `types` qui restreint la visibilité.
 
 **Financements & partenaires**
 - **Financements & aides** — un seul écran pour tout ce qui touche à l'argent :
@@ -208,7 +217,11 @@ modification de `store.js` ou de `apps-script/Code.gs`.
 **Documents & validation**
 - Coffre-fort documentaire par catégorie
 - Parapheurs de signature électronique administrés par l'expert
-- Bibliothèque des livrables par lot
+
+> Il n'y a **pas** d'écran « Livrables » distinct : la feuille de route porte déjà chaque
+> livrable, son statut et son lien. Deux écrans pour la même information entretenaient le
+> doute sur celui qui faisait foi. Le lien d'un livrable s'enregistre depuis « Détail » sur
+> la prestation.
 
 **Collaboration** — trois rôles distincts, sans recouvrement
 

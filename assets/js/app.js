@@ -1003,6 +1003,51 @@ const App = {
       toast(url ? 'Lien du projet de santé enregistré.' : 'Lien supprimé.', 'ok');
     },
 
+    /**
+     * Enregistre le lien du document d'un chapitre du projet de santé.
+     * Le chapitre est porté par l'entité documents, sous « CHAP01 » : vider le
+     * champ retire donc la pièce plutôt que d'enregistrer une adresse vide.
+     */
+    'enregistrer-chapitre'(el) {
+      const num = el.dataset.num;
+      const champ = document.querySelector(`[data-chapitre-url="${num}"]`);
+      if (!champ) return;
+
+      const url = champ.value.trim();
+      const existant = documentDeChapitre(num);
+
+      if (!url) {
+        if (existant) {
+          Store.supprimerDocument(existant.id);
+          toast(`Lien du chapitre ${num} retiré.`, 'ok');
+        }
+        return;
+      }
+
+      if (!urlSure(url)) {
+        toast('Adresse invalide : elle doit commencer par http:// ou https://', 'warn');
+        return;
+      }
+
+      const chapitre = CHAPITRES_PDS.find((c) => c.num === num);
+      const nom = `Chapitre ${num} — ${chapitre?.titre || ''}`;
+
+      if (existant) {
+        Store.majDocument(existant.id, { url, nom });
+        toast(`Lien du chapitre ${num} mis à jour.`, 'ok');
+        return;
+      }
+
+      Store.ajouterDocument({
+        nom, url, cat: 'Projet',
+        type: formatFichier(url) || 'doc',
+        taille: '—',
+        piece: `CHAP${num}`,
+        auteur: Store.projet().consultant?.nom || '',
+      });
+      toast(`Lien du chapitre ${num} enregistré.`, 'ok');
+    },
+
     'enregistrer-site'() {
       const url = document.getElementById('site-url').value.trim();
       Store.majProjet({ siteUrl: url });
@@ -1187,6 +1232,115 @@ const App = {
         libelle: 'Supprimer',
         danger: true,
         onConfirm: () => { Store.supprimerDocument(el.dataset.id); toast('Référence supprimée.', 'ok'); },
+      });
+    },
+
+    /**
+     * Dépose le justificatif d'une prestation dans le sous-dossier Drive de sa
+     * catégorie, et le rattache à la prestation par le champ « piece » de
+     * l'entité documents. La pièce apparaît alors sous la prestation et dans
+     * le coffre-fort, sans double saisie.
+     */
+    'deposer-justificatif'(el) {
+      const presta = Store.prestations().find((x) => x.id === el.dataset.id);
+      if (!presta) return;
+
+      if (!Store.ecritureActive()) {
+        toast('Le dépôt direct demande la connexion Google Sheets. '
+          + 'Sans elle, référencez le lien depuis le coffre-fort.', 'warn');
+        return;
+      }
+
+      const projet = Store.projet();
+      const categorie = categorieDePrestation(presta);
+
+      Modal.televersement({
+        categorie,
+        titre: `Justificatif — ${presta.titre}`,
+        soustitre: `Le fichier part dans le sous-dossier « ${categorie} » du Drive du projet `
+                 + `et reste rattaché à cette prestation. ${formaterOctets(TAILLE_MAX_DEPOT)} au maximum par fichier.`,
+        onFichier: (reference, categorieChoisie) => {
+          Store.ajouterDocument({
+            nom: reference.nom,
+            cat: categorieChoisie,
+            type: formatFichier(reference.nom),
+            url: reference.url,
+            taille: reference.taille,
+            piece: presta.id,
+            auteur: Store.estExpert() ? projet.consultant?.nom : projet.client?.nom,
+          });
+        },
+      });
+    },
+
+    /**
+     * Dépose un visuel — post réseaux sociaux, support, déclinaison — rattaché
+     * à la prestation graphique dont il relève.
+     */
+    'deposer-declinaison'(el) {
+      const presta = Store.prestations().find((x) => x.id === el.dataset.id);
+      if (!presta) return;
+
+      if (!Store.ecritureActive()) {
+        toast('Le dépôt direct demande la connexion Google Sheets. '
+          + 'Sans elle, référencez le lien depuis le coffre-fort.', 'warn');
+        return;
+      }
+
+      const projet = Store.projet();
+
+      Modal.televersement({
+        categorie: categorieDePrestation(presta),
+        titre: `Visuels — ${presta.titre}`,
+        soustitre: `Posts réseaux sociaux, supports et déclinaisons. Les fichiers partent dans le `
+                 + `sous-dossier « Identité » du Drive et restent rattachés à cette prestation. `
+                 + `${formaterOctets(TAILLE_MAX_DEPOT)} au maximum par fichier.`,
+        onFichier: (reference, categorieChoisie) => {
+          Store.ajouterDocument({
+            nom: reference.nom,
+            cat: categorieChoisie,
+            type: formatFichier(reference.nom),
+            url: reference.url,
+            taille: reference.taille,
+            piece: presta.id,
+            auteur: Store.estExpert() ? projet.consultant?.nom : projet.client?.nom,
+          });
+        },
+      });
+    },
+
+    /**
+     * Dépose la convention d'un partenaire dans le sous-dossier « Partenariats »
+     * du Drive, rattachée au partenaire par « PART:<id> ».
+     */
+    'deposer-convention'(el) {
+      const partenaire = Store.liste('partenaires').find((p) => p.id === el.dataset.id);
+      if (!partenaire) return;
+
+      if (!Store.ecritureActive()) {
+        toast('Le dépôt direct demande la connexion Google Sheets. '
+          + 'Sans elle, référencez le lien depuis le coffre-fort.', 'warn');
+        return;
+      }
+
+      const projet = Store.projet();
+
+      Modal.televersement({
+        categorie: 'Partenariats',
+        titre: `Convention — ${partenaire.nom}`,
+        soustitre: `Le fichier part dans le sous-dossier « Partenariats » du Drive du projet `
+                 + `et reste rattaché à ce partenaire. ${formaterOctets(TAILLE_MAX_DEPOT)} au maximum par fichier.`,
+        onFichier: (reference, categorieChoisie) => {
+          Store.ajouterDocument({
+            nom: reference.nom,
+            cat: categorieChoisie,
+            type: formatFichier(reference.nom),
+            url: reference.url,
+            taille: reference.taille,
+            piece: `PART:${partenaire.id}`,
+            auteur: Store.estExpert() ? projet.consultant?.nom : projet.client?.nom,
+          });
+        },
       });
     },
 
@@ -1895,11 +2049,12 @@ const Modal = {
    * l'échec de l'un n'empêche pas les suivants. `onFichier(reference, categorie)`
    * est appelé après chaque succès.
    */
-  televersement({ categorie, onFichier }) {
+  televersement({ categorie, onFichier, titre, soustitre }) {
     this.open({
-      titre: 'Déposer des fichiers',
-      soustitre: `Les fichiers partent dans le dossier Drive du projet, puis sont référencés `
-               + `dans le coffre-fort. ${formaterOctets(TAILLE_MAX_DEPOT)} au maximum par fichier.`,
+      titre: titre || 'Déposer des fichiers',
+      soustitre: soustitre
+        || `Les fichiers partent dans le dossier Drive du projet, puis sont référencés `
+         + `dans le coffre-fort. ${formaterOctets(TAILLE_MAX_DEPOT)} au maximum par fichier.`,
       corps: `
         <div class="stack-sm">
           <div class="field">

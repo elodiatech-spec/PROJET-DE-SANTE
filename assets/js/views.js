@@ -274,12 +274,161 @@ function cartePrestation(p, index) {
           </span>
           ${p.etat.note ? `<span><i class="fa-solid fa-note-sticky"></i> ${esc(p.etat.note)}</span>` : ''}
         </div>
+        ${annexesPrestation(p)}
       </div>
       <div class="presta__actions">
         ${controle}
         <div class="row-tight">${actionClient}${boutonDetail}</div>
       </div>
     </article>`;
+}
+
+/** Catégorie documentaire par défaut d'une prestation, d'après son lot. */
+const CATEGORIE_PAR_LOT = {
+  L0: 'Projet', LA: 'Projet', LB: 'Juridique', LC: 'Finances',
+  LD: 'Partenariats', LE: 'Projet', LF: 'Identité', LG: 'Projet',
+};
+
+/** Catégorie du sous-dossier Drive où déposer les pièces d'une prestation. */
+function categorieDePrestation(p) {
+  return p.categorieDoc || CATEGORIE_PAR_LOT[p.lot] || 'Projet';
+}
+
+/**
+ * Pièces rattachées à une prestation.
+ * Le champ `piece` de l'entité documents porte l'identifiant de la prestation :
+ * aucune colonne supplémentaire n'a été nécessaire pour les relier.
+ */
+function piecesDePrestation(idPrestation) {
+  return Store.liste('documents').filter((d) => d.piece === idPrestation);
+}
+
+/**
+ * Document d'un chapitre du projet de santé, rattaché sous la forme « CHAP01 »
+ * dans le même champ `piece`. Le chapitre apparaît donc aussi dans le
+ * coffre-fort, où il se cherche et se filtre comme toute autre pièce.
+ */
+function documentDeChapitre(num) {
+  return Store.liste('documents').find((d) => d.piece === `CHAP${num}`) || null;
+}
+
+/**
+ * Adresse de téléchargement direct d'un fichier Drive.
+ * `uc?export=download` sert le fichier lui-même, là où `/view` ouvre la
+ * visionneuse de Google. Toute autre adresse est rendue telle quelle.
+ */
+function lienTelechargement(url) {
+  const s = urlSure(url);
+  if (!s) return '';
+  const fichier = s.match(/^https:\/\/drive\.google\.com\/file\/d\/([-\w]+)/);
+  return fichier ? `https://drive.google.com/uc?export=download&id=${fichier[1]}` : s;
+}
+
+/**
+ * Pastilles de fichiers : nom cliquable pour l'aperçu, puis nouvel onglet.
+ * `avecTelechargement` ajoute le téléchargement direct — utile pour un visuel
+ * qu'on veut récupérer, pas seulement regarder.
+ */
+function chipsFichiers(fichiers, avecTelechargement) {
+  return `<div class="presta__pieces">
+      ${fichiers.map((d) => {
+        const lien = urlSure(d.url);
+        return `<span class="presta__piece">
+            <i class="fa-solid ${iconeFichier(d.type)}"></i>
+            <button class="presta__piece-nom" data-action="apercu-lien"
+                    data-url="${esc(lien)}" data-titre="${esc(d.nom)}"
+                    title="Visualiser ${esc(d.nom)}">${esc(d.nom)}</button>
+            ${lien && avecTelechargement ? `
+              <a href="${esc(lienTelechargement(d.url))}" download
+                 aria-label="Télécharger ${esc(d.nom)}" title="Télécharger">
+                <i class="fa-solid fa-download"></i>
+              </a>` : ''}
+            ${lien ? `
+              <a href="${esc(lien)}" target="_blank" rel="noopener noreferrer"
+                 aria-label="Ouvrir ${esc(d.nom)} dans un nouvel onglet" title="Nouvel onglet">
+                <i class="fa-solid fa-arrow-up-right-from-square"></i>
+              </a>` : ''}
+          </span>`;
+      }).join('')}
+    </div>`;
+}
+
+/**
+ * Bandeau d'annexes d'une prestation.
+ *
+ * `actes: true` → l'acte se signe, se visualise, et son justificatif se dépose
+ * dans le sous-dossier Drive de sa catégorie.
+ * `declinaisons: true` → la prestation porte des visuels à voir et à télécharger.
+ * `courriel` → le dossier se dépose par courriel auprès d'un guichet nommé.
+ * Sans aucun des trois, rien n'est rendu : la carte reste telle qu'avant.
+ */
+function annexesPrestation(p) {
+  const expert = Store.estExpert();
+  const guichet = p.courriel ? GUICHETS_COURRIEL[p.courriel] : null;
+  if (!p.actes && !p.declinaisons && !guichet) return '';
+
+  const lignes = [];
+
+  if (p.actes) {
+    const pieces = piecesDePrestation(p.id);
+    // À défaut de pièce rattachée, le lien du livrable fait office de justificatif.
+    const secours = urlSure(p.etat.livrableUrl);
+
+    lignes.push(`
+      <div class="row-tight">
+        <button class="btn btn--sm" data-action="aller" data-route="signatures">
+          <i class="fa-solid fa-file-signature"></i> Actes à signer
+        </button>
+        ${pieces.length
+          ? boutonApercu(pieces[0].url, pieces[0].nom, 'Visualiser')
+          : (secours
+              ? boutonApercu(secours, p.livrable, 'Visualiser')
+              : `<span class="text-xs text-muted"><i class="fa-solid fa-circle-info"></i> Aucun justificatif déposé</span>`)}
+        ${expert ? `
+          <button class="btn btn--sm" data-action="deposer-justificatif" data-id="${esc(p.id)}">
+            <i class="fa-solid fa-cloud-arrow-up"></i> Déposer le justificatif
+          </button>` : ''}
+      </div>`);
+
+    if (pieces.length) lignes.push(chipsFichiers(pieces));
+  }
+
+  // Livrables graphiques : posts réseaux sociaux, supports, déclinaisons.
+  if (p.declinaisons) {
+    const visuels = piecesDePrestation(p.id);
+
+    lignes.push(`
+      <div class="row-tight">
+        <span class="text-xs text-muted">
+          <i class="fa-solid fa-images"></i>
+          ${visuels.length
+            ? `${visuels.length} visuel${visuels.length > 1 ? 's' : ''} — posts réseaux, supports et déclinaisons`
+            : 'Aucun visuel déposé — posts réseaux, supports et déclinaisons'}
+        </span>
+        ${expert ? `
+          <button class="btn btn--sm" data-action="deposer-declinaison" data-id="${esc(p.id)}">
+            <i class="fa-solid fa-cloud-arrow-up"></i> Déposer un visuel
+          </button>` : ''}
+      </div>`);
+
+    if (visuels.length) lignes.push(chipsFichiers(visuels, true));
+  }
+
+  if (guichet) {
+    const projet = Store.projet();
+    const objet = `${p.titre} — ${projet?.nom || ''}`;
+    lignes.push(`
+      <div class="row-tight">
+        <a class="btn btn--sm" href="mailto:${esc(guichet.adresse)}?subject=${esc(encodeURIComponent(objet))}">
+          <i class="fa-solid fa-envelope"></i> Déposer par courriel
+        </a>
+        <span class="text-xs text-muted">
+          ${esc(guichet.libelle)} — <span class="mono">${esc(guichet.adresse)}</span>
+        </span>
+      </div>`);
+  }
+
+  return `<div class="presta__annexes">${lignes.join('')}</div>`;
 }
 
 /* --------------------------------------------------------------------------
@@ -676,7 +825,10 @@ const Views = {
         <div class="card__head">
           <div>
             <h3 class="card__title"><i class="fa-solid fa-layer-group"></i> Les 5 chapitres structurants</h3>
-            <p class="card__subtitle">Chaque chapitre est alimenté par les prestations correspondantes de la feuille de route.</p>
+            <p class="card__subtitle">
+              Chaque chapitre est alimenté par les prestations correspondantes de la feuille de route.
+              ${expert ? "Renseignez le lien de son document pour que le client puisse le lire ici." : ''}
+            </p>
           </div>
         </div>
         <div class="grid grid-3">
@@ -684,6 +836,9 @@ const Views = {
             const liees = prestas.filter((p) => c.prestations.includes(p.id));
             const somme = liees.reduce((s, p) => s + (STATUTS[p.etat.statut]?.poids ?? 0), 0);
             const pctC = liees.length ? Math.round((somme / liees.length) * 100) : 0;
+            const doc = documentDeChapitre(c.num);
+            const lien = doc ? urlSure(doc.url) : '';
+
             return `<div class="card card--flat">
                 <div class="row-tight" style="justify-content:space-between">
                   <span class="text-xs fw-800 text-brand">CHAPITRE ${esc(c.num)}</span>
@@ -692,17 +847,35 @@ const Views = {
                 <h4 style="margin:6px 0 4px">${esc(c.titre)}</h4>
                 <p class="text-xs text-muted">${esc(c.desc)}</p>
                 <div style="margin-top:10px">${progressBar(pctC, 'sm')}</div>
+
+                ${expert ? `
+                  <div class="field" style="margin-top:12px">
+                    <label class="field__label" for="chap-${esc(c.num)}">Lien du document</label>
+                    <div class="input-group">
+                      <input type="url" id="chap-${esc(c.num)}" class="input input--mono"
+                             data-chapitre-url="${esc(c.num)}" value="${esc(lien)}"
+                             placeholder="https://docs.google.com/…">
+                      <button class="btn btn--sm" data-action="enregistrer-chapitre" data-num="${esc(c.num)}"
+                              title="Enregistrer le lien du chapitre">
+                        <i class="fa-solid fa-floppy-disk"></i>
+                      </button>
+                    </div>
+                  </div>` : ''}
+
+                <div class="row-tight" style="margin-top:${expert ? '8' : '12'}px">
+                  ${lien
+                    ? `${boutonApercu(lien, `Chapitre ${c.num} — ${c.titre}`, 'Lire le chapitre')}
+                       <a class="btn btn--ghost btn--sm" href="${esc(lien)}" target="_blank" rel="noopener noreferrer"
+                          aria-label="Ouvrir le chapitre ${esc(c.num)} dans un nouvel onglet" title="Nouvel onglet">
+                         <i class="fa-solid fa-arrow-up-right-from-square"></i>
+                       </a>`
+                    : `<span class="text-xs text-muted">
+                         <i class="fa-solid fa-link-slash"></i>
+                         ${expert ? 'Aucun lien enregistré' : 'Chapitre en cours de rédaction'}
+                       </span>`}
+                </div>
               </div>`;
           }).join('')}
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card__head">
-          <h3 class="card__title"><i class="fa-solid fa-list-check"></i> Prestations du lot « Projet de santé »</h3>
-        </div>
-        <div class="stack-sm">
-          ${prestas.map((p) => cartePrestation(p, ++n)).join('')}
         </div>
       </div>
     </section>`;
@@ -734,31 +907,26 @@ const Views = {
             </div>` : badge(modele.nom, 'purple', modele.icone)}
         </div>
 
-        <div class="grid grid-sidebar">
-          <div class="card card--flat">
-            <div class="row" style="margin-bottom:10px">
-              <div class="file-icon" style="color:var(--purple-500);width:44px;height:44px;font-size:1.1rem"><i class="${esc(modele.icone)}"></i></div>
-              <div>
-                <h3 class="text-sm fw-800">${esc(modele.libelle)}</h3>
-                <p class="text-xs text-muted">Adapté à : ${esc(modele.cible)}</p>
-              </div>
+        <!-- L'encadré « Repère » a été reversé ici : le repère porte sur le
+             modèle juridique, il se lit mieux dans sa propre carte. -->
+        <div class="card card--flat">
+          <div class="row" style="margin-bottom:10px">
+            <div class="file-icon" style="color:var(--purple-500);width:44px;height:44px;font-size:1.1rem"><i class="${esc(modele.icone)}"></i></div>
+            <div>
+              <h3 class="text-sm fw-800">${esc(modele.libelle)}</h3>
+              <p class="text-xs text-muted">Adapté à : ${esc(modele.cible)}</p>
             </div>
-            <ul class="offre__list">
-              ${modele.points.map((pt) => `<li><i class="fa-solid fa-circle-check"></i> <span>${esc(pt)}</span></li>`).join('')}
-            </ul>
           </div>
-
-          <div class="card card--flat">
-            <h3 class="section-title"><i class="fa-solid fa-circle-info"></i> Repère</h3>
-            <p class="text-sm text-soft">
-              ${projet.modeleJuridique === 'sisa'
-                ? "La SISA est le seul véhicule permettant à une maison de santé de percevoir les rémunérations d'équipe versées au titre de l'accord conventionnel interprofessionnel (ACI)."
-                : "L'association loi 1901 est la forme la plus courante pour porter un centre de santé, dont les professionnels sont salariés de la structure gestionnaire."}
-            </p>
-            <div class="row-tight" style="margin-top:12px">
-              <button class="btn btn--sm" data-action="aller" data-route="signatures"><i class="fa-solid fa-file-signature"></i> Actes à signer</button>
-              <button class="btn btn--sm" data-action="aller" data-route="documents"><i class="fa-solid fa-folder-open"></i> Pièces juridiques</button>
-            </div>
+          <ul class="offre__list">
+            ${modele.points.map((pt) => `<li><i class="fa-solid fa-circle-check"></i> <span>${esc(pt)}</span></li>`).join('')}
+          </ul>
+          ${modele.repere ? `
+            <p class="text-sm text-soft" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
+              <i class="fa-solid fa-circle-info text-brand"></i> ${esc(modele.repere)}
+            </p>` : ''}
+          <div class="row-tight" style="margin-top:12px">
+            <button class="btn btn--sm" data-action="aller" data-route="signatures"><i class="fa-solid fa-file-signature"></i> Actes à signer</button>
+            <button class="btn btn--sm" data-action="aller" data-route="documents"><i class="fa-solid fa-folder-open"></i> Pièces juridiques</button>
           </div>
         </div>
       </div>
@@ -989,17 +1157,43 @@ const Views = {
         </div>
 
         ${liste.length ? `
-        <div class="grid grid-2">
+        <div class="stack-xs">
           ${liste.map((p) => {
             const st = STATUTS_PARTENAIRE[p.statut] || STATUTS_PARTENAIRE.a_faire;
-            return `<div class="file-row">
+            // La convention est rattachée au partenaire par le champ `piece`.
+            const conventions = piecesDePrestation(`PART:${p.id}`);
+            const signee = p.statut === 'signe';
+
+            return `<div class="file-row" style="flex-wrap:wrap">
                 <div class="file-icon" style="color:var(--brand-500)"><i class="fa-solid fa-handshake-angle"></i></div>
-                <div class="grow">
+                <div class="grow" style="min-width:180px">
                   <div class="text-sm fw-800">${esc(p.nom)}</div>
                   <div class="text-xs text-muted">${esc(p.type)}</div>
                 </div>
                 ${badge(st.label, st.couleur)}
-                ${expert ? `<button class="btn btn--ghost btn--sm" data-action="cycle-partenaire" data-id="${esc(p.id)}" title="Faire évoluer le statut"><i class="fa-solid fa-rotate"></i></button>` : ''}
+
+                ${signee
+                  ? ''
+                  // Le libellé ne redit pas le badge : il nomme le geste à faire.
+                  : `<button class="btn btn--sm" data-action="aller" data-route="signatures">
+                       <i class="fa-solid fa-file-signature"></i> Acte à signer
+                     </button>`}
+
+                ${conventions.length
+                  ? `<a class="btn btn--sm" href="${esc(urlSure(conventions[0].url))}" target="_blank" rel="noopener noreferrer">
+                       <i class="fa-solid fa-download"></i> Télécharger
+                     </a>
+                     ${boutonApercu(conventions[0].url, conventions[0].nom, 'Visualiser')}`
+                  : `<span class="text-xs text-muted"><i class="fa-solid fa-circle-info"></i> Aucune convention déposée</span>`}
+
+                ${expert ? `
+                  <button class="btn btn--ghost btn--sm" data-action="deposer-convention" data-id="${esc(p.id)}"
+                          title="Déposer la convention dans le Drive">
+                    <i class="fa-solid fa-cloud-arrow-up"></i>
+                  </button>
+                  <button class="btn btn--ghost btn--sm" data-action="cycle-partenaire" data-id="${esc(p.id)}" title="Faire évoluer le statut">
+                    <i class="fa-solid fa-rotate"></i>
+                  </button>` : ''}
               </div>`;
           }).join('')}
         </div>` : empty('Aucun partenaire', 'Les conventions apparaîtront ici au fil de leur signature.', 'fa-solid fa-handshake')}
@@ -1184,7 +1378,7 @@ const Views = {
       <div class="card">
         <div class="card__head">
           <div>
-            <h3 class="card__title"><i class="fa-solid fa-swatchbook"></i> Livrables graphiques & prestations du lot identité</h3>
+            <h3 class="card__title"><i class="fa-solid fa-swatchbook"></i> Livrables graphiques</h3>
             <p class="card__subtitle">
               ${expert
                 ? "Faites évoluer le statut, puis déposez ou remplacez le lien du fichier depuis « Détail »."
@@ -1434,63 +1628,11 @@ const Views = {
     </section>`;
   },
 
-  /* ====================== LIVRABLES ====================== */
-  livrables() {
-    const prestas = Store.prestations();
-    const lots = Store.avancementParLot();
-
-    return `
-    <section class="view stack">
-      <div class="card">
-        <div class="card__head">
-          <div>
-            <h2 class="card__title"><i class="fa-solid fa-box-archive"></i> Bibliothèque des livrables</h2>
-            <p class="card__subtitle">Chaque prestation de votre formule donne lieu à un livrable identifié. Les livrables validés sont téléchargeables.</p>
-          </div>
-          <span class="badge badge--ok">${prestas.filter((p) => p.etat.statut === 'valide').length} / ${prestas.length} livrés</span>
-        </div>
-
-        ${lots.map((l) => {
-          const items = prestas.filter((p) => p.lot === l.id);
-          if (!items.length) return '';
-          return `
-          <div style="margin-bottom:var(--sp-5)">
-            <h3 class="section-title"><i class="${esc(l.icone)}" style="color:${esc(l.couleur)}"></i> ${esc(l.nom)}</h3>
-            <div class="stack-xs">
-              ${items.map((p) => {
-                const pret = p.etat.statut === 'valide';
-                const lien = urlSure(p.etat.livrableUrl);
-                return `<div class="file-row">
-                    <div class="file-icon ${pret ? 'file-icon--pdf' : ''}" style="${pret ? '' : 'color:var(--text-muted)'}">
-                      <i class="fa-solid ${pret ? 'fa-file-pdf' : 'fa-file-circle-plus'}"></i>
-                    </div>
-                    <div class="grow">
-                      <div class="text-sm fw-800">${esc(p.livrable)}</div>
-                      <div class="text-xs text-muted">${esc(p.titre)}</div>
-                    </div>
-                    ${badgeStatut(p.etat.statut)}
-                    ${lien
-                      ? `${boutonApercu(lien, p.livrable)}
-                         <a class="btn btn--ghost btn--sm" href="${esc(lien)}" target="_blank" rel="noopener noreferrer"
-                            aria-label="Ouvrir ${esc(p.livrable)} dans un nouvel onglet" title="Ouvrir dans un nouvel onglet">
-                           <i class="fa-solid fa-arrow-up-right-from-square"></i>
-                         </a>`
-                      : (pret && !Store.estExpert()
-                          ? `<button class="btn btn--sm" data-action="telecharger-livrable" data-id="${esc(p.id)}"><i class="fa-solid fa-download"></i> Télécharger</button>`
-                          : (!Store.estExpert() ? `<span class="text-xs text-muted nowrap">En production</span>` : ''))}
-                    ${Store.estExpert()
-                      ? `<button class="btn btn--sm ${lien ? '' : 'btn--primary'}" data-action="deposer-livrable" data-id="${esc(p.id)}">
-                           <i class="fa-solid fa-file-arrow-up"></i> ${lien ? 'Remplacer' : 'Déposer'}
-                         </button>`
-                      : ''}
-                  </div>`;
-              }).join('')}
-            </div>
-          </div>`;
-        }).join('')}
-      </div>
-    </section>`;
-  },
+  /* La vue « Livrables » a été retirée : la feuille de route porte déjà chaque
+     livrable, son statut et son lien. Deux écrans pour la même information
+     entretenaient le doute sur celui qui faisait foi. Le lien d'un livrable
+     s'enregistre depuis « Détail » sur la prestation.
+     ---------------------------------------------------------------------- */
 
   /* ====================== MESSAGERIE ====================== */
   messagerie() {

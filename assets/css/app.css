@@ -758,6 +758,28 @@ select { cursor: pointer; }
 .presta__meta span { display: inline-flex; align-items: center; gap: 5px; }
 .presta__actions { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
 
+/* Annexes d'une prestation : actes à signer, justificatifs, dépôt par courriel. */
+.presta__annexes {
+  display: flex; flex-direction: column; gap: var(--sp-2);
+  margin-top: var(--sp-3); padding-top: var(--sp-3);
+  border-top: 1px dashed var(--border-strong);
+}
+.presta__pieces { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.presta__piece {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 10px; border-radius: 999px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  font-size: .72rem; max-width: 100%;
+}
+.presta__piece > i { color: var(--text-muted); flex: none; }
+.presta__piece-nom {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-weight: 700; color: var(--text-soft); text-align: left;
+}
+.presta__piece-nom:hover { color: var(--brand-500); text-decoration: underline; }
+.presta__piece a { color: var(--text-muted); flex: none; }
+.presta__piece a:hover { color: var(--brand-500); }
+
 /* --------------------------------------------------------------------------
    14. Offres / formules
    -------------------------------------------------------------------------- */

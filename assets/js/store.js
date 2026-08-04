@@ -556,6 +556,10 @@ const Store = {
     if (!p) return [];
     return prestationsDeFormule(p.formule, p.type).map((presta) => ({
       ...presta,
+      // `variantes` réécrit titre, libellé du livrable ou description selon le
+      // type de structure : une MSP tient une charte interne là où un centre de
+      // santé tient un règlement de fonctionnement.
+      ...(presta.variantes?.[p.type] || {}),
       etat: p.prestations[presta.id] || { statut: 'a_faire', echeance: '', note: '', livrableUrl: '' },
     }));
   },

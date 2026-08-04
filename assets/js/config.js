@@ -182,26 +182,40 @@ const PRESTATIONS = [
      conformité est propre aux centres de santé : il n'a pas à encombrer le
      suivi d'une maison de santé. */
   { id: 'P17', lot: 'LB', titre: 'Structuration SISA ou association 1901', acteur: 'expert', jours: 10,
+    actes: true,
     desc: "Choix du véhicule juridique, rédaction des statuts, règlement intérieur, formalités d'immatriculation.",
     livrable: 'Statuts & règlement intérieur' },
   { id: 'P35', lot: 'LB', titre: 'Règlement de fonctionnement', acteur: 'expert', jours: 5,
+    actes: true,
+    // Le même document ne porte pas le même nom des deux côtés : règlement de
+    // fonctionnement pour un centre de santé, charte interne pour une MSP.
+    variantes: {
+      MSP: { titre: 'Charte interne', livrable: 'Charte interne',
+             desc: "Rédaction de la charte interne de la maison de santé : engagements réciproques de l'équipe, "
+                 + "organisation du travail pluriprofessionnel, fonctionnement des instances et vie de la structure." },
+    },
     desc: "Rédaction du règlement de fonctionnement : organisation interne, droits et obligations des usagers, "
         + "fonctionnement des instances, modalités d'accueil et de prise en charge.",
     livrable: 'Règlement de fonctionnement' },
   { id: 'P36', lot: 'LB', titre: "Engagement de conformité d'un centre de santé", acteur: 'expert', jours: 6,
-    types: ['CDS'],
+    types: ['CDS'], actes: true, categorieDoc: 'ARS',
     desc: "Constitution et dépôt de l'engagement de conformité au référentiel national, préalable obligatoire "
         + "à l'ouverture d'un centre de santé, accompagné du projet de santé et du règlement de fonctionnement.",
     livrable: 'Engagement de conformité déposé' },
-  { id: 'P18', lot: 'LB', titre: 'Préparation du dossier ARS', acteur: 'expert', jours: 8,
-    desc: "Constitution du dossier complet, vérification des pièces obligatoires, cohérence avec le cahier des charges régional.",
-    livrable: 'Dossier ARS complet' },
-  { id: 'P19', lot: 'LB', titre: 'Accompagnement au dépôt', acteur: 'expert', jours: 4,
-    desc: "Dépôt sur le portail dédié, suivi de l'instruction, réponses aux demandes de compléments.",
+  { id: 'P38', lot: 'LB', titre: 'Signatures du projet de santé en ligne', acteur: 'mixte', jours: 3,
+    actes: true,
+    desc: "Mise en signature électronique du projet de santé par l'ensemble des professionnels de l'équipe, "
+        + "puis archivage de l'exemplaire signé.",
+    livrable: 'Projet de santé signé par l\'équipe' },
+  { id: 'P19', lot: 'LB', titre: 'Dépôt du projet de santé', acteur: 'expert', jours: 4,
+    courriel: 'ars-premier-recours',
+    desc: "Transmission du projet de santé signé à l'ARS, suivi de l'instruction et réponses aux demandes "
+        + "de compléments.",
     livrable: 'Accusé de dépôt ARS' },
-  { id: 'P37', lot: 'LB', titre: "Demande d'immatriculation ARS (FINESS / labellisation)", acteur: 'expert', jours: 5,
-    desc: "Demande d'inscription au répertoire FINESS, suivi de l'attribution du numéro et des démarches "
-        + "de labellisation applicables à la structure.",
+  { id: 'P37', lot: 'LB', titre: 'Immatriculation FINESS', acteur: 'expert', jours: 5,
+    courriel: 'finess-cgss',
+    desc: "Demande d'inscription au répertoire FINESS (labellisation établissement médico-social) auprès de "
+        + "l'ARS et du pôle établissement de l'Assurance Maladie, puis suivi de l'attribution du numéro.",
     livrable: 'Numéro FINESS attribué' },
   /* --- LOT C : Financements & subventions (F2, F3) ---
      L'ACI est une rémunération d'équipe versée par l'Assurance Maladie :
@@ -241,12 +255,14 @@ const PRESTATIONS = [
 
   /* --- LOT F : Identité visuelle & digital (F3) --- */
   { id: 'P29', lot: 'LF', titre: 'Création du logo', acteur: 'expert', jours: 6,
+    declinaisons: true,
     desc: "Conception du logo de la structure, propositions, itérations et livraison des fichiers sources.",
     livrable: 'Logo (SVG, PNG, sources)' },
   { id: 'P30', lot: 'LF', titre: 'Charte graphique', acteur: 'expert', jours: 5,
     desc: "Palette, typographies, règles d'usage et gabarits documentaires de la structure.",
     livrable: 'Charte graphique (PDF)' },
   { id: 'P31', lot: 'LF', titre: 'Identité visuelle & déclinaisons', acteur: 'expert', jours: 5,
+    declinaisons: true,
     desc: "Signalétique, papeterie, plaquette patients, supports d'affichage et déclinaisons réseaux.",
     livrable: 'Kit de déclinaisons' },
   { id: 'P32', lot: 'LF', titre: 'Site internet professionnel', acteur: 'expert', jours: 15,
@@ -299,7 +315,9 @@ const MODULES = [
 
   { id: 'documents',    pole: 'documents', label: 'Coffre-fort documentaire',icone: 'fa-solid fa-folder-open',          formules: null },
   { id: 'signatures',   pole: 'documents', label: 'Validation & signatures', icone: 'fa-solid fa-file-signature',       formules: null },
-  { id: 'livrables',    pole: 'documents', label: 'Livrables',               icone: 'fa-solid fa-box-archive',          formules: null },
+  // « Livrables » retiré : la feuille de route porte déjà chaque livrable, son
+  // statut et son lien. Deux écrans pour la même information entretenaient le
+  // doute sur celui qui faisait foi.
 
   { id: 'messagerie',   pole: 'collab',    label: 'Messagerie',              icone: 'fa-solid fa-comments',             formules: null },
   { id: 'planning',     pole: 'collab',    label: 'Planning & échéances',    icone: 'fa-solid fa-calendar-days',        formules: null },
@@ -457,6 +475,27 @@ const PORTAILS = [
 ];
 
 /**
+ * Guichets qui reçoivent un dossier par courriel, référencés par la clé
+ * `courriel` d'une prestation.
+ *
+ * Adresses valables pour la Martinique. Pour un autre territoire, ajoutez une
+ * entrée ici et renseignez sa clé sur la prestation — l'interface suit, elle
+ * ne devine rien.
+ */
+const GUICHETS_COURRIEL = {
+  'ars-premier-recours': {
+    libelle: 'ARS Martinique — pôle premier recours',
+    adresse: 'ars-martinique-premier-recours@ars.sante.fr',
+    aide: "Le projet de santé signé se dépose par courriel auprès de ce pôle.",
+  },
+  'finess-cgss': {
+    libelle: 'CGSS Martinique — pôle établissement',
+    adresse: 'jessica.ramanich@cgss-martinique.fr',
+    aide: "La demande d'immatriculation FINESS se fait par courriel auprès de ce contact.",
+  },
+};
+
+/**
  * Parapheur électronique d'ElodiaTech.
  * L'expert y prépare la demande de signature, puis colle le lien obtenu dans
  * l'acte correspondant ci-dessous : le client le voit alors dans son espace.
@@ -479,6 +518,8 @@ const MODELES_JURIDIQUES = {
   sisa: {
     id: 'sisa', nom: 'SISA', libelle: 'Société interprofessionnelle de soins ambulatoires',
     cible: 'Maison de santé pluriprofessionnelle (MSP)', icone: 'fa-solid fa-building-user',
+    repere: "La SISA est le seul véhicule permettant à une maison de santé de percevoir les "
+          + "rémunérations d'équipe versées au titre de l'accord conventionnel interprofessionnel (ACI).",
     points: [
       "Permet de percevoir les rémunérations d'équipe (ACI)",
       "Au moins 2 médecins et 1 auxiliaire médical associés",
@@ -489,6 +530,8 @@ const MODELES_JURIDIQUES = {
   assoc: {
     id: 'assoc', nom: 'Association loi 1901', libelle: 'Association déclarée à but non lucratif',
     cible: 'Centre de santé (CDS)', icone: 'fa-solid fa-people-group',
+    repere: "L'association loi 1901 est la forme la plus courante pour porter un centre de santé, "
+          + "dont les professionnels sont salariés de la structure gestionnaire.",
     points: [
       "Structure gestionnaire employant des professionnels salariés",
       "Déclaration en préfecture et publication au JOAFE",
