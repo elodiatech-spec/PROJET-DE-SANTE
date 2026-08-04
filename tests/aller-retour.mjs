@@ -139,7 +139,7 @@ Store.setProjet('cds-gros-morne');           // souscrit en Formule 1
 
 Store.changerFormule('cds-gros-morne', 'F3');
 Store.majProjet({ options: { immobilier: true } }, 'cds-gros-morne');
-Store.majPrestation('P08', { statut: 'valide', note: 'Validé en réunion.' });
+Store.majPrestation('P08', { statut: 'valide', note: 'Validé en réunion.', dateRealisation: '2026-07-28' });
 Store.ajouterDocument({ nom: 'Test.pdf', cat: 'ARS', type: 'pdf', url: '', taille: '1 Mo', auteur: 'Camille R.' });
 Store.ajouterEvenement({ titre: 'Comité de suivi', date: '2026-09-15', heure: '10:00', lieu: 'Visio', type: 'reunion' });
 Store.ajouterFinancement({ source: 'FIR — ARS Martinique', montant: '50000', statut: 'etude', echeance: '2026-10-01' });
@@ -222,6 +222,9 @@ const controles = [
   ['P08 est validée', p08.statut === 'valide', p08.statut],
   ['la note de P08 est écrite', p08.note === 'Validé en réunion.', p08.note],
   ['l\'échéance de P08 reste au format AAAA-MM-JJ', /^\d{4}-\d{2}-\d{2}$/.test(String(p08.echeance)), p08.echeance],
+  ['la date de réalisation de P08 est écrite, distincte de l\'échéance',
+    p08.date_realisation === '2026-07-28' && p08.date_realisation !== p08.echeance,
+    `${p08.date_realisation} vs échéance ${p08.echeance}`],
   ['le document supprimé n\'est plus là', !lire('Documents').find((d) => d.nom === 'Test.pdf'), 'toujours présent'],
   ['l\'événement est ajouté', !!lire('Evenements').find((e) => e.titre === 'Comité de suivi'), 'absent'],
   ['le financement est ajouté', !!lire('Financements').find((f) => f.montant === 50000), 'absent'],
@@ -239,6 +242,8 @@ const controles = [
     Object.keys(projetRelu.prestations).length === NB_PRESTATIONS_F3_CDS,
     Object.keys(projetRelu.prestations).length],
   ['relecture : P08 validée', projetRelu.prestations.P08.statut === 'valide', projetRelu.prestations.P08.statut],
+  ['relecture : date de réalisation de P08 restituée en camelCase',
+    projetRelu.prestations.P08.dateRealisation === '2026-07-28', projetRelu.prestations.P08.dateRealisation],
   ['relecture : projet supprimé absent', !relu.projets.find((p) => p.id === 'cds-cayenne'), 'présent'],
   ['relecture : nom du porteur corrigé', projetRelu.client.nom === 'Mme Sophie Rivière-Martin', projetRelu.client.nom],
   ['relecture : lien Meet exposé en lienMeet',

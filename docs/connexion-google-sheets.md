@@ -104,6 +104,28 @@ a fait. Elle est sans effet si tout est déjà en place, donc sans risque à rel
 
 ---
 
+### Pourquoi un lien Google Docs peut ne pas s'afficher dans l'application
+
+Le projet de santé, les chapitres et les comptes rendus acceptent un lien Google Docs, lu dans
+une visionneuse intégrée à l'application. Si le document reste blanc dans cette visionneuse
+alors qu'il s'ouvre normalement dans un nouvel onglet, ce n'est presque toujours **pas** un
+problème de l'application : c'est que le document n'est pas partagé publiquement.
+
+Un navigateur bloque les cookies de connexion Google dans un cadre intégré (protection
+standard contre le pistage). Ouvert en onglet, votre session Google fonctionne normalement ;
+dans le petit cadre de la visionneuse, cette session n'est pas transmise — Google demande alors
+une autorisation que la personne qui consulte ne peut pas donner.
+
+**Solution** : sur le document Google, **Partager → Accès général → Toute personne disposant du
+lien → Lecteur**. Aucune donnée n'est rendue publique sur un moteur de recherche par cette
+option — seule une personne qui a le lien exact peut l'ouvrir, exactement comme aujourd'hui.
+
+Canva se comporte différemment : ses pages refusent systématiquement l'affichage intégré, quel
+que soit le partage. Un lien Canva s'ouvre donc toujours dans un nouvel onglet, ce qui est
+volontaire et ne peut pas être corrigé côté application.
+
+---
+
 ## Étape 2 — Créer les dossiers Drive des projets
 
 > Le plus simple, une fois tout relié : le faire **depuis l'application**, dans

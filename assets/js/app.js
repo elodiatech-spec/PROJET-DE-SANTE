@@ -929,9 +929,16 @@ const App = {
           </div>
           ${expert ? `
             <div class="stack-sm" style="margin-top:18px">
-              <div class="field">
-                <label class="field__label" for="pd-echeance">Échéance</label>
-                <input type="date" id="pd-echeance" value="${esc(p.etat.echeance || '')}">
+              <div class="grid grid-2">
+                <div class="field">
+                  <label class="field__label" for="pd-echeance">Échéance prévisionnelle</label>
+                  <input type="date" id="pd-echeance" value="${esc(p.etat.echeance || '')}">
+                </div>
+                <div class="field">
+                  <label class="field__label" for="pd-realisation">Date de réalisation</label>
+                  <input type="date" id="pd-realisation" value="${esc(p.etat.dateRealisation || '')}">
+                  <span class="field__hint">La date où le travail a réellement été fait — distincte de l'échéance visée.</span>
+                </div>
               </div>
               <!-- Le « Lien du livrable » a été retiré : les pièces se déposent
                    désormais depuis la prestation ou le coffre-fort, et le fichier
@@ -942,6 +949,9 @@ const App = {
                 <textarea id="pd-note" placeholder="Point d'avancement, blocage, prochaine étape…">${esc(p.etat.note || '')}</textarea>
               </div>
             </div>` : `
+            <div class="grid grid-2" style="margin-top:16px">
+              ${p.etat.dateRealisation ? `<div><span class="text-xs text-muted">Réalisée le</span><br><strong class="text-sm">${esc(Dates.format(p.etat.dateRealisation))}</strong></div>` : ''}
+            </div>
             ${p.etat.note ? `<div class="card card--flat" style="margin-top:16px">
                 <div class="text-xs text-muted fw-800">Note de votre référent</div>
                 <p class="text-sm">${esc(p.etat.note)}</p>
@@ -960,6 +970,7 @@ const App = {
       // l'envoyer à vide effacerait les adresses déjà enregistrées.
       Store.majPrestation(el.dataset.id, {
         echeance: document.getElementById('pd-echeance')?.value || '',
+        dateRealisation: document.getElementById('pd-realisation')?.value || '',
         note: document.getElementById('pd-note')?.value.trim() || '',
       });
       Modal.close();

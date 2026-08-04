@@ -49,9 +49,13 @@ const STATUTS = {
     id: 'valide', label: 'Validé', couleur: 'ok',
     icone: 'fa-solid fa-circle-check', poids: 1,
   },
+  // Ni « à faire » ni « validée » : une prestation jugée non nécessaire pour
+  // ce dossier. Exclue du calcul d'avancement — Store.prestationsApplicables()
+  // filtre ce statut avant toute moyenne, elle ne pèse donc plus jamais à la
+  // baisse. Elle reste visible dans la feuille de route, pour la traçabilité.
   bloque: {
-    id: 'bloque', label: 'Bloqué', couleur: 'danger',
-    icone: 'fa-solid fa-triangle-exclamation', poids: 0.2,
+    id: 'bloque', label: 'Non nécessaire', couleur: 'neutre',
+    icone: 'fa-solid fa-ban', poids: 0,
   },
 };
 

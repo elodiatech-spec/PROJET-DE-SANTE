@@ -61,6 +61,7 @@ var ONGLETS = {
     "prestation_id",
     "statut",
     "echeance",
+    "date_realisation",
     "note",
     "livrable_url"
   ],
@@ -2265,7 +2266,7 @@ function construire(avecDonnees) {
     // Le format texte doit être posé AVANT l'écriture : sans cela Sheets
     // convertit « 2026-03-15 » en date sérielle et l'affiche en nombre.
     entetes.forEach(function (titre, i) {
-      if (titre === 'date' || titre === 'echeance' || titre === 'date_debut') {
+      if (titre === 'date' || titre === 'echeance' || titre === 'date_debut' || titre === 'date_realisation') {
         feuille.getRange(1, i + 1, feuille.getMaxRows()).setNumberFormat('@');
       }
     });
@@ -2332,7 +2333,7 @@ function mettreAJourStructure() {
       var position = feuille.getLastColumn() + 1;
       feuille.getRange(1, position).setValue(colonne)
         .setFontWeight('bold').setFontColor('#ffffff').setBackground('#1e95cb');
-      if (colonne === 'date' || colonne === 'echeance' || colonne === 'date_debut') {
+      if (colonne === 'date' || colonne === 'echeance' || colonne === 'date_debut' || colonne === 'date_realisation') {
         feuille.getRange(1, position, feuille.getMaxRows()).setNumberFormat('@');
       }
       existantes.push(colonne);
@@ -2616,6 +2617,7 @@ function construireDonnees(projetIdUnique) {
     p.prestations[r.prestation_id] = {
       statut: r.statut || 'a_faire',
       echeance: iso(r.echeance),
+      dateRealisation: iso(r.date_realisation),
       note: r.note || '',
       livrableUrl: r.livrable_url || '',
       majLe: iso(new Date())
@@ -2704,7 +2706,8 @@ var ECRITURE = {
   },
   prestations: {
     onglet: 'Prestations', cles: ['projet_id', 'prestation_id'],
-    champs: { statut: 'statut', echeance: 'echeance', note: 'note', livrableUrl: 'livrable_url' }
+    champs: { statut: 'statut', echeance: 'echeance', dateRealisation: 'date_realisation',
+              note: 'note', livrableUrl: 'livrable_url' }
   },
   documents: {
     onglet: 'Documents', cles: ['projet_id', 'id'],

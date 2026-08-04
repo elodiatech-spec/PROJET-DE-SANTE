@@ -298,6 +298,7 @@ function cartePrestation(p, index) {
             <i class="fa-solid fa-calendar-day"></i>
             ${esc(Dates.format(p.etat.echeance))}${retard ? ` · en retard de ${Math.abs(jours)} j` : ''}
           </span>
+          ${p.etat.dateRealisation ? `<span class="text-ok"><i class="fa-solid fa-calendar-check"></i> Réalisée le ${esc(Dates.format(p.etat.dateRealisation))}</span>` : ''}
           ${p.etat.note ? `<span><i class="fa-solid fa-note-sticky"></i> ${esc(p.etat.note)}</span>` : ''}
         </div>
         ${annexesPrestation(p)}
@@ -474,8 +475,9 @@ const Views = {
     const projet = Store.projet();
     const formule = Store.formule(projet);
     const pct = Store.avancement();
-    const prestations = Store.prestations();
+    const prestations = Store.prestationsApplicables();
     const validees = prestations.filter((p) => p.etat.statut === 'valide').length;
+    const horsPerimetre = Store.prestations().length - prestations.length;
     const aValider = Store.actionsClient();
     const sigs = Store.signaturesEnAttente();
     const retard = Store.enRetard();
@@ -521,6 +523,7 @@ const Views = {
             </div>
             <span class="kpi__value">${validees} / ${prestations.length}</span>
             ${progressBar(pct, 'sm')}
+            ${horsPerimetre ? `<span class="text-xs text-muted" style="margin-top:4px;display:block">${horsPerimetre} jugée${horsPerimetre > 1 ? 's' : ''} non nécessaire${horsPerimetre > 1 ? 's' : ''}, hors calcul</span>` : ''}
           </div>
         </div>
 
@@ -2196,7 +2199,7 @@ const Views = {
 
                 <span class="etiquette__avancement">
                   <span class="row-tight" style="justify-content:space-between;margin-bottom:4px">
-                    <span class="text-xs text-muted">${Store.prestations(p.id).filter((x) => x.etat.statut === 'valide').length} / ${Store.prestations(p.id).length} prestations</span>
+                    <span class="text-xs text-muted">${Store.prestationsApplicables(p.id).filter((x) => x.etat.statut === 'valide').length} / ${Store.prestationsApplicables(p.id).length} prestations</span>
                     <span class="text-xs fw-800">${pct} %</span>
                   </span>
                   ${progressBar(pct, 'sm')}

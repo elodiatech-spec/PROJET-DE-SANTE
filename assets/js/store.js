@@ -102,7 +102,13 @@ function seedPrestations(codeFormule, dateDebut, nbValidees, overrides = {}, ret
       echeance = Dates.addDays(Dates.today(), curseurFutur);
     }
 
-    etat[p.id] = { statut, echeance, note: '', livrableUrl: '', majLe: Dates.today() };
+    etat[p.id] = {
+      statut, echeance,
+      // Le jeu de démonstration n'a pas de vraie date de réalisation à
+      // proposer : une validée en emprunte une plausible à son échéance.
+      dateRealisation: statut === 'valide' ? echeance : '',
+      note: '', livrableUrl: '', majLe: Dates.today(),
+    };
   });
 
   return etat;
@@ -568,31 +574,48 @@ const Store = {
       // type de structure : une MSP tient une charte interne là où un centre de
       // santé tient un règlement de fonctionnement.
       ...(presta.variantes?.[p.type] || {}),
-      etat: p.prestations[presta.id] || { statut: 'a_faire', echeance: '', note: '', livrableUrl: '' },
+      etat: p.prestations[presta.id] || { statut: 'a_faire', echeance: '', dateRealisation: '', note: '', livrableUrl: '' },
     }));
   },
 
-  /** Avancement 0-100 pondéré par le statut. */
+  /**
+   * Prestations qui comptent dans l'avancement du dossier — tout sauf celles
+   * jugées non nécessaires. Une prestation « non nécessaire » reste visible
+   * dans la feuille de route, mais ne pèse plus dans aucune moyenne : le
+   * dossier progresse sur ce qui reste réellement à faire.
+   */
+  prestationsApplicables(projetId) {
+    return this.prestations(projetId).filter((p) => p.etat.statut !== 'bloque');
+  },
+
+  /** Avancement 0-100 pondéré par le statut, hors prestations non nécessaires. */
   avancement(projetId) {
-    const liste = this.prestations(projetId);
+    const liste = this.prestationsApplicables(projetId);
     if (!liste.length) return 0;
     const total = liste.reduce((s, p) => s + (STATUTS[p.etat.statut]?.poids ?? 0), 0);
     return Math.round((total / liste.length) * 100);
   },
 
-  /** Avancement par lot : [{ lot, nom, couleur, icone, pct, total, valides }]. */
+  /**
+   * Avancement par lot : [{ lot, nom, couleur, icone, pct, total, valides, horsPerimetre }].
+   * `total` et `valides` ne comptent que les prestations applicables ;
+   * `horsPerimetre` dit combien ont été écartées, pour que l'exclusion reste
+   * visible plutôt que silencieuse.
+   */
   avancementParLot(projetId) {
     const p = this.projet(projetId);
     if (!p) return [];
     const liste = this.prestations(projetId);
     return FORMULES[p.formule].lots.map((idLot) => {
       const items = liste.filter((x) => x.lot === idLot);
-      const somme = items.reduce((s, x) => s + (STATUTS[x.etat.statut]?.poids ?? 0), 0);
+      const applicables = items.filter((x) => x.etat.statut !== 'bloque');
+      const somme = applicables.reduce((s, x) => s + (STATUTS[x.etat.statut]?.poids ?? 0), 0);
       return {
         ...LOTS[idLot],
-        pct: items.length ? Math.round((somme / items.length) * 100) : 0,
-        total: items.length,
-        valides: items.filter((x) => x.etat.statut === 'valide').length,
+        pct: applicables.length ? Math.round((somme / applicables.length) * 100) : 0,
+        total: applicables.length,
+        valides: applicables.filter((x) => x.etat.statut === 'valide').length,
+        horsPerimetre: items.length - applicables.length,
       };
     });
   },
@@ -611,9 +634,9 @@ const Store = {
     return this.prestations(projetId).filter((p) => p.etat.statut === 'a_valider');
   },
 
-  /** Prestations en retard (échéance dépassée et non validée). */
+  /** Prestations en retard (échéance dépassée, ni validée ni sans objet). */
   enRetard(projetId) {
-    return this.prestations(projetId).filter((p) => {
+    return this.prestationsApplicables(projetId).filter((p) => {
       if (p.etat.statut === 'valide') return false;
       const j = Dates.daysUntil(p.etat.echeance);
       return j !== null && j < 0;
@@ -745,7 +768,7 @@ const Store = {
         });
       });
 
-      this.prestations(p.id)
+      this.prestationsApplicables(p.id)
         .filter((x) => x.etat.statut !== 'valide' && x.etat.echeance)
         .forEach((x) => {
           entrees.push({
@@ -765,7 +788,7 @@ const Store = {
     const evts = this.liste('evenements', projetId).map((e) => ({
       type: e.type, titre: e.titre, date: e.date, detail: [e.heure, e.lieu].filter(Boolean).join(' · '),
     }));
-    const prestas = this.prestations(projetId)
+    const prestas = this.prestationsApplicables(projetId)
       .filter((p) => p.etat.statut !== 'valide' && p.etat.echeance)
       .map((p) => ({ type: 'prestation', titre: p.titre, date: p.etat.echeance, detail: LOTS[p.lot].nom }));
 
@@ -1064,6 +1087,7 @@ const Store = {
           p.prestations[presta.id] = {
             statut: 'a_faire',
             echeance: Dates.addDays(p.dateDebut, curseur),
+            dateRealisation: '',
             note: '', livrableUrl: '', majLe: Dates.today(),
           };
           ajoutees.push(presta.id);

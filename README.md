@@ -97,7 +97,8 @@ plateforme-projet-sante/
 ├── tests/
 │   ├── aller-retour.mjs          Test d'intégration de la synchronisation
 │   ├── isolation.mjs             Test du cloisonnement des accès
-│   └── televersement.mjs         Test du dépôt de fichiers dans le Drive
+│   ├── televersement.mjs         Test du dépôt de fichiers dans le Drive
+│   └── avancement.mjs            Test du calcul d'avancement (statut « Non nécessaire »)
 ├── docs/
 │   └── connexion-google-sheets.md
 └── README.md
@@ -167,6 +168,7 @@ est assurée par GitHub Pages.
 node tests/aller-retour.mjs
 node tests/isolation.mjs
 node tests/televersement.mjs
+node tests/avancement.mjs
 ```
 
 Le premier vérifie l'intégration Google Sheets de bout en bout : les actions de l'interface
@@ -178,9 +180,14 @@ peut-il écrire ailleurs, une requête sans secret est-elle refusée.
 Le troisième couvre le dépôt de fichiers : le fichier atterrit-il dans le sous-dossier de sa
 catégorie, un jeton client peut-il déposer chez un autre, un refus est-il toujours motivé.
 
-Les trois s'exécutent sur un classeur — et pour le dernier un Drive — simulés en mémoire,
-avec le vrai code du script. Aucune donnée réelle n'est touchée. À relancer après toute
-modification de `store.js` ou de `apps-script/Code.gs`.
+Le quatrième couvre le calcul d'avancement : une prestation « Non nécessaire » est-elle bien
+exclue du pourcentage, du ratio affiché et des alertes de retard, sans disparaître de la feuille
+de route.
+
+Les quatre s'exécutent sur un classeur — et pour le troisième un Drive — simulés en mémoire,
+avec le vrai code du script (le quatrième teste directement l'application, sans classeur).
+Aucune donnée réelle n'est touchée. À relancer après toute modification de `store.js` ou de
+`apps-script/Code.gs`.
 
 ---
 
@@ -190,6 +197,13 @@ modification de `store.js` ou de `apps-script/Code.gs`.
 - Tableau de bord adapté au rôle : avancement, actions attendues, échéances, alertes de retard
 - Feuille de route : avancement par lot, filtres, statut et échéance pilotables par l'expert
 - Rétroplanning recalculable à partir de la charge indicative de chaque prestation
+- Chaque prestation porte deux dates distinctes : une **échéance prévisionnelle** (la cible) et
+  une **date de réalisation** (le jour où le travail a réellement été fait), pour ne pas
+  confondre planification et constat
+- Statut **« Non nécessaire »** (`STATUTS.bloque` dans le code, nom conservé pour ne pas casser
+  les dossiers existants) : une prestation jugée hors périmètre pour ce client. Elle reste dans
+  la feuille de route, mais disparaît du calcul d'avancement, du ratio « prestations validées »
+  et des alertes de retard — `Store.prestationsApplicables()` centralise cette exclusion
 
 **Ingénierie**
 - Projet de santé : document collaboratif, 5 chapitres réglementaires alimentés par les
