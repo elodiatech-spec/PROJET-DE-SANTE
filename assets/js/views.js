@@ -451,15 +451,36 @@ function annexesPrestation(p) {
   if (guichet) {
     const projet = Store.projet();
     const objet = `${p.titre} — ${projet?.nom || ''}`;
+
+    // Le projet de santé se transmet avec son lien de lecture : sans lui,
+    // l'ARS n'a que le courriel, pas le document. Rien n'est envoyé de force —
+    // le lien manque simplement du corps si personne ne l'a encore renseigné.
+    const gdoc = urlSure(projet?.gdocProjetSante);
+    let corps = '';
+    if (p.courrielAvecProjetSante) {
+      corps = `Bonjour,\n\nVeuillez trouver ci-après le projet de santé de ${projet?.nom || 'la structure'}`
+            + (gdoc ? ` :\n${gdoc}` : ', dont le lien sera transmis séparément.')
+            + `\n\nCordialement,\n${projet?.consultant?.nom || 'ElodiaTech'}`;
+    }
+
+    const parametres = [`subject=${encodeURIComponent(objet)}`]
+      .concat(corps ? [`body=${encodeURIComponent(corps)}`] : [])
+      .join('&');
+
     lignes.push(`
       <div class="row-tight">
-        <a class="btn btn--sm" href="mailto:${esc(guichet.adresse)}?subject=${esc(encodeURIComponent(objet))}">
+        <a class="btn btn--sm" href="mailto:${esc(guichet.adresse)}?${esc(parametres)}">
           <i class="fa-solid fa-envelope"></i> Déposer par courriel
         </a>
         <span class="text-xs text-muted">
           ${esc(guichet.libelle)} — <span class="mono">${esc(guichet.adresse)}</span>
         </span>
-      </div>`);
+      </div>
+      ${p.courrielAvecProjetSante && !gdoc ? `
+        <p class="text-xs text-muted" style="margin-top:6px">
+          <i class="fa-solid fa-circle-info"></i> Aucun lien de projet de santé renseigné — le mail
+          partira sans lui. Ajoutez-le depuis la page « Projet de santé ».
+        </p>` : ''}`);
   }
 
   return `<div class="presta__annexes">${lignes.join('')}</div>`;

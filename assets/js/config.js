@@ -212,7 +212,7 @@ const PRESTATIONS = [
         + "puis archivage de l'exemplaire signé.",
     livrable: 'Projet de santé signé par l\'équipe' },
   { id: 'P19', lot: 'LB', titre: 'Dépôt du projet de santé', acteur: 'expert', jours: 4,
-    courriel: 'ars-premier-recours',
+    courriel: 'ars-premier-recours', courrielAvecProjetSante: true,
     desc: "Transmission du projet de santé signé à l'ARS, suivi de l'instruction et réponses aux demandes "
         + "de compléments.",
     livrable: 'Accusé de dépôt ARS' },
