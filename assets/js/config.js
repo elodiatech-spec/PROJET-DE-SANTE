@@ -473,10 +473,6 @@ const PORTAILS = [
       { label: 'Compte association', url: 'https://synergie-europe.fr/e_synergie/inscription.do?typeTiers=association', primaire: true },
       { label: 'Compte entreprise / SISA', url: 'https://synergie-europe.fr/e_synergie/inscription.do?typeTiers=entreprise' },
     ]},
-  { id: 'ameli', nom: 'Espace Pro Ameli (ACI)', desc: "Suivi du contrat ACI et des dotations conventionnelles de la CPAM.",
-    couleur: '#a5c836', formules: ['F2', 'F3'], liens: [
-      { label: 'Espace professionnel', url: 'https://www.ameli.fr/exercice-coordonne', primaire: true },
-    ]},
 ];
 
 /**

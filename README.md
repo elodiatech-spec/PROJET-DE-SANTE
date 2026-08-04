@@ -207,7 +207,7 @@ l'**engagement de conformité** ne s'affiche que pour un centre de santé. C'est
 
 **Financements & partenaires**
 - **Financements & aides** — un seul écran pour tout ce qui touche à l'argent :
-  les guichets de dépôt (Stars FIR, e-Synergie, Espace Pro Ameli), les demandes
+  les guichets de dépôt (Stars FIR, e-Synergie), les demandes
   et leur statut, les douze pièces justificatives, et les prestations du lot.
   Chaque pièce indique à quels dossiers elle sert et qui doit la fournir.
   Le client **téléverse** sa pièce depuis l'explorateur de son ordinateur : le fichier part
