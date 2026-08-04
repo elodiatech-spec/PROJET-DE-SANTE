@@ -798,30 +798,30 @@ const Views = {
 
         <div class="card card--flat" style="border-color:color-mix(in srgb, var(--info-500) 40%, transparent)">
           <div class="row" style="margin-bottom:12px">
-            <div class="file-icon file-icon--doc" style="width:44px;height:44px;font-size:1.1rem"><i class="fa-brands fa-google-drive"></i></div>
+            <div class="file-icon file-icon--doc" style="width:44px;height:44px;font-size:1.1rem"><i class="fa-solid fa-file-lines"></i></div>
             <div class="grow">
-              <h3 class="text-sm fw-800">Document collaboratif Google Docs</h3>
-              <p class="text-xs text-muted">Version de travail partagée entre l'équipe et votre référent ElodiaTech.</p>
+              <h3 class="text-sm fw-800">Document du projet de santé</h3>
+              <p class="text-xs text-muted">Google Docs, Canva ou tout autre outil de rédaction partagé avec votre référent ElodiaTech.</p>
             </div>
           </div>
           ${expert ? `
             <div class="field">
               <label class="field__label" for="gdoc-url">Lien du document</label>
               <div class="input-group">
-                <input type="url" id="gdoc-url" class="input input--mono" value="${esc(projet.gdocProjetSante)}" placeholder="https://docs.google.com/document/d/…">
+                <input type="url" id="gdoc-url" class="input input--mono" value="${esc(projet.gdocProjetSante)}" placeholder="https://docs.google.com/document/d/… ou https://www.canva.com/design/…">
                 <button class="btn btn--primary" data-action="enregistrer-gdoc"><i class="fa-solid fa-floppy-disk"></i> Enregistrer</button>
               </div>
-              <span class="field__hint">Ce lien est visible par le client depuis son espace.</span>
+              <span class="field__hint">
+                Ce lien est visible par le client depuis son espace. La rédaction se fait dans l'outil
+                lui-même — seule sa lecture se fait ici.
+              </span>
             </div>` : ''}
           <div class="row-tight" style="margin-top:12px">
             ${gdoc
               ? `<button class="btn btn--primary" data-action="apercu-lien"
                     data-url="${esc(gdoc)}" data-titre="Projet de santé — ${esc(projet.nom)}">
                    <i class="fa-solid fa-eye"></i> Lire le projet de santé
-                 </button>
-                 <a class="btn" href="${esc(gdoc)}" target="_blank" rel="noopener noreferrer">
-                   <i class="fa-solid fa-arrow-up-right-from-square"></i> Modifier dans Google Docs
-                 </a>`
+                 </button>`
               : `<span class="badge badge--neutre"><i class="fa-solid fa-link-slash"></i> Aucun lien renseigné pour l'instant</span>`}
             ${urlSure(projet.driveUrl) ? `<a class="btn" href="${esc(urlSure(projet.driveUrl))}" target="_blank" rel="noopener noreferrer"><i class="fa-brands fa-google-drive"></i> Dossier Drive</a>` : ''}
           </div>
@@ -1226,10 +1226,10 @@ const Views = {
                      </button>`}
 
                 ${conventions.length
-                  ? `<a class="btn btn--sm" href="${esc(urlSure(conventions[0].url))}" target="_blank" rel="noopener noreferrer">
+                  ? `${boutonApercu(conventions[0].url, conventions[0].nom, 'Visualiser')}
+                     <a class="btn btn--sm" href="${esc(lienTelechargement(conventions[0].url))}" download>
                        <i class="fa-solid fa-download"></i> Télécharger
-                     </a>
-                     ${boutonApercu(conventions[0].url, conventions[0].nom, 'Visualiser')}`
+                     </a>`
                   : `<span class="text-xs text-muted"><i class="fa-solid fa-circle-info"></i> Aucune convention déposée</span>`}
 
                 ${expert ? `
@@ -2023,7 +2023,7 @@ const Views = {
                     <span class="text-xs text-muted">${esc(Dates.formatLong(cr.date))}</span>
                   </div>
                   <div class="row-tight">
-                    ${doc ? `<a class="btn btn--sm" href="${esc(doc)}" target="_blank" rel="noopener noreferrer"><i class="fa-brands fa-google-drive"></i> Google Doc</a>` : ''}
+                    ${doc ? boutonApercu(doc, `Compte rendu — ${cr.objet}`, 'Google Doc') : ''}
                     ${meet ? `<a class="btn btn--sm" href="${esc(meet)}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-video"></i> Lien Meet</a>` : ''}
                     ${expert ? `
                       <button class="btn btn--ghost btn--sm" data-action="modifier-cr" data-id="${esc(cr.id)}" title="Modifier"><i class="fa-solid fa-pen"></i></button>
