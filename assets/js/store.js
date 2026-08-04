@@ -762,7 +762,7 @@ const Store = {
     this.state.projets.forEach((p) => {
       (this.state.evenements[p.id] || []).forEach((e) => {
         entrees.push({
-          date: e.date, heure: e.heure || '', titre: e.titre, type: e.type,
+          id: e.id, date: e.date, heure: e.heure || '', titre: e.titre, type: e.type,
           canal: e.canal || '', lieu: e.lieu || '', lien: e.lien || '',
           projetId: p.id, projetNom: p.nom, projetVille: p.ville,
         });
@@ -1322,12 +1322,18 @@ const Store = {
     this._pousserItem('comptesRendus', { id: crId }, 'delete');
   },
 
-  supprimerEvenement(evtId) {
+  /**
+   * Retire un événement du planning.
+   * `projetId` permet de le supprimer depuis le planning général du
+   * portefeuille, où l'événement n'appartient pas forcément au projet
+   * actuellement ouvert — sans lui, la suppression viserait le mauvais projet.
+   */
+  supprimerEvenement(evtId, projetId) {
+    const id = projetId || this.state.projetActifId;
     this.commit((s) => {
-      const id = s.projetActifId;
       s.evenements[id] = (s.evenements[id] || []).filter((e) => e.id !== evtId);
     });
-    this._pousserItem('evenements', { id: evtId }, 'delete');
+    this.pousser('evenements', `${id}:${evtId}`, null, 'delete');
   },
 
   ajouterFinancement(donnees) {

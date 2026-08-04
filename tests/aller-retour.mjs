@@ -170,6 +170,16 @@ Store.ajouterEvenement({
   type: 'reunion', lieu: 'Visioconférence', lien: 'https://meet.google.com/test-hebdo',
 });
 
+// Suppression d'un événement d'un AUTRE projet que celui actuellement ouvert —
+// reproduit le planning général du portefeuille, où l'événement affiché
+// n'appartient pas forcément au projet actif. On crée l'événement sur
+// « msp-fort-de-france », on revient sur le projet actif du scénario, puis on
+// supprime en ciblant explicitement l'autre projet.
+Store.setProjet('msp-fort-de-france');
+const evtAutreProjet = Store.ajouterEvenement({ titre: 'Jalon à supprimer', date: '2026-09-01', type: 'jalon' });
+Store.setProjet('cds-gros-morne');
+Store.supprimerEvenement(evtAutreProjet.id, 'msp-fort-de-france');
+
 Store.supprimerDocument(Store.liste('documents').find((d) => d.nom === 'Test.pdf').id);
 Store.supprimerProjet('cds-cayenne');
 
@@ -206,7 +216,7 @@ const evtMeet = lire('Evenements').find((e) => e.titre === 'Point hebdomadaire')
 
 const controles = [
   ['le script ne renvoie aucune erreur', erreurs.length === 0, erreurs.join(' | ')],
-  ['15 requêtes émises par l\'application', requetes.length === 15, requetes.length],
+  ['17 requêtes émises par l\'application', requetes.length === 17, requetes.length],
   ['la formule est passée en F3', projet.formule === 'F3', projet.formule],
   ['fiche client : nom du porteur corrigé', projet.client_nom === 'Mme Sophie Rivière-Martin', projet.client_nom],
   ['fiche client : téléphone enregistré', projet.client_tel === '0596 11 22 33', projet.client_tel],
@@ -227,6 +237,12 @@ const controles = [
     `${p08.date_realisation} vs échéance ${p08.echeance}`],
   ['le document supprimé n\'est plus là', !lire('Documents').find((d) => d.nom === 'Test.pdf'), 'toujours présent'],
   ['l\'événement est ajouté', !!lire('Evenements').find((e) => e.titre === 'Comité de suivi'), 'absent'],
+  ['suppression cross-projet : le jalon d\'un autre projet a bien été retiré de la feuille',
+    !lire('Evenements').find((e) => e.titre === 'Jalon à supprimer'), 'toujours présent'],
+  ['suppression cross-projet : les événements du projet actif ne sont pas touchés',
+    !!lire('Evenements').find((e) => e.titre === 'Point hebdomadaire'), 'disparu par erreur'],
+  ['suppression cross-projet : le projet actif n\'a pas changé après coup',
+    Store.state.projetActifId === 'cds-gros-morne', Store.state.projetActifId],
   ['le financement est ajouté', !!lire('Financements').find((f) => f.montant === 50000), 'absent'],
   ['le partenaire est ajouté', !!lire('Partenaires').find((p) => p.nom === 'CCAS Gros-Morne'), 'absent'],
   ['la signature sig8 est signée', lire('Signatures').find((s) => s.id === 'sig8').statut === 'signe', 'non signée'],

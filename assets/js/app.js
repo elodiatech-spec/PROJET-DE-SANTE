@@ -1582,13 +1582,19 @@ const App = {
     },
 
     'supprimer-evenement'(el) {
-      const evt = Store.liste('evenements').find((e) => e.id === el.dataset.id);
+      // `data-projet` n'est présent que depuis le planning général : l'événement
+      // peut y appartenir à un autre projet que celui actuellement ouvert.
+      const projetId = el.dataset.projet || undefined;
+      const evt = Store.liste('evenements', projetId).find((e) => e.id === el.dataset.id);
       Modal.confirmer({
         titre: 'Retirer du planning',
         texte: `« ${evt?.titre || 'Cet événement'} » sera supprimé du planning du projet.`,
         libelle: 'Retirer',
         danger: true,
-        onConfirm: () => { Store.supprimerEvenement(el.dataset.id); toast('Événement retiré.', 'ok'); },
+        onConfirm: () => {
+          Store.supprimerEvenement(el.dataset.id, projetId);
+          toast('Événement retiré.', 'ok');
+        },
       });
     },
 

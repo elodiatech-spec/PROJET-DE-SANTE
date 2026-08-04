@@ -1802,7 +1802,7 @@ const Views = {
     if (expert && filtres.portee === 'tous') return Views._planningGlobal(filtres);
 
     const evts = Store.liste('evenements').slice().sort((a, b) => a.date.localeCompare(b.date));
-    const prestas = Store.prestations()
+    const prestas = Store.prestationsApplicables()
       .filter((p) => p.etat.statut !== 'valide' && p.etat.echeance)
       .sort((a, b) => a.etat.echeance.localeCompare(b.etat.echeance))
       .slice(0, 8);
@@ -1997,6 +1997,12 @@ const Views = {
                   </button>
                   ${boutonEchange(e)}
                   ${badge(j === 0 ? "Aujourd'hui" : `J-${j}`, j <= 7 ? 'warn' : 'brand')}
+                  ${Store.estExpert() && e.type !== 'prestation' ? `
+                    <button class="btn btn--ghost btn--sm" data-action="supprimer-evenement"
+                            data-id="${esc(e.id)}" data-projet="${esc(e.projetId)}"
+                            aria-label="Supprimer ${esc(e.titre)}">
+                      <i class="fa-solid fa-trash"></i>
+                    </button>` : ''}
                 </div>`;
               }).join('')}
             </div>
