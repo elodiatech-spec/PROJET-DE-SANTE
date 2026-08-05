@@ -104,6 +104,26 @@ a fait. Elle est sans effet si tout est déjà en place, donc sans risque à rel
 
 ---
 
+### Fichiers déposés dans l'application : rien à partager
+
+Un fichier téléversé depuis l'application (justificatif, convention, visuel, pièce du dossier)
+est créé dans le Drive du compte propriétaire, **sans aucun partage**. Il n'a pas besoin d'en
+avoir : l'application ne l'ouvre pas par son adresse Drive, elle en demande le contenu à la
+passerelle, qui le lit avec vos droits après avoir vérifié qu'il relève bien du dossier du
+projet demandé.
+
+Conséquence pratique : **le client consulte et télécharge ces fichiers sans compte Google, sans
+partage, et sans jamais voir le reste de votre Drive.** Les PDF et les images s'affichent
+directement dans l'application ; les formats qu'un navigateur ne sait pas rendre (Word, Excel,
+archives) sont proposés au téléchargement.
+
+Les seules limites : 10 Mo par fichier à l'affichage, et un temps de chargement proportionnel au
+poids du fichier, puisque le contenu transite par la passerelle.
+
+> Le contrôle de rattachement au dossier du projet est ce qui empêche un jeton client de devenir
+> une clé de lecture sur l'ensemble du Drive. Il est vérifié par `node tests/lecture-fichier.mjs`,
+> pour l'expert comme pour le client.
+
 ### Pourquoi un lien Google Docs peut ne pas s'afficher dans l'application
 
 Le projet de santé, les chapitres et les comptes rendus acceptent un lien Google Docs, lu dans

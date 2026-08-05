@@ -124,16 +124,39 @@ function lienIntegrable(url) {
 }
 
 /**
+ * Identifiant Drive d'un fichier, extrait de son adresse. Chaîne vide si
+ * l'adresse ne désigne pas un fichier Drive.
+ *
+ * Un fichier Drive se lit à travers le script (voir `Store.fichierDuDrive`),
+ * pas par son adresse : déposé par l'application, il n'est partagé avec
+ * personne, et son adresse ne s'ouvre donc ni pour le client ni dans un cadre.
+ */
+function idFichierDrive(url) {
+  const trouve = urlSure(url).match(/^https:\/\/drive\.google\.com\/file\/d\/([-\w]+)/);
+  return trouve ? trouve[1] : '';
+}
+
+/** Formats qu'un navigateur sait afficher lui-même, depuis les octets du fichier. */
+function formatAffichableEnLigne(mimeType) {
+  const m = String(mimeType || '');
+  return m === 'application/pdf' || m.startsWith('image/') || m === 'text/plain';
+}
+
+/**
  * Vrai pour les adresses dont on a vérifié qu'elles s'affichent dans un cadre.
  *
- * Beaucoup de sites l'interdisent (Canva, WM Goodflag, les portails officiels
- * — vérifié par leurs en-têtes `x-frame-options`), et rien côté navigateur ne
- * permet de le détecter à l'usage : mieux vaut ne pas promettre un aperçu qui
- * restera vide que de laisser l'utilisateur devant un cadre blanc.
+ * Un fichier Drive en fait partie : il ne passe pas par son adresse mais par le
+ * script, qui en renvoie les octets. Les documents Google (Docs, Sheets, Slides)
+ * s'affichent par leur variante `/preview`, à condition d'être partagés.
+ *
+ * Tout le reste en est exclu : Canva, WM Goodflag et les portails officiels
+ * l'interdisent (vérifié par leurs en-têtes `x-frame-options`), et rien côté
+ * navigateur ne permet de le détecter à l'usage — mieux vaut ne pas promettre
+ * un aperçu que de laisser l'utilisateur devant un cadre blanc.
  */
 function probablementCadrable(url) {
   const s = urlSure(url);
-  return /^https:\/\/drive\.google\.com\/file\/d\//.test(s)
+  return !!idFichierDrive(s)
       || /^https:\/\/docs\.google\.com\/(document|spreadsheets|presentation)\/d\//.test(s);
 }
 
@@ -352,6 +375,31 @@ function lienTelechargement(url) {
 }
 
 /**
+ * Bouton de téléchargement d'un document.
+ *
+ * Un fichier du dossier Drive du projet passe par la passerelle : son adresse
+ * Drive échouerait pour le client, qui n'a aucun droit dessus. Toute autre
+ * adresse — document partagé par lien, ressource externe — reste un lien direct.
+ */
+function boutonTelechargement(url, classe = 'btn btn--sm', libelle = 'Télécharger') {
+  const s = urlSure(url);
+  if (!s) return '';
+
+  const fileId = idFichierDrive(s);
+  if (fileId && Store.ecritureActive()) {
+    return `<button class="${classe}" data-action="telecharger-fichier" data-fichier="${esc(fileId)}"
+               ${libelle ? '' : `aria-label="Télécharger"`} title="Télécharger">
+              <i class="fa-solid fa-download"></i>${libelle ? ` ${esc(libelle)}` : ''}
+            </button>`;
+  }
+
+  return `<a class="${classe}" href="${esc(lienTelechargement(s))}" download
+             ${libelle ? '' : `aria-label="Télécharger"`} title="Télécharger">
+            <i class="fa-solid fa-download"></i>${libelle ? ` ${esc(libelle)}` : ''}
+          </a>`;
+}
+
+/**
  * Pastilles de fichiers : nom cliquable pour l'aperçu, puis nouvel onglet.
  * `avecTelechargement` ajoute le téléchargement direct — utile pour un visuel
  * qu'on veut récupérer, pas seulement regarder.
@@ -365,11 +413,7 @@ function chipsFichiers(fichiers, avecTelechargement) {
             <button class="presta__piece-nom" data-action="apercu-lien"
                     data-url="${esc(lien)}" data-titre="${esc(d.nom)}"
                     title="Visualiser ${esc(d.nom)}">${esc(d.nom)}</button>
-            ${lien && avecTelechargement ? `
-              <a href="${esc(lienTelechargement(d.url))}" download
-                 aria-label="Télécharger ${esc(d.nom)}" title="Télécharger">
-                <i class="fa-solid fa-download"></i>
-              </a>` : ''}
+            ${lien && avecTelechargement ? boutonTelechargement(d.url, 'presta__piece-lien', '') : ''}
             ${lien ? `
               <a href="${esc(lien)}" target="_blank" rel="noopener noreferrer"
                  aria-label="Ouvrir ${esc(d.nom)} dans un nouvel onglet" title="Nouvel onglet">
@@ -411,11 +455,7 @@ function annexesPrestation(p) {
           : (secours
               ? boutonApercu(secours, p.livrable, 'Visualiser')
               : `<span class="text-xs text-muted"><i class="fa-solid fa-circle-info"></i> Aucun justificatif déposé</span>`)}
-        ${pieces.length
-          ? `<a class="btn btn--sm" href="${esc(lienTelechargement(pieces[0].url))}" download>
-               <i class="fa-solid fa-download"></i> Télécharger
-             </a>`
-          : ''}
+        ${pieces.length ? boutonTelechargement(pieces[0].url) : ''}
         ${expert ? `
           <button class="btn btn--sm" data-action="deposer-justificatif" data-id="${esc(p.id)}">
             <i class="fa-solid fa-cloud-arrow-up"></i> Déposer le justificatif
@@ -1204,10 +1244,7 @@ const Views = {
 
               ${fournie && lien
                 ? `${boutonApercu(lien, p.nom, 'Voir')}
-                   <a class="btn btn--ghost btn--sm" href="${esc(lienTelechargement(lien))}" download
-                      aria-label="Télécharger ${esc(p.nom)}" title="Télécharger">
-                     <i class="fa-solid fa-download"></i>
-                   </a>`
+                   ${boutonTelechargement(lien, 'btn btn--ghost btn--sm', '')}`
                 : ''}
               ${fournie && expert
                 ? `<button class="btn btn--ghost btn--sm" data-action="detacher-piece" data-piece="${esc(p.id)}" title="Détacher ce document"><i class="fa-solid fa-link-slash"></i></button>`
@@ -1291,9 +1328,7 @@ const Views = {
 
                 ${conventions.length
                   ? `${boutonApercu(conventions[0].url, conventions[0].nom, 'Visualiser')}
-                     <a class="btn btn--sm" href="${esc(lienTelechargement(conventions[0].url))}" download>
-                       <i class="fa-solid fa-download"></i> Télécharger
-                     </a>`
+                     ${boutonTelechargement(conventions[0].url)}`
                   : `<span class="text-xs text-muted"><i class="fa-solid fa-circle-info"></i> Aucune convention déposée</span>`}
 
                 ${expert ? `

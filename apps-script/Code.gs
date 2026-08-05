@@ -2806,6 +2806,12 @@ function doPost(e) {
       return json({ ok: true, fichier: televerserFichier(requete, acces) });
     }
 
+    // --- Lecture du contenu d'un fichier du dossier du projet ---
+    // Aucun verrou : lecture seule, rien n'est écrit.
+    if (requete.action === 'lireFichier') {
+      return json({ ok: true, fichier: lireFichierDuProjet(requete, acces) });
+    }
+
     // --- Écriture ---
     verrou.waitLock(25000);   // deux écritures simultanées décaleraient les lignes
 
@@ -3068,6 +3074,82 @@ function televerserFichier(requete, acces) {
     taille: formaterOctets(octets.length),
     dossier: cible.getName()
   };
+}
+
+/**
+ * Renvoie le contenu d'un fichier du dossier d'un projet, encodé en base64.
+ *
+ * Pourquoi passer par le script plutôt que par l'adresse Drive : un fichier
+ * déposé par l'application vit dans le Drive du compte propriétaire, sans
+ * partage. Le client n'y a donc aucun accès, et même l'expert échoue dans un
+ * cadre intégré — le navigateur y bloque les cookies de session Google, d'où le
+ * message « Impossible d'accéder à votre compte Google ». Servir les octets
+ * par ici règle les deux cas sans rendre aucun document public.
+ *
+ * @returns {{nom:string, mimeType:string, taille:string, contenu:string}}
+ */
+function lireFichierDuProjet(requete, acces) {
+  var projetId = String(requete.projetId || '');
+  if (!projetId) throw new Error('Projet non précisé.');
+
+  // Un jeton client ne lit que dans son propre dossier.
+  if (acces.role === 'client' && projetId !== acces.projetId) {
+    throw new Error('Lecture refusée : ce projet ne vous appartient pas.');
+  }
+
+  var fileId = String(requete.fileId || '');
+  if (!fileId) throw new Error('Fichier non précisé.');
+
+  var fichier;
+  try {
+    fichier = DriveApp.getFileById(fileId);
+  } catch (e) {
+    throw new Error('Fichier introuvable ou hors de portée du script.');
+  }
+
+  // Contrôle décisif : le script agit avec les droits du propriétaire, donc il
+  // pourrait lire n'importe quel fichier de son Drive. On exige que celui
+  // demandé descende bien du dossier du projet, sans quoi un jeton client
+  // deviendrait une clé de lecture sur tout le Drive.
+  if (!fichierDansDossier(fichier, dossierDuProjet(projetId).getId())) {
+    throw new Error('Lecture refusée : ce fichier ne relève pas de ce projet.');
+  }
+
+  var blob = fichier.getBlob();
+  var octets = blob.getBytes();
+  if (octets.length > TAILLE_MAX_OCTETS) {
+    throw new Error('« ' + fichier.getName() + ' » pèse ' + formaterOctets(octets.length)
+      + ', au-delà de la limite d\'affichage de ' + formaterOctets(TAILLE_MAX_OCTETS)
+      + '. Ouvrez-le directement dans le Drive.');
+  }
+
+  return {
+    nom: fichier.getName(),
+    mimeType: blob.getContentType() || 'application/octet-stream',
+    taille: formaterOctets(octets.length),
+    contenu: Utilities.base64Encode(octets)
+  };
+}
+
+/**
+ * Vrai si le fichier descend du dossier donné, en remontant ses parents.
+ * Trois niveaux suffisent : projet → sous-dossier de catégorie → fichier.
+ */
+function fichierDansDossier(fichier, idDossierAttendu) {
+  var aExplorer = [];
+  var it = fichier.getParents();
+  while (it.hasNext()) aExplorer.push({ dossier: it.next(), profondeur: 0 });
+
+  while (aExplorer.length) {
+    var courant = aExplorer.shift();
+    if (courant.dossier.getId() === idDossierAttendu) return true;
+    if (courant.profondeur >= 3) continue;
+    var parents = courant.dossier.getParents();
+    while (parents.hasNext()) {
+      aExplorer.push({ dossier: parents.next(), profondeur: courant.profondeur + 1 });
+    }
+  }
+  return false;
 }
 
 /** Dossier Drive d'un projet, d'après la colonne « drive_url » de l'onglet Projets. */

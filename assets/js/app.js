@@ -1472,6 +1472,35 @@ const App = {
       });
     },
 
+    /**
+     * Télécharge un fichier du dossier Drive du projet en passant par le script.
+     * L'adresse Drive directe échouerait pour le client, qui n'a aucun droit sur
+     * le fichier — ici, c'est la passerelle qui le lit et le navigateur qui
+     * l'enregistre depuis sa propre mémoire.
+     */
+    async 'telecharger-fichier'(el) {
+      const fileId = el.dataset.fichier;
+      if (!fileId) return;
+
+      const libelle = el.innerHTML;
+      el.disabled = true;
+      el.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Préparation…';
+
+      try {
+        const fichier = await Store.fichierDuDrive(fileId);
+        const a = document.createElement('a');
+        a.href = fichier.url;
+        a.download = fichier.nom;
+        a.click();
+        toast(`« ${fichier.nom} » téléchargé.`, 'ok');
+      } catch (err) {
+        toast(`Téléchargement impossible : ${err.message}`, 'danger');
+      } finally {
+        // L'élément peut avoir disparu si la modale a été fermée entre-temps.
+        if (el.isConnected) { el.disabled = false; el.innerHTML = libelle; }
+      }
+    },
+
     /** Aperçu d'un lien dans l'application, sans ouvrir d'onglet. */
     'apercu-lien'(el) {
       Modal.apercuLien({
@@ -2113,8 +2142,21 @@ const Modal = {
   apercuLien({ titre, url, soustitre }) {
     const direct = urlSure(url);
     if (!direct) { toast('Aucune adresse exploitable pour ce lien.', 'warn'); return; }
-    const integrable = lienIntegrable(direct);
 
+    // Un fichier déposé dans le Drive du projet n'est partagé avec personne :
+    // son adresse ne s'ouvre ni pour le client, ni dans un cadre. On en demande
+    // donc les octets au script, qui les lit avec les droits du propriétaire.
+    const fileId = idFichierDrive(direct);
+    if (fileId && Store.ecritureActive()) {
+      this._apercuFichierDrive({ titre, soustitre, direct, fileId });
+      return;
+    }
+
+    this._apercuAdresse({ titre, soustitre, direct });
+  },
+
+  /** Aperçu d'une adresse distante, affichée telle quelle dans un cadre. */
+  _apercuAdresse({ titre, soustitre, direct }) {
     this.open({
       titre: titre || 'Aperçu',
       soustitre,
@@ -2127,16 +2169,98 @@ const Modal = {
               <i class="fa-solid fa-arrow-up-right-from-square"></i> Nouvel onglet
             </a>
           </div>
-          <iframe class="viewer__cadre" src="${esc(integrable)}" title="${esc(titre || 'Aperçu du lien')}"
+          <iframe class="viewer__cadre" src="${esc(lienIntegrable(direct))}" title="${esc(titre || 'Aperçu du lien')}"
                   referrerpolicy="no-referrer" loading="eager"></iframe>
           <p class="viewer__aide">
             <i class="fa-solid fa-circle-info"></i>
-            Cadre vide ? Certains sites — portails officiels, dossiers Drive — interdisent
-            l'affichage intégré. Utilisez « Nouvel onglet ».
+            Cadre vide ? Un document Google doit être partagé en « Toute personne disposant du
+            lien » pour s'afficher ici. Sinon, utilisez « Nouvel onglet ».
           </p>
         </div>`,
       actions: `<button class="btn" data-action="fermer-modal">Fermer</button>`,
     });
+  },
+
+  /**
+   * Aperçu d'un fichier du dossier Drive du projet, servi par le script.
+   *
+   * Le contenu est affiché depuis la mémoire du navigateur : aucune connexion
+   * Google n'est requise, ni pour l'expert ni pour le client. Les formats que le
+   * navigateur ne sait pas rendre (Word, Excel, archives) sont proposés au
+   * téléchargement plutôt qu'affichés dans un cadre vide.
+   */
+  async _apercuFichierDrive({ titre, soustitre, direct, fileId }) {
+    this.open({
+      titre: titre || 'Aperçu',
+      soustitre,
+      viewer: true,
+      corps: `
+        <div class="viewer">
+          <div class="viewer__cadre viewer__cadre--attente" id="apercu-etat">
+            <i class="fa-solid fa-circle-notch fa-spin"></i>
+            <span>Chargement du fichier…</span>
+          </div>
+        </div>`,
+      actions: `<button class="btn" data-action="fermer-modal">Fermer</button>`,
+    });
+
+    let fichier;
+    try {
+      fichier = await Store.fichierDuDrive(fileId);
+    } catch (err) {
+      const etat = document.getElementById('apercu-etat');
+      if (!etat) return;   // modale fermée entre-temps
+      etat.classList.remove('viewer__cadre--attente');
+      etat.outerHTML = `
+        <div class="empty" style="border-style:solid">
+          <i class="fa-solid fa-triangle-exclamation text-warn"></i>
+          <div class="empty__title">Fichier illisible</div>
+          <div class="empty__text">
+            ${esc(err.message)}<br><br>
+            <a class="btn btn--sm" href="${esc(direct)}" target="_blank" rel="noopener noreferrer">
+              <i class="fa-brands fa-google-drive"></i> Ouvrir dans le Drive
+            </a>
+          </div>
+        </div>`;
+      return;
+    }
+
+    const etat = document.getElementById('apercu-etat');
+    if (!etat) return;   // modale fermée pendant le chargement
+
+    const barre = `
+      <div class="viewer__barre">
+        <span class="viewer__url mono" title="${esc(fichier.nom)}">${esc(fichier.nom)} · ${esc(fichier.taille)}</span>
+        <button class="btn btn--sm" data-action="telecharger-fichier" data-fichier="${esc(fileId)}">
+          <i class="fa-solid fa-download"></i> Télécharger
+        </button>
+        <a class="btn btn--sm" href="${esc(direct)}" target="_blank" rel="noopener noreferrer">
+          <i class="fa-brands fa-google-drive"></i> Drive
+        </a>
+      </div>`;
+
+    if (!formatAffichableEnLigne(fichier.mimeType)) {
+      etat.outerHTML = `
+        ${barre}
+        <div class="empty" style="border-style:solid">
+          <i class="fa-solid ${iconeFichier(formatFichier(fichier.nom))}"></i>
+          <div class="empty__title">Ce format ne s'affiche pas dans le navigateur</div>
+          <div class="empty__text">
+            ${esc(fichier.mimeType)} — récupérez le fichier avec « Télécharger »,
+            ou ouvrez-le dans le Drive.
+          </div>
+        </div>`;
+      return;
+    }
+
+    etat.outerHTML = `
+      ${barre}
+      <iframe class="viewer__cadre" src="${esc(fichier.url)}" title="${esc(fichier.nom)}"></iframe>
+      <p class="viewer__aide">
+        <i class="fa-solid fa-lock"></i>
+        Fichier lu par la passerelle ElodiaTech : il reste privé dans le Drive du projet,
+        aucune connexion Google n'est nécessaire pour le consulter ici.
+      </p>`;
   },
 
   /**

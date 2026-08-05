@@ -98,7 +98,8 @@ plateforme-projet-sante/
 │   ├── aller-retour.mjs          Test d'intégration de la synchronisation
 │   ├── isolation.mjs             Test du cloisonnement des accès
 │   ├── televersement.mjs         Test du dépôt de fichiers dans le Drive
-│   └── avancement.mjs            Test du calcul d'avancement (statut « Non nécessaire »)
+│   ├── avancement.mjs            Test du calcul d'avancement (statut « Non nécessaire »)
+│   └── lecture-fichier.mjs       Test du cloisonnement à la lecture des fichiers Drive
 ├── docs/
 │   └── connexion-google-sheets.md
 └── README.md
@@ -169,23 +170,29 @@ node tests/aller-retour.mjs
 node tests/isolation.mjs
 node tests/televersement.mjs
 node tests/avancement.mjs
+node tests/lecture-fichier.mjs
 ```
 
-Le premier vérifie l'intégration Google Sheets de bout en bout : les actions de l'interface
-produisent-elles les bonnes écritures, et une relecture rend-elle l'état attendu.
+**aller-retour** vérifie l'intégration Google Sheets de bout en bout : les actions de
+l'interface produisent-elles les bonnes écritures, et une relecture rend-elle l'état attendu.
 
-Le second éprouve le cloisonnement : un jeton client ne rapporte-t-il que son dossier,
+**isolation** éprouve le cloisonnement : un jeton client ne rapporte-t-il que son dossier,
 peut-il écrire ailleurs, une requête sans secret est-elle refusée.
 
-Le troisième couvre le dépôt de fichiers : le fichier atterrit-il dans le sous-dossier de sa
-catégorie, un jeton client peut-il déposer chez un autre, un refus est-il toujours motivé.
+**televersement** couvre le dépôt de fichiers : le fichier atterrit-il dans le sous-dossier de
+sa catégorie, un jeton client peut-il déposer chez un autre, un refus est-il toujours motivé.
 
-Le quatrième couvre le calcul d'avancement : une prestation « Non nécessaire » est-elle bien
-exclue du pourcentage, du ratio affiché et des alertes de retard, sans disparaître de la feuille
-de route.
+**avancement** couvre le calcul : une prestation « Non nécessaire » est-elle bien exclue du
+pourcentage, du ratio affiché et des alertes de retard, sans disparaître de la feuille de route.
 
-Les quatre s'exécutent sur un classeur — et pour le troisième un Drive — simulés en mémoire,
-avec le vrai code du script (le quatrième teste directement l'application, sans classeur).
+**lecture-fichier** éprouve le contrôle le plus sensible de la passerelle. Le script lit les
+fichiers avec les droits du compte propriétaire : il pourrait donc renvoyer n'importe quel
+fichier de ce Drive. Le test vérifie, sur un Drive simulé où cohabitent deux clients et un
+dossier privé, qu'un fichier n'est jamais servi s'il ne descend pas du dossier du projet
+demandé — pour l'expert comme pour le client.
+
+Tous s'exécutent sur un classeur — et pour deux d'entre eux un Drive — simulés en mémoire,
+avec le vrai code du script (`avancement` teste directement l'application, sans classeur).
 Aucune donnée réelle n'est touchée. À relancer après toute modification de `store.js` ou de
 `apps-script/Code.gs`.
 

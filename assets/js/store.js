@@ -945,6 +945,10 @@ const Store = {
   },
 
   deconnecter() {
+    // Les fichiers déjà lus quittent la mémoire avec la session : sans cela, le
+    // visiteur suivant sur ce navigateur pourrait rouvrir des pièces du
+    // précédent sans que le serveur ne soit jamais réinterrogé.
+    this.oublierFichiers();
     this.commit((s) => {
       s.session = { connecte: false, identifiant: '', cle: '', jeton: '', expire: 0 };
       s.role = 'client';
@@ -995,6 +999,10 @@ const Store = {
   async connecterAuServeur({ cle, jeton, identifiant }) {
     const url = this.state.reglages.webAppUrl;
     if (!url) throw new Error("Aucune source Google Sheets n'est configurée.");
+
+    // Une nouvelle session repart d'un cache vide : les fichiers de la
+    // précédente ne doivent pas être resservis sans contrôle du serveur.
+    this.oublierFichiers();
 
     const data = await SheetsAdapter.chargerTout(url, cle ? { cle } : { jeton });
 
@@ -1519,6 +1527,65 @@ const Store = {
       throw new Error("le script n'a pas renvoyé l'adresse du fichier");
     }
     return rep.fichier;
+  },
+
+  /**
+   * Récupère un fichier du dossier Drive du projet et le rend sous forme
+   * d'adresse `blob:` affichable sans aucune connexion Google.
+   *
+   * C'est le script qui lit le fichier, avec les droits du propriétaire, après
+   * avoir vérifié qu'il relève bien du projet demandé. Ni le client ni l'expert
+   * n'ont donc besoin d'un accès Drive, et rien n'est rendu public.
+   *
+   * Le résultat est mémorisé pour la durée de la session : rouvrir la même
+   * pièce ne refait pas monter les octets.
+   */
+  _cacheFichiers: new Map(),
+
+  async fichierDuDrive(fileId) {
+    if (!fileId) throw new Error('aucun identifiant de fichier');
+    if (this._cacheFichiers.has(fileId)) return this._cacheFichiers.get(fileId);
+
+    if (!this.ecritureActive()) {
+      throw new Error('la source Google Sheets doit être connectée');
+    }
+
+    const rep = await SheetsAdapter.envoyer(this.state.reglages.webAppUrl, {
+      action: 'lireFichier',
+      projetId: this.state.projetActifId,
+      fileId,
+      ...this.porteCles(),
+    });
+    if (!rep.fichier || !rep.fichier.contenu) {
+      throw new Error("le script n'a pas renvoyé le contenu du fichier");
+    }
+
+    // base64 → octets → Blob : le navigateur affiche ensuite le PDF ou l'image
+    // depuis sa propre mémoire, sans requête vers Google.
+    const binaire = atob(rep.fichier.contenu);
+    const octets = new Uint8Array(binaire.length);
+    for (let i = 0; i < binaire.length; i += 1) octets[i] = binaire.charCodeAt(i);
+
+    const blob = new Blob([octets], { type: rep.fichier.mimeType });
+    const resultat = {
+      nom: rep.fichier.nom,
+      mimeType: rep.fichier.mimeType,
+      taille: rep.fichier.taille,
+      url: URL.createObjectURL(blob),
+    };
+
+    this._cacheFichiers.set(fileId, resultat);
+    return resultat;
+  },
+
+  /**
+   * Vide le cache des fichiers et libère les adresses `blob:` associées.
+   * Appelé à chaque ouverture ou fermeture de session : les octets d'un dossier
+   * ne doivent pas survivre au départ de celui qui y avait droit.
+   */
+  oublierFichiers() {
+    this._cacheFichiers.forEach((f) => URL.revokeObjectURL(f.url));
+    this._cacheFichiers.clear();
   },
 
   /* ---- Équipe ElodiaTech ---- */
