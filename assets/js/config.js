@@ -268,6 +268,8 @@ const PRESTATIONS = [
     desc: "Conception du logo de la structure, propositions, itérations et livraison des fichiers sources.",
     livrable: 'Logo (SVG, PNG, sources)' },
   { id: 'P30', lot: 'LF', titre: 'Charte graphique', acteur: 'expert', jours: 5,
+    // Rien à signer, mais un document que le client doit pouvoir consulter.
+    lien: true,
     desc: "Palette, typographies, règles d'usage et gabarits documentaires de la structure.",
     livrable: 'Charte graphique (PDF)' },
   { id: 'P31', lot: 'LF', titre: 'Identité visuelle & déclinaisons', acteur: 'expert', jours: 5,

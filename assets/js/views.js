@@ -436,35 +436,67 @@ function chipsFichiers(fichiers, avecTelechargement) {
 function annexesPrestation(p) {
   const expert = Store.estExpert();
   const guichet = p.courriel ? GUICHETS_COURRIEL[p.courriel] : null;
-  if (!p.actes && !p.declinaisons && !guichet) return '';
+
+  // `actes` implique un lien consultable ; `lien` le porte sans acte à signer,
+  // pour un livrable qui se consulte simplement — une charte graphique, par exemple.
+  const porteLien = !!(p.actes || p.lien);
+  if (!porteLien && !p.declinaisons && !guichet) return '';
 
   const lignes = [];
 
-  if (p.actes) {
+  if (porteLien) {
     const pieces = piecesDePrestation(p.id);
-    // À défaut de pièce rattachée, le lien du livrable fait office de justificatif.
-    const secours = urlSure(p.etat.livrableUrl);
+    // Deux voies pour rendre le travail consultable : un fichier déposé, ou un
+    // lien saisi vers le document en ligne. Le fichier déposé a la préséance.
+    const lienSaisi = urlSure(p.etat.livrableUrl);
 
     lignes.push(`
       <div class="row-tight">
-        <button class="btn btn--sm" data-action="aller" data-route="signatures">
-          <i class="fa-solid fa-file-signature"></i> Actes à signer
-        </button>
+        ${p.actes ? `
+          <button class="btn btn--sm" data-action="aller" data-route="signatures">
+            <i class="fa-solid fa-file-signature"></i> Actes à signer
+          </button>` : ''}
         ${pieces.length
           ? boutonApercu(pieces[0].url, pieces[0].nom, 'Visualiser')
-          : (secours
-              ? boutonApercu(secours, p.livrable, 'Visualiser')
-              : `<span class="text-xs text-muted"><i class="fa-solid fa-circle-info"></i> Aucun justificatif déposé</span>`)}
+          : (lienSaisi
+              ? boutonApercu(lienSaisi, p.livrable, 'Visualiser')
+              : `<span class="text-xs text-muted">
+                   <i class="fa-solid fa-circle-info"></i>
+                   ${p.actes ? 'Aucun justificatif déposé' : 'Aucun document consultable'}
+                 </span>`)}
         ${pieces.length ? boutonTelechargement(pieces[0].url) : ''}
-        ${expert ? `
+        ${expert && p.actes ? `
           <button class="btn btn--sm" data-action="deposer-justificatif" data-id="${esc(p.id)}">
             <i class="fa-solid fa-cloud-arrow-up"></i> Déposer le justificatif
+          </button>` : ''}
+        ${expert && !p.actes ? `
+          <button class="btn btn--sm" data-action="deposer-justificatif" data-id="${esc(p.id)}">
+            <i class="fa-solid fa-cloud-arrow-up"></i> Déposer le fichier
           </button>` : ''}
       </div>`);
 
     // Le téléchargement direct vaut aussi pour un acte : une convention signée
     // se conserve, elle ne se regarde pas seulement.
     if (pieces.length) lignes.push(chipsFichiers(pieces, true));
+
+    if (expert) {
+      lignes.push(`
+        <div class="field">
+          <label class="field__label" for="lien-presta-${esc(p.id)}">
+            Lien du document en ligne${pieces.length ? ' — le fichier déposé ci-dessus reste prioritaire' : ''}
+          </label>
+          <div class="input-group">
+            <input type="url" id="lien-presta-${esc(p.id)}" class="input input--mono"
+                   data-lien-presta="${esc(p.id)}" value="${esc(p.etat.livrableUrl || '')}"
+                   placeholder="https://docs.google.com/… ou https://www.canva.com/…">
+            <button class="btn btn--sm" data-action="enregistrer-lien-prestation" data-id="${esc(p.id)}"
+                    title="Enregistrer le lien">
+              <i class="fa-solid fa-floppy-disk"></i>
+            </button>
+          </div>
+          <span class="field__hint">Visible par le client, qui pourra le consulter depuis son espace.</span>
+        </div>`);
+    }
   }
 
   // Livrables graphiques : posts réseaux sociaux, supports, déclinaisons.
@@ -1338,7 +1370,21 @@ const Views = {
                   </button>
                   <button class="btn btn--ghost btn--sm" data-action="cycle-partenaire" data-id="${esc(p.id)}" title="Faire évoluer le statut">
                     <i class="fa-solid fa-rotate"></i>
-                  </button>` : ''}
+                  </button>
+
+                  <div class="field" style="flex-basis:100%;margin-top:8px">
+                    <label class="field__label" for="lien-part-${esc(p.id)}">Lien de la convention en ligne</label>
+                    <div class="input-group">
+                      <input type="url" id="lien-part-${esc(p.id)}" class="input input--mono"
+                             data-lien-partenaire="${esc(p.id)}"
+                             value="${esc(conventions.length ? conventions[0].url : '')}"
+                             placeholder="https://docs.google.com/…">
+                      <button class="btn btn--sm" data-action="enregistrer-lien-partenaire" data-id="${esc(p.id)}"
+                              title="Enregistrer le lien">
+                        <i class="fa-solid fa-floppy-disk"></i>
+                      </button>
+                    </div>
+                  </div>` : ''}
               </div>`;
           }).join('')}
         </div>` : empty('Aucun partenaire', 'Les conventions apparaîtront ici au fil de leur signature.', 'fa-solid fa-handshake')}

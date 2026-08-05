@@ -1501,6 +1501,72 @@ const App = {
       }
     },
 
+    /**
+     * Enregistre le lien de consultation d'une prestation, dans `livrableUrl`.
+     * Vider le champ retire le lien plutôt que d'enregistrer une adresse vide.
+     */
+    'enregistrer-lien-prestation'(el) {
+      const id = el.dataset.id;
+      const champ = document.querySelector(`[data-lien-presta="${CSS.escape(id)}"]`);
+      if (!champ) return;
+
+      const url = champ.value.trim();
+      if (url && !urlSure(url)) {
+        toast('Adresse invalide : elle doit commencer par http:// ou https://', 'warn');
+        return;
+      }
+
+      Store.majPrestation(id, { livrableUrl: url });
+      toast(url ? 'Lien enregistré — le client peut le consulter.' : 'Lien retiré.', 'ok');
+    },
+
+    /**
+     * Enregistre le lien d'une convention de partenaire.
+     * Porté par l'entité documents sous « PART:<id> », comme le fichier déposé :
+     * le partenaire n'a donc pas de colonne supplémentaire, et les deux voies —
+     * fichier ou lien — se retrouvent au même endroit.
+     */
+    'enregistrer-lien-partenaire'(el) {
+      const partenaireId = el.dataset.id;
+      const partenaire = Store.liste('partenaires').find((p) => p.id === partenaireId);
+      if (!partenaire) return;
+
+      const champ = document.querySelector(`[data-lien-partenaire="${CSS.escape(partenaireId)}"]`);
+      if (!champ) return;
+
+      const url = champ.value.trim();
+      const existant = piecesDePrestation(`PART:${partenaireId}`)[0] || null;
+
+      if (!url) {
+        if (existant) {
+          Store.supprimerDocument(existant.id);
+          toast('Lien de la convention retiré.', 'ok');
+        }
+        return;
+      }
+
+      if (!urlSure(url)) {
+        toast('Adresse invalide : elle doit commencer par http:// ou https://', 'warn');
+        return;
+      }
+
+      const nom = `Convention — ${partenaire.nom}`;
+      if (existant) {
+        Store.majDocument(existant.id, { url, nom, type: formatFichier(url) || 'doc' });
+        toast('Lien de la convention mis à jour.', 'ok');
+        return;
+      }
+
+      Store.ajouterDocument({
+        nom, url, cat: 'Partenariats',
+        type: formatFichier(url) || 'doc',
+        taille: '—',
+        piece: `PART:${partenaireId}`,
+        auteur: Store.projet().consultant?.nom || '',
+      });
+      toast('Lien de la convention enregistré.', 'ok');
+    },
+
     /** Aperçu d'un lien dans l'application, sans ouvrir d'onglet. */
     'apercu-lien'(el) {
       Modal.apercuLien({
