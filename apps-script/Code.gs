@@ -2828,7 +2828,12 @@ function doPost(e) {
     return json({ ok: true, resultat: resultat });
 
   } catch (err) {
-    return json({ erreur: String(err && err.message ? err.message : err) });
+    // `code` distingue un refus attendu, sur lequel l'application peut se
+    // rabattre, d'une véritable panne à signaler à l'utilisateur.
+    return json({
+      erreur: String(err && err.message ? err.message : err),
+      code: (err && err.code) ? String(err.code) : ''
+    });
   } finally {
     try { verrou.releaseLock(); } catch (ignore) { /* verrou jamais pris */ }
   }
@@ -3112,7 +3117,13 @@ function lireFichierDuProjet(requete, acces) {
   // demandé descende bien du dossier du projet, sans quoi un jeton client
   // deviendrait une clé de lecture sur tout le Drive.
   if (!fichierDansDossier(fichier, dossierDuProjet(projetId).getId())) {
-    throw new Error('Lecture refusée : ce fichier ne relève pas de ce projet.');
+    // Cas légitime et fréquent : un lien collé vers un fichier qui vit ailleurs
+    // dans le Drive. Le code permet à l'application de basculer sur l'affichage
+    // par adresse, qui fonctionne si le fichier est partagé — au lieu de
+    // présenter un échec à l'utilisateur.
+    var refus = new Error('Ce fichier ne relève pas du dossier de ce projet.');
+    refus.code = 'hors-projet';
+    throw refus;
   }
 
   var blob = fichier.getBlob();

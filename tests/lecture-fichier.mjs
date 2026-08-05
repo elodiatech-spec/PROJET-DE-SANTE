@@ -199,6 +199,20 @@ const fileAutreClient = lire({ projetId: s.projetDuJeton, fileId: 'f-autre', jet
 verifier('client : ne peut pas lire le fichier d\'un autre client via son propre projet',
   !!fileAutreClient.erreur && !fileAutreClient.fichier, fileAutreClient.erreur);
 
+// Le refus « hors projet » porte un code : l'application s'en sert pour basculer
+// sur l'affichage par adresse Drive, qui convient à un lien collé vers un
+// fichier partagé vivant ailleurs. Sans ce code, elle devrait deviner en lisant
+// le message — et casserait au premier reformulage.
+verifier('le refus hors-projet est identifiable par son code, pas par son message',
+  filePrive.code === 'hors-projet', filePrive.code);
+verifier('un refus de cloisonnement client garde ce même code',
+  fileAutreClient.code === 'hors-projet', fileAutreClient.code);
+
+const jetonInvalide = lire({ projetId: s.projetDuJeton, fileId: 'f-client', jeton: 'jetonquinexistepasdutout' });
+verifier('un refus d\'authentification ne porte pas le code hors-projet',
+  !!jetonInvalide.erreur && jetonInvalide.code !== 'hors-projet',
+  `${jetonInvalide.erreur} / code « ${jetonInvalide.code} »`);
+
 const croise = lire({ projetId: s.projetAutre, fileId: 'f-autre', jeton: JETON_CLIENT });
 verifier('client : ne peut pas lire en désignant le projet d\'un autre',
   !!croise.erreur && !croise.fichier, croise.erreur);

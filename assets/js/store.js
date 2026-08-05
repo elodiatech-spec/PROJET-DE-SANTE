@@ -415,7 +415,14 @@ const SheetsAdapter = {
     }
     if (!rep.ok) throw new Error(`réponse ${rep.status} du script Google`);
     const data = await rep.json();
-    if (data && data.erreur) throw new Error(data.erreur);
+    if (data && data.erreur) {
+      const err = new Error(data.erreur);
+      // Le script distingue un refus attendu — sur lequel l'appelant peut se
+      // rabattre — d'une panne à signaler. Sans ce report, l'appelant devrait
+      // deviner en lisant le message, ce qui casserait au premier reformulage.
+      if (data.code) err.code = data.code;
+      throw err;
+    }
     return data;
   },
 };

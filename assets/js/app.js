@@ -1494,7 +1494,14 @@ const App = {
         a.click();
         toast(`« ${fichier.nom} » téléchargé.`, 'ok');
       } catch (err) {
-        toast(`Téléchargement impossible : ${err.message}`, 'danger');
+        // Fichier hors du dossier du projet : la passerelle refuse d'en sortir,
+        // mais l'adresse de téléchargement Drive fonctionne s'il est partagé.
+        if (err.code === 'hors-projet') {
+          window.open(`https://drive.google.com/uc?export=download&id=${encodeURIComponent(fileId)}`,
+            '_blank', 'noopener');
+        } else {
+          toast(`Téléchargement impossible : ${err.message}`, 'danger');
+        }
       } finally {
         // L'élément peut avoir disparu si la modale a été fermée entre-temps.
         if (el.isConnected) { el.disabled = false; el.innerHTML = libelle; }
@@ -2274,8 +2281,17 @@ const Modal = {
     try {
       fichier = await Store.fichierDuDrive(fileId);
     } catch (err) {
+      if (!document.getElementById('apercu-etat')) return;   // modale fermée entre-temps
+
+      // Un fichier qui vit ailleurs dans le Drive — cas d'un lien collé — n'est
+      // pas une erreur : la passerelle refuse d'en sortir, mais son adresse
+      // s'affiche très bien s'il est partagé. On bascule sur cette voie.
+      if (err.code === 'hors-projet') {
+        this._apercuAdresse({ titre, soustitre, direct });
+        return;
+      }
+
       const etat = document.getElementById('apercu-etat');
-      if (!etat) return;   // modale fermée entre-temps
       etat.classList.remove('viewer__cadre--attente');
       etat.outerHTML = `
         <div class="empty" style="border-style:solid">
