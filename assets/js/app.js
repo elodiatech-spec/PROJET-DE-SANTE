@@ -2246,8 +2246,9 @@ const Modal = {
                   referrerpolicy="no-referrer" loading="eager"></iframe>
           <p class="viewer__aide">
             <i class="fa-solid fa-circle-info"></i>
-            Cadre vide ? Un document Google doit être partagé en « Toute personne disposant du
-            lien » pour s'afficher ici. Sinon, utilisez « Nouvel onglet ».
+            Cadre vide ? Un document Google hors du dossier Drive du projet dépend du moteur
+            d'affichage de Google, qui reste souvent muet dans un cadre. Rangez-le dans le
+            dossier du projet pour un affichage fiable, ou utilisez « Nouvel onglet ».
           </p>
         </div>`,
       actions: `<button class="btn" data-action="fermer-modal">Fermer</button>`,

@@ -124,6 +124,22 @@ poids du fichier, puisque le contenu transite par la passerelle.
 > une clé de lecture sur l'ensemble du Drive. Il est vérifié par `node tests/lecture-fichier.mjs`,
 > pour l'expert comme pour le client.
 
+### Documents Google : les ranger dans le dossier du projet
+
+Un Google Docs, Sheets ou Slides **rangé dans le dossier Drive du projet** s'affiche dans
+l'application de façon fiable : la passerelle l'exporte en PDF, que tous les navigateurs savent
+rendre. Le client le consulte sans compte Google et sans partage, comme les fichiers déposés.
+
+Un document rangé **ailleurs** dans le Drive ne peut pas passer par la passerelle : le contrôle
+de rattachement au projet l'écarte, et c'est voulu. L'application se rabat alors sur l'adresse
+`/preview` de Google — qui dépend du moteur d'affichage `kix`, lequel exige une session Google
+et **reste souvent muet dans un cadre intégré**. D'où des pages blanches, même pour un document
+correctement partagé en lecture.
+
+**Règle pratique : un document que le client doit consulter dans l'application se range dans le
+dossier Drive du projet.** Déplacer un Google Docs dans ce dossier suffit — son adresse ne
+change pas, les liens déjà collés continuent de fonctionner.
+
 ### Pourquoi un lien Google Docs peut ne pas s'afficher dans l'application
 
 Le projet de santé, les chapitres et les comptes rendus acceptent un lien Google Docs, lu dans

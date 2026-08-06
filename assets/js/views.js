@@ -124,16 +124,25 @@ function lienIntegrable(url) {
 }
 
 /**
- * Identifiant Drive d'un fichier, extrait de son adresse. Chaîne vide si
- * l'adresse ne désigne pas un fichier Drive.
+ * Identifiant Drive d'un document, extrait de son adresse — qu'il s'agisse d'un
+ * fichier déposé (`drive.google.com/file/d/…`) ou d'un document Google
+ * (`docs.google.com/document/d/…`, Sheets, Slides). Chaîne vide sinon.
  *
- * Un fichier Drive se lit à travers le script (voir `Store.fichierDuDrive`),
- * pas par son adresse : déposé par l'application, il n'est partagé avec
- * personne, et son adresse ne s'ouvre donc ni pour le client ni dans un cadre.
+ * Tous se lisent à travers le script (voir `Store.fichierDuDrive`) plutôt que
+ * par leur adresse. Deux raisons distinctes :
+ *   — un fichier déposé n'est partagé avec personne, son adresse ne s'ouvre
+ *     donc ni pour le client ni dans un cadre ;
+ *   — un document Google est rendu par le moteur `kix` côté navigateur, qui
+ *     exige une session Google et reste muet dans un cadre intégré. Le script
+ *     l'exporte en PDF, qui s'affiche partout sans rien exiger.
  */
 function idFichierDrive(url) {
-  const trouve = urlSure(url).match(/^https:\/\/drive\.google\.com\/file\/d\/([-\w]+)/);
-  return trouve ? trouve[1] : '';
+  const s = urlSure(url);
+  const fichier = s.match(/^https:\/\/drive\.google\.com\/file\/d\/([-\w]+)/);
+  if (fichier) return fichier[1];
+
+  const docGoogle = s.match(/^https:\/\/docs\.google\.com\/(?:document|spreadsheets|presentation)\/d\/([-\w]+)/);
+  return docGoogle ? docGoogle[1] : '';
 }
 
 /** Formats qu'un navigateur sait afficher lui-même, depuis les octets du fichier. */
@@ -155,9 +164,9 @@ function formatAffichableEnLigne(mimeType) {
  * un aperçu que de laisser l'utilisateur devant un cadre blanc.
  */
 function probablementCadrable(url) {
-  const s = urlSure(url);
-  return !!idFichierDrive(s)
-      || /^https:\/\/docs\.google\.com\/(document|spreadsheets|presentation)\/d\//.test(s);
+  // `idFichierDrive` couvre désormais les deux familles : fichiers déposés et
+  // documents Google. Toutes deux passent par la passerelle.
+  return !!idFichierDrive(url);
 }
 
 /**

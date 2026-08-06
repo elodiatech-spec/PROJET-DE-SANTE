@@ -3126,7 +3126,15 @@ function lireFichierDuProjet(requete, acces) {
     throw refus;
   }
 
-  var blob = fichier.getBlob();
+  // Un Google Docs, Sheets ou Slides n'a pas de contenu binaire propre : il
+  // s'exporte. En PDF, il s'affiche dans n'importe quel navigateur, sans
+  // dépendre du moteur de rendu de Google — qui exige une session et reste
+  // muet dans un cadre intégré, d'où les pages blanches constatées.
+  var natif = String(fichier.getMimeType() || '');
+  var blob = (natif.indexOf('application/vnd.google-apps.') === 0)
+    ? fichier.getAs('application/pdf')
+    : fichier.getBlob();
+
   var octets = blob.getBytes();
   if (octets.length > TAILLE_MAX_OCTETS) {
     throw new Error('« ' + fichier.getName() + ' » pèse ' + formaterOctets(octets.length)
@@ -3134,8 +3142,15 @@ function lireFichierDuProjet(requete, acces) {
       + '. Ouvrez-le directement dans le Drive.');
   }
 
+  // Un document exporté prend l'extension de son export : sans elle, le
+  // téléchargement produirait un fichier que le système ne saurait pas ouvrir.
+  var nomRendu = fichier.getName();
+  if (natif.indexOf('application/vnd.google-apps.') === 0 && !/\.pdf$/i.test(nomRendu)) {
+    nomRendu += '.pdf';
+  }
+
   return {
-    nom: fichier.getName(),
+    nom: nomRendu,
     mimeType: blob.getContentType() || 'application/octet-stream',
     taille: formaterOctets(octets.length),
     contenu: Utilities.base64Encode(octets)

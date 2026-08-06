@@ -70,10 +70,21 @@ function construireDrive() {
     fichiers[id] = {
       getId: () => id,
       getName: () => nom,
+      getMimeType: () => mime,
       getBlob: () => ({
         getBytes: () => Buffer.from(contenu),
         getContentType: () => mime,
       }),
+      // Un Google Docs n'a pas de contenu binaire : seul `getAs` en produit un.
+      getAs: (cible) => {
+        if (mime.indexOf('application/vnd.google-apps.') !== 0) {
+          throw new Error(`getAs inattendu sur ${mime}`);
+        }
+        return {
+          getBytes: () => Buffer.from(`%PDF export de ${nom}`),
+          getContentType: () => cible,
+        };
+      },
       getParents: () => {
         let i = 0;
         return { hasNext: () => i < parents.length, next: () => dossiers[parents[i++]] };
@@ -91,6 +102,10 @@ function construireDrive() {
   creerFichier('f-client', 'Statuts.pdf', ['sous-juridique'], 'contenu des statuts', 'application/pdf');
   creerFichier('f-autre', 'Convention.pdf', [ID_DOSSIER_AUTRE], 'contenu autre client', 'application/pdf');
   creerFichier('f-prive', 'Bilan_ElodiaTech.pdf', ['prive'], 'contenu confidentiel', 'application/pdf');
+
+  // Un Google Docs rangé dans le dossier du projet : doit être exporté en PDF.
+  creerFichier('f-gdoc', 'Reglement de fonctionnement', ['sous-juridique'],
+    '(contenu non binaire)', 'application/vnd.google-apps.document');
 
   return { dossiers, fichiers };
 }
@@ -189,6 +204,21 @@ verifier('le nom est renvoyé', parExpert.fichier?.nom === 'Statuts.pdf', parExp
 const parClient = lire({ projetId: s.projetDuJeton, fileId: 'f-client', jeton: JETON_CLIENT });
 verifier('client : lit un fichier de son propre dossier — sans aucun droit Drive',
   !parClient.erreur && !!parClient.fichier, parClient.erreur);
+
+/* --- Document Google : exporté en PDF, pas servi tel quel --- */
+const gdoc = lire({ projetId: s.projetDuJeton, fileId: 'f-gdoc', cle: CODE_EXPERT });
+verifier('un Google Docs du dossier du projet est lisible', !gdoc.erreur && !!gdoc.fichier, gdoc.erreur);
+verifier('il est converti en PDF, non servi dans son format natif',
+  gdoc.fichier?.mimeType === 'application/pdf', gdoc.fichier?.mimeType);
+verifier('son nom reçoit l\'extension .pdf, sans quoi le téléchargement serait inouvrable',
+  gdoc.fichier?.nom === 'Reglement de fonctionnement.pdf', gdoc.fichier?.nom);
+verifier('le contenu exporté est bien renvoyé',
+  gdoc.fichier?.contenu === Buffer.from('%PDF export de Reglement de fonctionnement').toString('base64'),
+  gdoc.fichier?.contenu?.slice(0, 30));
+
+const gdocClient = lire({ projetId: s.projetDuJeton, fileId: 'f-gdoc', jeton: JETON_CLIENT });
+verifier('le client lit ce Google Docs sans compte Google ni partage',
+  !gdocClient.erreur && gdocClient.fichier?.mimeType === 'application/pdf', gdocClient.erreur);
 
 /* --- Le contrôle décisif : cloisonnement du Drive --- */
 const filePrive = lire({ projetId: s.projetDuJeton, fileId: 'f-prive', jeton: JETON_CLIENT });
