@@ -173,6 +173,10 @@ var ONGLETS = {
     "projet_id", "chapitre", "statut", "lot_id", "doc_id", "doc_url", "version",
     "maj_le", "message", "fil", "consignes", "a_completer"
   ],
+  "Actes": [
+    "projet_id", "acte", "statut", "lot_id", "doc_id", "doc_url", "version",
+    "maj_le", "message", "consignes", "a_completer"
+  ],
   "Prestataires": [
     "id",
     "nom",
@@ -2345,6 +2349,7 @@ function onOpen() {
     .addItem('Créer les dossiers Drive manquants', 'creerTousLesDossiers')
     .addSeparator()
     .addItem('Définir ma clé Claude (rédaction du projet de santé)', 'definirCleClaude')
+    .addItem('Créer les dossiers des sources officielles des actes', 'creerDossiersSourcesActes')
     .addToUi();
 }
 
@@ -2762,6 +2767,7 @@ function construireDonnees(projetIdUnique) {
     // Rédaction avec Claude : brouillons et consignes restent chez l'expert.
     // Le client ne lit un chapitre qu'une fois validé, par ses documents.
     donnees.redaction = donneesRedaction_(projets);
+    donnees.actes = donneesActes_(projets);
     donnees.experts = lireOnglet('Experts').map(function (r) {
       return {
         id: r.id, nom: r.nom || '', fonction: r.fonction || '',
@@ -2837,6 +2843,10 @@ var ECRITURE = {
   // le reste de la ligne est écrit par le script au fil de la rédaction.
   redaction: {
     onglet: 'Redaction', cles: ['projet_id', 'chapitre'],
+    champs: { statut: 'statut' }
+  },
+  actes: {
+    onglet: 'Actes', cles: ['projet_id', 'acte'],
     champs: { statut: 'statut' }
   },
   documents: {
@@ -2955,6 +2965,10 @@ function doPost(e) {
       return json({ ok: true, redaction: requete.action === 'redigerChapitre'
         ? redigerChapitre(requete) : suivreRedaction(requete) });
     }
+    if (requete.action === 'redigerActe' || requete.action === 'suivreActe') {
+      if (acces.role !== 'expert') throw new Error('Réservé à l\'expert.');
+      return json({ ok: true, acte: requete.action === 'redigerActe' ? redigerActe(requete) : suivreActe(requete) });
+    }
 
     // --- Écriture ---
     verrou.waitLock(25000);   // deux écritures simultanées décaleraient les lignes
@@ -3021,12 +3035,12 @@ function executerEcriture(op, acces) {
     payload = questionnaireValide(cles[1], payload, acces);
   }
 
-  if (op.entite === 'redaction') {
-    // Valider un chapitre rédigé, ou revenir sur cette validation : rien d'autre.
+  if (op.entite === 'redaction' || op.entite === 'actes') {
+    // Valider un chapitre ou un document rédigé, ou revenir sur cette validation : rien d'autre.
     if (op.action === 'delete') throw new Error('Suppression non autorisée.');
-    var ligneR = ligneRedaction_(cles[0], cles[1]);
+    var ligneR = op.entite === 'redaction' ? ligneRedaction_(cles[0], cles[1]) : ligneActe_(cles[0], cles[1]);
     if (!ligneR || ['pret', 'valide'].indexOf(String(ligneR.statut)) === -1) {
-      throw new Error('Ce chapitre n\'a pas de version rédigée à valider.');
+      throw new Error('Ce document n\'a pas de version rédigée à valider.');
     }
     if (['pret', 'valide'].indexOf(String(payload.statut)) === -1) throw new Error('Statut non permis.');
     payload = { statut: payload.statut };
@@ -3567,13 +3581,15 @@ function messageErreurClaude_(texte) {
 
 /* ------------------------------------------------- Onglet Redaction ---- */
 
-function feuilleRedaction_() {
+function feuilleRedaction_() { return assurerOnglet_('Redaction'); }
+
+/** Onglet créé à la première demande : aucune manipulation préalable de la feuille. */
+function assurerOnglet_(nom) {
   var classeur = SpreadsheetApp.getActive();
-  var feuille = classeur.getSheetByName('Redaction');
+  var feuille = classeur.getSheetByName(nom);
   if (feuille) return feuille;
-  // Créé à la première demande : aucune manipulation préalable de la feuille.
-  feuille = classeur.insertSheet('Redaction');
-  feuille.getRange(1, 1, 1, REDACTION_COLONNES.length).setValues([REDACTION_COLONNES])
+  feuille = classeur.insertSheet(nom);
+  feuille.getRange(1, 1, 1, ONGLETS[nom].length).setValues([ONGLETS[nom]])
     .setFontWeight('bold').setFontColor('#ffffff').setBackground('#1e95cb');
   feuille.setFrozenRows(1);
   return feuille;
@@ -3651,28 +3667,8 @@ function redigerChapitre(requete) {
     .map(function (r) { return String(r.doc_id); });
   var sources = sourcesDuDossier_(dossier, dejaRediges);
 
-  var corps = {
-    requests: [{
-      custom_id: (projetId + '-' + chapitre.id).replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 64),
-      params: {
-        model: PropertiesService.getScriptProperties().getProperty(PROPRIETE_MODELE_CLAUDE) || MODELE_CLAUDE_DEFAUT,
-        max_tokens: JETONS_SORTIE_MAX,
-        output_config: { effort: 'high' },
-        system: consigneSysteme_(),
-        messages: [{ role: 'user', content: contenuDemande_(projetId, projet, chapitre, consignes, sources) }]
-      }
-    }]
-  };
-
-  var rep = UrlFetchApp.fetch(URL_LOTS_CLAUDE, {
-    method: 'post', contentType: 'application/json', headers: entetesClaude_(cle),
-    payload: JSON.stringify(corps), muteHttpExceptions: true
-  });
-  if (rep.getResponseCode() !== 200) {
-    throw new Error('Claude a refusé la demande (' + rep.getResponseCode() + ') : '
-      + messageErreurClaude_(rep.getContentText()));
-  }
-  var lot = JSON.parse(rep.getContentText());
+  var lot = envoyerLotClaude_(cle, projetId + '-' + chapitre.id, consigneSysteme_(),
+    contenuDemande_(projetId, projet, chapitre, consignes, sources));
 
   var noms = sources.lus.map(function (s) { return s.nom; });
   ecrireRedaction_(projetId, chapitre.id, {
@@ -3730,34 +3726,8 @@ function methodeChapitre_(methode) {
 
 /** Contenu du message : pièces du dossier, puis la demande elle-même. */
 function contenuDemande_(projetId, donnees, chapitre, consignes, sources) {
-  var blocs = [];
   var p = donnees.projets[0];
-
-  var fiche = {
-    nom: p.nom, type: p.type, commune: p.ville, departement: p.departement, adresse: p.adresse,
-    modele_juridique: p.modeleJuridique, nombre_professionnels: p.equipe, surface_m2: p.surface,
-    date_de_debut_accompagnement: p.dateDebut, referent_client: p.client && p.client.nom,
-    fonction_referent: p.client && p.client.fonction
-  };
-  blocs.push(texteBloc_('<fiche_projet>\n' + JSON.stringify(fiche, null, 1) + '\n</fiche_projet>'));
-
-  var q = (donnees.questionnaire || {})[projetId] || {};
-  var reponses = {};
-  Object.keys(q).forEach(function (rub) { reponses[rub] = q[rub].donnees; });
-  blocs.push(texteBloc_('<informations_client>\n'
-    + (Object.keys(reponses).length ? JSON.stringify(reponses, null, 1) : 'Aucune information renseignée par le client.')
-    + '\n</informations_client>'));
-
-  var partenaires = (donnees.partenaires || {})[projetId] || [];
-  var financements = (donnees.financements || {})[projetId] || [];
-  blocs.push(texteBloc_('<partenaires>\n' + JSON.stringify(partenaires) + '\n</partenaires>\n'
-    + '<financements>\n' + JSON.stringify(financements) + '\n</financements>'));
-
-  var fil = lireOnglet('Redaction')
-    .filter(function (r) { return String(r.projet_id) === projetId && r.chapitre !== chapitre.id && r.fil; })
-    .map(function (r) { return '[' + r.chapitre + '] ' + r.fil; });
-  blocs.push(texteBloc_('<fil_conducteur>\n'
-    + (fil.length ? fil.join('\n') : 'Aucun chapitre rédigé auparavant.') + '\n</fil_conducteur>'));
+  var blocs = blocsDossier_(projetId, donnees, chapitre.id);
 
   if (chapitre.modele) {
     var modele = '';
@@ -3791,6 +3761,97 @@ function contenuDemande_(projetId, donnees, chapitre, consignes, sources) {
 }
 
 function texteBloc_(t) { return { type: 'text', text: t }; }
+
+/** Soumet une demande unique en lot ; renvoie le lot créé ({id, …}). */
+function envoyerLotClaude_(cle, identifiant, systeme, contenu) {
+  var corps = {
+    requests: [{
+      custom_id: String(identifiant).replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 64),
+      params: {
+        model: PropertiesService.getScriptProperties().getProperty(PROPRIETE_MODELE_CLAUDE) || MODELE_CLAUDE_DEFAUT,
+        max_tokens: JETONS_SORTIE_MAX,
+        output_config: { effort: 'high' },
+        system: systeme,
+        messages: [{ role: 'user', content: contenu }]
+      }
+    }]
+  };
+  var rep = UrlFetchApp.fetch(URL_LOTS_CLAUDE, {
+    method: 'post', contentType: 'application/json', headers: entetesClaude_(cle),
+    payload: JSON.stringify(corps), muteHttpExceptions: true
+  });
+  if (rep.getResponseCode() !== 200) {
+    throw new Error('Claude a refusé la demande (' + rep.getResponseCode() + ') : '
+      + messageErreurClaude_(rep.getContentText()));
+  }
+  return JSON.parse(rep.getContentText());
+}
+
+/**
+ * État d'un lot : { etat: 'en_cours' } tant qu'il tourne, puis
+ * { etat: 'erreur', motif } ou { etat: 'ok', texte, tronque }.
+ */
+function resultatLotClaude_(cle, lotId) {
+  var rep = UrlFetchApp.fetch(URL_LOTS_CLAUDE + '/' + encodeURIComponent(String(lotId)), {
+    headers: entetesClaude_(cle), muteHttpExceptions: true
+  });
+  if (rep.getResponseCode() !== 200) {
+    throw new Error('Suivi impossible (' + rep.getResponseCode() + ') : ' + messageErreurClaude_(rep.getContentText()));
+  }
+  var lot = JSON.parse(rep.getContentText());
+  if (lot.processing_status !== 'ended') return { etat: 'en_cours' };
+
+  var resultats = UrlFetchApp.fetch(lot.results_url, { headers: entetesClaude_(cle), muteHttpExceptions: true });
+  var resultat = null;
+  String(resultats.getContentText('UTF-8')).split('\n').forEach(function (l) {
+    if (!l.trim()) return;
+    try { resultat = JSON.parse(l).result; } catch (e) { /* ligne illisible */ }
+  });
+  if (!resultat || resultat.type !== 'succeeded') {
+    return { etat: 'erreur', motif: !resultat ? 'aucun résultat renvoyé'
+      : resultat.type === 'errored' ? ('erreur : ' + ((resultat.error && resultat.error.error && resultat.error.error.message)
+          || (resultat.error && resultat.error.message) || 'inconnue'))
+      : resultat.type === 'expired' ? 'délai dépassé' : 'demande annulée' };
+  }
+  return {
+    etat: 'ok',
+    texte: (resultat.message.content || []).filter(function (b) { return b.type === 'text'; })
+      .map(function (b) { return b.text; }).join('\n'),
+    tronque: resultat.message.stop_reason === 'max_tokens'
+  };
+}
+
+/** Fiche, informations du client, partenaires, financements, fil conducteur. */
+function blocsDossier_(projetId, donnees, chapitreExclu) {
+  var blocs = [];
+  var p = donnees.projets[0];
+  var fiche = {
+    nom: p.nom, type: p.type, commune: p.ville, departement: p.departement, adresse: p.adresse,
+    modele_juridique: p.modeleJuridique, nombre_professionnels: p.equipe, surface_m2: p.surface,
+    date_de_debut_accompagnement: p.dateDebut, referent_client: p.client && p.client.nom,
+    fonction_referent: p.client && p.client.fonction
+  };
+  blocs.push(texteBloc_('<fiche_projet>\n' + JSON.stringify(fiche, null, 1) + '\n</fiche_projet>'));
+
+  var q = (donnees.questionnaire || {})[projetId] || {};
+  var reponses = {};
+  Object.keys(q).forEach(function (rub) { reponses[rub] = q[rub].donnees; });
+  blocs.push(texteBloc_('<informations_client>\n'
+    + (Object.keys(reponses).length ? JSON.stringify(reponses, null, 1) : 'Aucune information renseignée par le client.')
+    + '\n</informations_client>'));
+
+  var partenaires = (donnees.partenaires || {})[projetId] || [];
+  var financements = (donnees.financements || {})[projetId] || [];
+  blocs.push(texteBloc_('<partenaires>\n' + JSON.stringify(partenaires) + '\n</partenaires>\n'
+    + '<financements>\n' + JSON.stringify(financements) + '\n</financements>'));
+
+  var fil = lireOnglet('Redaction')
+    .filter(function (r) { return String(r.projet_id) === projetId && r.chapitre !== chapitreExclu && r.fil; })
+    .map(function (r) { return '[' + r.chapitre + '] ' + r.fil; });
+  blocs.push(texteBloc_('<fil_conducteur>\n'
+    + (fil.length ? fil.join('\n') : 'Aucun chapitre rédigé auparavant.') + '\n</fil_conducteur>'));
+  return blocs;
+}
 
 /**
  * Fichiers du dossier « 01 — Projet de santé » et de ses sous-dossiers
@@ -3877,40 +3938,18 @@ function suivreRedaction(requete) {
     if (!ligne) throw new Error('Aucune rédaction demandée pour ce chapitre.');
     if (String(ligne.statut) !== 'en_cours') return etatRedaction_(projetId, chapitre.id);
 
-    var cle = cleClaude_();
-    var rep = UrlFetchApp.fetch(URL_LOTS_CLAUDE + '/' + encodeURIComponent(String(ligne.lot_id)), {
-      headers: entetesClaude_(cle), muteHttpExceptions: true
-    });
-    if (rep.getResponseCode() !== 200) {
-      throw new Error('Suivi impossible (' + rep.getResponseCode() + ') : ' + messageErreurClaude_(rep.getContentText()));
-    }
-    var lot = JSON.parse(rep.getContentText());
-    if (lot.processing_status !== 'ended') return etatRedaction_(projetId, chapitre.id);
-
-    var resultats = UrlFetchApp.fetch(lot.results_url, { headers: entetesClaude_(cle), muteHttpExceptions: true });
-    var resultat = null;
-    String(resultats.getContentText('UTF-8')).split('\n').forEach(function (l) {
-      if (!l.trim()) return;
-      try { resultat = JSON.parse(l).result; } catch (e) { /* ligne illisible */ }
-    });
-
-    if (!resultat || resultat.type !== 'succeeded') {
-      var motif = !resultat ? 'aucun résultat renvoyé'
-        : resultat.type === 'errored' ? ('erreur : ' + ((resultat.error && resultat.error.error && resultat.error.error.message)
-            || (resultat.error && resultat.error.message) || 'inconnue'))
-        : resultat.type === 'expired' ? 'délai dépassé' : 'demande annulée';
-      ecrireRedaction_(projetId, chapitre.id, { statut: 'erreur', message: 'Rédaction non aboutie : ' + motif + '.' });
+    var res = resultatLotClaude_(cleClaude_(), ligne.lot_id);
+    if (res.etat === 'en_cours') return etatRedaction_(projetId, chapitre.id);
+    if (res.etat === 'erreur') {
+      ecrireRedaction_(projetId, chapitre.id, { statut: 'erreur', message: 'Rédaction non aboutie : ' + res.motif + '.' });
       return etatRedaction_(projetId, chapitre.id);
     }
 
-    var texte = (resultat.message.content || [])
-      .filter(function (b) { return b.type === 'text'; })
-      .map(function (b) { return b.text; }).join('\n');
+    var texte = res.texte;
     var html = extraireBloc_(texte, 'chapitre');
     if (!html) {
       ecrireRedaction_(projetId, chapitre.id, { statut: 'erreur',
-        message: 'Réponse inattendue : le chapitre est absent'
-          + (resultat.message.stop_reason === 'max_tokens' ? ' (longueur maximale atteinte)' : '') + '.' });
+        message: 'Réponse inattendue : le chapitre est absent' + (res.tronque ? ' (longueur maximale atteinte)' : '') + '.' });
       return etatRedaction_(projetId, chapitre.id);
     }
 
@@ -3928,7 +3967,7 @@ function suivreRedaction(requete) {
       fil: String(fil).slice(0, 20000),
       a_completer: extraireBloc_(texte, 'a_completer').trim().slice(0, 20000),
       message: 'Version ' + version + ' rédigée'
-        + (resultat.message.stop_reason === 'max_tokens' ? ' — attention : longueur maximale atteinte, fin du chapitre à vérifier' : '') + '.'
+        + (res.tronque ? ' — attention : longueur maximale atteinte, fin du chapitre à vérifier' : '') + '.'
     });
     return etatRedaction_(projetId, chapitre.id);
   } finally {
@@ -4003,7 +4042,7 @@ function mettreEnForme_(html, chapitre, projet) {
     });
   });
 
-  var bandeau = '<p style="' + police + 'font-size:9pt;color:#5b6b7b;">Projet de santé — '
+  var bandeau = '<p style="' + police + 'font-size:9pt;color:#5b6b7b;">' + (chapitre.bandeau || 'Projet de santé') + ' — '
     + echapperHtml_(projet.nom || '') + (projet.ville ? ' (' + echapperHtml_(projet.ville) + ')' : '')
     + ' · ElodiaTech — Ingénierie médicale · document de travail rédigé le '
     + Utilities.formatDate(new Date(), 'America/Martinique', 'dd/MM/yyyy') + '</p>';
@@ -4069,6 +4108,329 @@ function creerGoogleDoc_(nom, html, dossierId) {
   }
   var f = JSON.parse(rep.getContentText());
   return { id: f.id, url: f.webViewLink || ('https://docs.google.com/document/d/' + f.id + '/edit') };
+}
+
+/* ==========================================================================
+   ACTES ET DOCUMENTS GÉNÉRÉS — réservés à l'expert
+
+   Les documents qu'un modèle type ne suffit pas à produire — statuts,
+   charte, règlement de fonctionnement, conventions, contrats — sont rédigés
+   par Claude sur le même circuit que les chapitres : le dossier du projet,
+   les chapitres déjà rédigés et les sources officielles déposées dans
+   « Sources officielles des actes / <document> » partent en lot ; le
+   résultat devient un Google Docs dans le dossier de sa catégorie.
+   Validé, il rejoint les documents du client et, s'il se signe, ses
+   actes à signer.
+   ========================================================================== */
+
+var DOSSIER_SOURCES_ACTES = 'Sources officielles des actes';
+var DOSSIER_SOURCES_COMMUN = '00 — Commun à tous les actes';
+var CHAPITRES_MAX_CARACTERES = 40000;   // par chapitre joint
+var CHAPITRES_TOTAL_CARACTERES = 160000;
+
+/**
+ * Documents générés. `types` / `modeles` : à quelles structures ils
+ * s'appliquent (même règle que les prestations). `categorie` : dossier Drive.
+ * `signature` : 'renforcee' (DocuSeal, WM Goodflag en secours), 'interne'
+ * ou 'aucune'. `prestation` : étape soumise au client à la validation.
+ * `plan` : ce que le document doit contenir, sans chiffre ni nom inventé.
+ */
+var ACTES_GENERES = [
+  { id: 'statuts_sisa', titre: 'Statuts de la SISA', types: ['MSP'], modeles: ['sisa'], categorie: 'Juridique',
+    signature: 'renforcee', prestation: 'P17', nature: 'acte juridique',
+    plan: "Statuts d'une société interprofessionnelle de soins ambulatoires (articles L.4041-1 et suivants du Code de la santé publique) : "
+        + "forme, dénomination, objet (mise en commun de moyens, exercice en commun des activités de coordination thérapeutique, d'éducation "
+        + "thérapeutique et de coopération entre professionnels), siège, durée, apports et capital, associés (au moins deux médecins et un "
+        + "auxiliaire médical), parts sociales, gérance, décisions collectives, activités exercées en commun et rémunérations perçues à ce "
+        + "titre, répartition des résultats, cession de parts, retrait et exclusion, dissolution. Prendre pour base le modèle de statuts de "
+        + "SISA de l'Ordre des médecins s'il est joint." },
+  { id: 'ri_sisa', titre: 'Règlement intérieur de la SISA', types: ['MSP'], modeles: ['sisa'], categorie: 'Juridique',
+    signature: 'interne', prestation: 'P17', nature: 'acte juridique',
+    plan: "Règlement intérieur complétant les statuts : organisation de la gérance et des réunions, répartition des rémunérations perçues "
+        + "en commun entre associés, engagements de chacun dans les missions du projet de santé, utilisation des moyens communs, "
+        + "procédure d'entrée et de sortie, règlement des différends." },
+  { id: 'statuts_assoc', titre: "Statuts de l'association gestionnaire", types: ['CDS'], modeles: ['assoc'], categorie: 'Juridique',
+    signature: 'renforcee', prestation: 'P17', nature: 'acte juridique',
+    plan: "Statuts d'une association déclarée (loi du 1er juillet 1901) gestionnaire d'un centre de santé (article L.6323-1 du Code de la "
+        + "santé publique) : dénomination, objet (création et gestion du centre de santé, missions du projet de santé), siège, durée, "
+        + "membres et cotisations, assemblée générale, conseil d'administration, bureau, ressources, gestion désintéressée, "
+        + "absence de partage des excédents, dissolution." },
+  { id: 'pacte_associes', titre: "Pacte d'associés", types: ['MSP'], categorie: 'Juridique',
+    signature: 'renforcee', prestation: '', nature: 'acte juridique',
+    plan: "Pacte entre les associés de la SISA : engagements de présence et de participation aux missions coordonnées, préemption et "
+        + "agrément des cessions, sortie d'un associé, non-concurrence dans le respect de la déontologie, résolution des conflits." },
+  { id: 'charte_interne', titre: 'Charte interne de la maison de santé', types: ['MSP'], categorie: 'Juridique',
+    signature: 'interne', prestation: 'P35', nature: 'document de fonctionnement',
+    plan: "Charte interne : valeurs et engagements de l'équipe, organisation du travail pluriprofessionnel (réunions, protocoles, "
+        + "système d'information partagé), accueil des patients et continuité des soins, instances et prise de décision, accueil des "
+        + "nouveaux professionnels et des étudiants, en cohérence avec les axes du projet de santé." },
+  { id: 'reglement_fonctionnement', titre: 'Règlement de fonctionnement du centre de santé', types: ['CDS'], categorie: 'Juridique',
+    signature: 'interne', prestation: 'P35', nature: 'document de fonctionnement',
+    plan: "Règlement de fonctionnement suivant les rubriques du modèle annexé à l'arrêté du 27 février 2018 relatif aux centres de santé "
+        + "(s'il est joint, en reprendre exactement l'ordre et les intitulés) : organisation du centre, horaires et accueil, droits et "
+        + "obligations des usagers, hygiène et sécurité, gestion des dossiers et des informations, organisation des urgences et de la "
+        + "continuité des soins." },
+  { id: 'organigramme', titre: 'Organigramme et gouvernance', categorie: 'Projet',
+    signature: 'aucune', prestation: '', nature: 'document de pilotage',
+    plan: "Organigramme fonctionnel : instances de gouvernance, coordination, professionnels par pôle, fonctions support, "
+        + "référents des axes du projet de santé. Présenter un tableau des rôles et une liste hiérarchisée, à partir du chapitre 2." },
+  { id: 'adhesion_ancs', titre: "Demande d'adhésion à l'accord national des centres de santé", types: ['CDS'], categorie: 'Finances',
+    signature: 'renforcee', prestation: 'P41', nature: 'courrier',
+    plan: "Courrier du représentant légal à la caisse d'assurance maladie (CGSS dans les départements d'outre-mer) demandant l'adhésion "
+        + "du centre de santé à l'accord national du 28 août 2025 (article 8 : demande par tout moyen donnant date certaine à sa "
+        + "réception), avec la liste des pièces jointes (récépissé de l'engagement de conformité, numéro FINESS, projet de santé, "
+        + "règlement de fonctionnement)." },
+  { id: 'budget', titre: 'Budget prévisionnel et plan de financement', categorie: 'Finances',
+    signature: 'aucune', prestation: '', nature: 'document financier',
+    plan: "Budget prévisionnel sur trois ans (charges, produits, résultat) et plan de financement de l'investissement (emplois, "
+        + "ressources), en tableaux. Seuls les montants figurant dans les pièces sont repris ; chaque autre montant est [à compléter]. "
+        + "Ajouter les hypothèses retenues." },
+  { id: 'convention_ccas', titre: 'Convention avec le CCAS ou la collectivité', categorie: 'Partenariats',
+    signature: 'interne', prestation: 'P23', nature: 'convention',
+    plan: "Convention de partenariat : parties, objet, engagements réciproques (repérage et orientation des publics, accès aux droits, "
+        + "actions communes du projet de santé), coordination et référents, échanges d'informations dans le respect du secret "
+        + "professionnel, durée, évaluation, résiliation." },
+  { id: 'convention_hopital', titre: "Convention avec l'établissement de santé", categorie: 'Partenariats',
+    signature: 'renforcee', prestation: 'P24', nature: 'convention',
+    plan: "Convention de partenariat avec l'établissement hospitalier ou le groupement hospitalier de territoire : parcours entrée et "
+        + "sortie d'hospitalisation, avis spécialisés et télé-expertise, consultations avancées, échanges d'informations, durée, évaluation." },
+  { id: 'convention_domicile', titre: 'Convention avec un service à domicile (HAD, SSIAD)', categorie: 'Partenariats',
+    signature: 'interne', prestation: 'P24', nature: 'convention',
+    plan: "Convention de coordination avec l'HAD, le SSIAD ou le service à domicile : critères d'orientation, coordination des "
+        + "interventions, transmissions, gestion des situations complexes, durée, évaluation." },
+  { id: 'convention_plateau', titre: 'Convention avec un laboratoire, une pharmacie ou un cabinet de radiologie', categorie: 'Partenariats',
+    signature: 'interne', prestation: 'P24', nature: 'convention',
+    plan: "Convention de coopération : délais de rendu et circuits des résultats, protocoles partagés, sécurité des échanges, "
+        + "respect du libre choix du patient, durée, évaluation." },
+  { id: 'convention_cpts', titre: 'Convention avec la CPTS', categorie: 'Partenariats',
+    signature: 'interne', prestation: 'P24', nature: 'convention',
+    plan: "Convention avec la communauté professionnelle territoriale de santé : contribution de la structure aux missions de la CPTS "
+        + "(accès aux soins, parcours, prévention, crises sanitaires), réciprocité, référents, durée, évaluation." },
+  { id: 'convention_prevention', titre: 'Convention de partenariat de prévention', categorie: 'Partenariats',
+    signature: 'interne', prestation: 'P25', nature: 'convention',
+    plan: "Convention avec un acteur de prévention ou une association de patients : actions communes rattachées aux axes du projet "
+        + "de santé, publics visés, moyens, indicateurs, durée, évaluation." },
+  { id: 'contrat_medecin', titre: 'Contrat de travail du médecin salarié', types: ['CDS'], categorie: 'Équipe',
+    signature: 'renforcee', prestation: '', nature: 'contrat de travail',
+    plan: "Contrat de travail d'un médecin salarié du centre de santé : fonctions, indépendance professionnelle et respect de la "
+        + "déontologie, participation aux missions du projet de santé, durée et temps de travail, rémunération [à compléter], "
+        + "permanence et continuité des soins, formation continue, communication du contrat au conseil départemental de l'Ordre "
+        + "(article L.4113-9 du Code de la santé publique)." },
+  { id: 'contrats_salaries', titre: 'Contrat de travail d\'un professionnel de santé salarié', types: ['CDS'], categorie: 'Équipe',
+    signature: 'renforcee', prestation: '', nature: 'contrat de travail',
+    plan: "Contrat de travail d'un professionnel de santé non médecin (profession à préciser dans les consignes) : fonctions, "
+        + "autonomie professionnelle, participation au projet de santé, durée, temps de travail, rémunération [à compléter], formation." },
+  { id: 'mise_a_disposition', titre: 'Convention de mise à disposition des locaux', categorie: 'Immobilier',
+    signature: 'renforcee', prestation: '', nature: 'convention',
+    plan: "Convention de mise à disposition des locaux par la collectivité ou le propriétaire : désignation des locaux, destination, "
+        + "durée, contrepartie [à compléter], charges, entretien, assurances, accessibilité et sécurité ERP, résiliation." },
+  { id: 'cahier_locaux', titre: 'Cahier des charges des locaux', categorie: 'Immobilier',
+    signature: 'aucune', prestation: '', nature: 'document technique',
+    plan: "Cahier des charges des locaux à partir des informations du client : surfaces et pièces par fonction, flux patients, "
+        + "accessibilité, normes ERP, confidentialité, salles de soins et de télémédecine, stockage, déchets d'activités de soins, "
+        + "sécurité, réseau informatique, évolutivité." },
+  { id: 'rapport_annuel', titre: "Rapport annuel d'activité", categorie: 'Projet',
+    signature: 'interne', prestation: '', nature: 'document de pilotage',
+    plan: "Rapport annuel : activité, réalisation des actions par axe du projet de santé, indicateurs (uniquement ceux des pièces), "
+        + "fonctionnement de l'équipe, partenariats, difficultés et perspectives." },
+  { id: 'avenant_pds', titre: 'Avenant au projet de santé', categorie: 'Projet',
+    signature: 'interne', prestation: '', nature: 'avenant',
+    plan: "Avenant d'actualisation du projet de santé : objet, éléments modifiés (équipe, organisation, axes, actions), justification, "
+        + "date d'effet, signatures de l'équipe. Préciser les modifications dans les consignes." }
+];
+
+function acteGenere_(id) {
+  for (var i = 0; i < ACTES_GENERES.length; i++) if (ACTES_GENERES[i].id === id) return ACTES_GENERES[i];
+  return null;
+}
+
+function ligneActe_(projetId, acte) {
+  return lireOnglet('Actes').filter(function (r) {
+    return String(r.projet_id) === projetId && String(r.acte) === acte;
+  })[0] || null;
+}
+
+function ecrireActe_(projetId, acte, champs) {
+  assurerOnglet_('Actes');
+  var conf = { onglet: 'Actes', cles: ['projet_id', 'acte'], champs: {} };
+  ONGLETS['Actes'].slice(2).forEach(function (c) { conf.champs[c] = c; });
+  champs.maj_le = new Date().toISOString();
+  ecrireLigne(conf, [projetId, acte], champs);
+}
+
+function donneesActes_(projets) {
+  var parProjet = {};
+  projets.forEach(function (p) { parProjet[p.id] = {}; });
+  lireOnglet('Actes').forEach(function (r) {
+    var groupe = parProjet[r.projet_id];
+    if (!groupe || !acteGenere_(String(r.acte))) return;
+    groupe[r.acte] = {
+      statut: String(r.statut || ''), docId: String(r.doc_id || ''), docUrl: String(r.doc_url || ''),
+      version: Number(r.version) || 0, majLe: String(r.maj_le || ''), message: String(r.message || ''),
+      consignes: String(r.consignes || ''), aCompleter: String(r.a_completer || ''),
+      enCours: String(r.statut) === 'en_cours'
+    };
+  });
+  return parProjet;
+}
+
+function etatActe_(projetId, acteId) {
+  return donneesActes_([{ id: projetId }])[projetId][acteId] || null;
+}
+
+/** Dossier des sources officielles d'un acte (créé au besoin, vide). */
+function dossierSourcesActe_(titre) {
+  var racine = DriveApp.getFolderById(DOSSIER_RACINE);
+  var trouver = function (parent, nom) {
+    var it = parent.getFoldersByName(nom);
+    return it.hasNext() ? it.next() : parent.createFolder(nom);
+  };
+  return trouver(trouver(racine, DOSSIER_SOURCES_ACTES), titre);
+}
+
+/** Menu : crée les dossiers où déposer les sources officielles de chaque acte. */
+function creerDossiersSourcesActes() {
+  dossierSourcesActe_(DOSSIER_SOURCES_COMMUN);
+  ACTES_GENERES.forEach(function (a) { dossierSourcesActe_(a.titre); });
+  SpreadsheetApp.getUi().alert('Dossiers prêts',
+    'Dossier « ' + DOSSIER_SOURCES_ACTES + ' » : un sous-dossier par document. Déposez-y les modèles officiels '
+    + '(PDF, Google Docs) que Claude doit suivre.', SpreadsheetApp.getUi().ButtonSet.OK);
+}
+
+/** Texte des chapitres rédigés, validés d'abord : les actes en reprennent les choix. */
+function blocChapitres_(projetId) {
+  var lignes = lireOnglet('Redaction').filter(function (r) {
+    return String(r.projet_id) === projetId && r.doc_id && ['pret', 'valide'].indexOf(String(r.statut)) !== -1;
+  }).sort(function (a, b) { return (String(b.statut) === 'valide') - (String(a.statut) === 'valide'); });
+  var total = 0, parties = [];
+  lignes.forEach(function (r) {
+    if (total >= CHAPITRES_TOTAL_CARACTERES) return;
+    var texte = '';
+    try { texte = exporterTexteGoogle_(String(r.doc_id), 'text/plain'); } catch (e) { return; }
+    texte = texte.slice(0, Math.min(CHAPITRES_MAX_CARACTERES, CHAPITRES_TOTAL_CARACTERES - total));
+    total += texte.length;
+    parties.push('[' + r.chapitre + (String(r.statut) === 'valide' ? ', validé' : ', brouillon') + ']\n' + texte);
+  });
+  return texteBloc_('<projet_de_sante>\n' + (parties.length ? parties.join('\n\n')
+    : 'Aucun chapitre du projet de santé n\'est encore rédigé : signaler [à compléter] tout choix qui en dépend.')
+    + '\n</projet_de_sante>');
+}
+
+function consigneSystemeActe_() {
+  return [
+    "Tu es juriste et consultant expert de l'exercice coordonné (maisons de santé pluriprofessionnelles, centres de santé), au sein du cabinet ElodiaTech.",
+    "Tu rédiges un PROJET de document pour la structure décrite dans les pièces. Il sera relu par l'expert et, pour un acte juridique, par un professionnel du droit, avant toute signature.",
+    "",
+    "RÈGLES ABSOLUES",
+    "- N'invente jamais un nom, une date, un montant, un capital, une adresse, un numéro (SIRET, FINESS, RPPS) ou un engagement : reprends-les des pièces, sinon écris [à compléter : <élément précis>].",
+    "- Les choix d'organisation, les axes et les missions viennent du projet de santé et du fil conducteur fournis ; ne les modifie pas.",
+    "- Une source officielle jointe (modèle de l'Ordre, arrêté, accord conventionnel) fait référence : suis sa structure et ses intitulés.",
+    "- Ne cite que des références légales dont tu es certain ; sinon décris la règle sans numéro d'article, ou ajoute [à confirmer].",
+    "- Style juridique et administratif précis, sans formule commerciale. Articles numérotés pour un acte ; clauses numérotées pour une convention ou un contrat.",
+    "",
+    "FORMAT DE SORTIE — respecte-le exactement",
+    "1. Le document en HTML simple entre <document> et </document>. Balises permises : h1 (titre, une seule fois), h2, h3, h4, p, ul, ol, li, strong, em, table, thead, tbody, tr, th, td, blockquote, br. Aucun attribut de style.",
+    "   Termine par un bloc de signatures en tableau (nom, qualité, date, signature) quand le document se signe.",
+    "2. Entre <a_completer> et </a_completer>, la liste en texte simple, une ligne par élément, des informations à obtenir et des points à faire vérifier.",
+    "Rien d'autre en dehors de ces deux blocs."
+  ].join('\n');
+}
+
+/** Action « redigerActe » (expert). */
+function redigerActe(requete) {
+  var projetId = String(requete.projetId || '');
+  var acte = acteGenere_(String(requete.acte || ''));
+  if (!projetId) throw new Error('Projet non précisé.');
+  if (!acte) throw new Error('Document inconnu.');
+
+  var donnees = construireDonnees(projetId);
+  if (!donnees.projets.length) throw new Error('Projet introuvable.');
+  var p = donnees.projets[0];
+  var cle = cleClaude_();
+  var consignes = String(requete.consignes || '').slice(0, 8000);
+
+  var existant = ligneActe_(projetId, acte.id);
+  if (existant && String(existant.statut) === 'en_cours') throw new Error('Une rédaction de ce document est déjà en cours.');
+
+  // Sources : modèles officiels de cet acte, sources communes, pièces du
+  // dossier du client dans la catégorie (hors documents déjà générés).
+  var generes = lireOnglet('Actes').filter(function (r) { return r.doc_id; }).map(function (r) { return String(r.doc_id); });
+  var officielles = sourcesDuDossier_(dossierSourcesActe_(acte.titre), generes);
+  var communes = sourcesDuDossier_(dossierSourcesActe_(DOSSIER_SOURCES_COMMUN), generes);
+  var client = sourcesDuDossier_(sousDossierCategorie(dossierDuProjet(projetId), acte.categorie), generes);
+
+  var blocs = blocsDossier_(projetId, donnees, '');
+  blocs.push(blocChapitres_(projetId));
+  var joindre = function (liste, etiquette) {
+    liste.lus.forEach(function (s) {
+      blocs.push(texteBloc_('<' + etiquette + ' nom="' + s.nom.replace(/"/g, "'") + '">'));
+      blocs.push(s.bloc);
+    });
+  };
+  joindre(officielles, 'source_officielle');
+  joindre(communes, 'source_officielle');
+  joindre(client, 'piece_du_dossier');
+  if (!officielles.lus.length && !communes.lus.length) {
+    blocs.push(texteBloc_('<sources_officielles>Aucune source officielle déposée pour ce document.</sources_officielles>'));
+  }
+  blocs.push(texteBloc_([
+    'Rédige maintenant le projet de document suivant pour « ' + p.nom + ' » (' + (p.type === 'CDS' ? 'centre de santé' : 'maison de santé pluriprofessionnelle') + ').',
+    '', 'DOCUMENT : ' + acte.titre + ' (' + acte.nature + ')', '', 'CONTENU ATTENDU :', acte.plan,
+    consignes ? '\nCONSIGNES PARTICULIÈRES DE L\'EXPERT :\n' + consignes : ''
+  ].join('\n')));
+
+  var lot = envoyerLotClaude_(cle, projetId + '-' + acte.id, consigneSystemeActe_(), blocs);
+  var noms = officielles.lus.concat(communes.lus, client.lus).map(function (s) { return s.nom; });
+  var ignores = officielles.ignores.concat(communes.ignores, client.ignores);
+  ecrireActe_(projetId, acte.id, {
+    statut: 'en_cours', lot_id: lot.id, consignes: consignes,
+    message: 'Rédaction demandée. Sources jointes : ' + (noms.length ? noms.join(', ') : 'aucune')
+      + (ignores.length ? '. Non lues : ' + ignores.join(', ') : '') + '.'
+  });
+  return { statut: 'en_cours', lotId: lot.id, sources: noms, ignores: ignores };
+}
+
+/** Action « suivreActe » (expert) : crée le Google Docs quand le lot est terminé. */
+function suivreActe(requete) {
+  var projetId = String(requete.projetId || '');
+  var acte = acteGenere_(String(requete.acte || ''));
+  if (!projetId || !acte) throw new Error('Projet ou document non précisé.');
+
+  var verrou = LockService.getScriptLock();
+  verrou.waitLock(60000);
+  try {
+    var ligne = ligneActe_(projetId, acte.id);
+    if (!ligne) throw new Error('Aucune rédaction demandée pour ce document.');
+    if (String(ligne.statut) !== 'en_cours') return etatActe_(projetId, acte.id);
+
+    var res = resultatLotClaude_(cleClaude_(), ligne.lot_id);
+    if (res.etat === 'en_cours') return etatActe_(projetId, acte.id);
+    if (res.etat === 'erreur') {
+      ecrireActe_(projetId, acte.id, { statut: 'erreur', message: 'Rédaction non aboutie : ' + res.motif + '.' });
+      return etatActe_(projetId, acte.id);
+    }
+    var html = extraireBloc_(res.texte, 'document');
+    if (!html) {
+      ecrireActe_(projetId, acte.id, { statut: 'erreur',
+        message: 'Réponse inattendue : le document est absent' + (res.tronque ? ' (longueur maximale atteinte)' : '') + '.' });
+      return etatActe_(projetId, acte.id);
+    }
+
+    var projet = lireOnglet('Projets').filter(function (r) { return r.id === projetId; })[0] || {};
+    var version = (Number(ligne.version) || 0) + 1;
+    var dossier = sousDossierCategorie(dossierDuProjet(projetId), acte.categorie);
+    var doc = creerGoogleDoc_(acte.titre + ' — ' + (projet.nom || projetId) + ' — projet v' + version,
+      mettreEnForme_(html, { titre: acte.titre, bandeau: 'Projet de document' }, projet), dossier.getId());
+
+    ecrireActe_(projetId, acte.id, {
+      statut: 'pret', doc_id: doc.id, doc_url: doc.url, version: version,
+      a_completer: extraireBloc_(res.texte, 'a_completer').trim().slice(0, 20000),
+      message: 'Version ' + version + ' rédigée' + (res.tronque ? ' — attention : longueur maximale atteinte, fin à vérifier' : '') + '.'
+    });
+    return etatActe_(projetId, acte.id);
+  } finally {
+    try { verrou.releaseLock(); } catch (ignore) { /* rien */ }
+  }
 }
 
 /* ==========================================================================

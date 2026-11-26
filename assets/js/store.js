@@ -357,6 +357,8 @@ function demoDonnees() {
     // Rédaction avec Claude : { [projetId]: { [chapitre]: { statut, docUrl, … } } }.
     // Réservée à l'expert ; vide en démonstration, la rédaction exigeant le script.
     redaction: {},
+    // Actes générés avec Claude : même forme, réservés à l'expert.
+    actes: {},
     // Informations fournies par le client (module « Informations du projet »).
     // Une entrée par rubrique de QUESTIONNAIRE : { donnees, majLe, majPar }.
     questionnaire: {
@@ -496,7 +498,7 @@ const Store = {
       });
       ['projets', 'documents', 'signatures', 'messages', 'evenements',
        'comptesRendus', 'financements', 'partenaires', 'pieces', 'prestataires',
-       'intervenantsImmo', 'questionnaire', 'redaction'].forEach((cle) => {
+       'intervenantsImmo', 'questionnaire', 'redaction', 'actes'].forEach((cle) => {
         if (sauvegarde[cle]) this.state[cle] = sauvegarde[cle];
       });
     }
@@ -547,7 +549,7 @@ const Store = {
       if (this.state.reglages.source === 'sheets') {
         ['projets', 'documents', 'signatures', 'messages', 'evenements',
          'comptesRendus', 'financements', 'partenaires', 'pieces',
-         'experts', 'prestataires', 'questionnaire', 'redaction'].forEach((cle) => {
+         'experts', 'prestataires', 'questionnaire', 'redaction', 'actes'].forEach((cle) => {
           delete aEnregistrer[cle];
         });
       }
@@ -1917,6 +1919,96 @@ const Store = {
         + `${(r.ignores || []).length ? `. Non lues : ${r.ignores.join(', ')}` : ''}.`,
     }, projetId);
     return r;
+  },
+
+  /* ---- Actes et documents générés (expert) ---- */
+
+  /** Actes applicables au projet, selon son type et sa forme juridique. */
+  actesApplicables(projetId) {
+    const p = this.projet(projetId);
+    if (!p) return [];
+    return ACTES_GENERES.filter((a) => prestationApplicable(a, p.type, p.modeleJuridique));
+  },
+
+  actesProjet(projetId) {
+    return (this.state.actes || {})[projetId || this.state.projetActifId] || {};
+  },
+
+  _majActe(acte, etat, projetId) {
+    const id = projetId || this.state.projetActifId;
+    this.commit((s) => {
+      if (!s.actes) s.actes = {};
+      if (!s.actes[id]) s.actes[id] = {};
+      s.actes[id][acte] = { ...(s.actes[id][acte] || {}), ...etat };
+    });
+  },
+
+  async redigerActe(acte, consignes) {
+    if (!this.ecritureActive()) throw new Error('la source Google Sheets doit être connectée');
+    const projetId = this.state.projetActifId;
+    const rep = await SheetsAdapter.envoyer(this.state.reglages.webAppUrl, {
+      action: 'redigerActe', projetId, acte, consignes: consignes || '', ...this.porteCles(),
+    });
+    const r = rep.acte || {};
+    this._majActe(acte, {
+      statut: 'en_cours', enCours: true, consignes: consignes || '', majLe: new Date().toISOString(),
+      message: `Rédaction demandée. Sources jointes : ${(r.sources || []).join(', ') || 'aucune'}`
+        + `${(r.ignores || []).length ? `. Non lues : ${r.ignores.join(', ')}` : ''}.`,
+    }, projetId);
+    return r;
+  },
+
+  async suivreActe(acte, projetId) {
+    const id = projetId || this.state.projetActifId;
+    const rep = await SheetsAdapter.envoyer(this.state.reglages.webAppUrl, {
+      action: 'suivreActe', projetId: id, acte, ...this.porteCles(),
+    });
+    if (rep.acte) this._majActe(acte, rep.acte, id);
+    return rep.acte;
+  },
+
+  /**
+   * Valide un acte : il rejoint les documents du client ; s'il se signe, il
+   * entre dans ses actes à signer, en attente du lien de signature ; l'étape
+   * correspondante de la feuille de route lui est soumise.
+   */
+  validerActe(acteId) {
+    const etat = this.actesProjet()[acteId];
+    const def = ACTES_GENERES.find((a) => a.id === acteId);
+    if (!etat?.docUrl || !def) return;
+
+    this._majActe(acteId, { statut: 'valide' });
+    this.pousser('actes', `${this.state.projetActifId}:${acteId}`, { statut: 'valide' });
+
+    const existant = this.liste('documents').find((d) => d.piece === `ACTE-${acteId}`);
+    if (existant) this.majDocument(existant.id, { nom: def.titre, url: etat.docUrl, date: Dates.today() });
+    else this.ajouterDocument({ nom: def.titre, url: etat.docUrl, cat: def.categorie, type: 'doc', auteur: 'ElodiaTech', piece: `ACTE-${acteId}` });
+
+    if (def.signature !== 'aucune') {
+      const mode = SIGNATURES_ACTE[def.signature];
+      const desc = `${mode.label}${mode.detail ? ` (${mode.detail})` : ''} — version ${etat.version || 1}.`;
+      const sig = this.liste('signatures').find((x) => x.titre === def.titre && x.statut === 'a_signer');
+      if (sig) this.majSignature(sig.id, { desc, date: Dates.today() });
+      else this.ajouterSignature({ titre: def.titre, desc });
+    }
+
+    const projet = this.projet();
+    const statut = def.prestation ? projet?.prestations?.[def.prestation]?.statut : '';
+    if (def.prestation && statut !== 'valide' && statut !== 'a_valider'
+        && this.prestations().some((p) => p.id === def.prestation)) {
+      this.majPrestation(def.prestation, { statut: 'a_valider' });
+    }
+  },
+
+  /** Ajoute un acte à signer ; le lien de signature se colle ensuite. */
+  ajouterSignature(champs) {
+    const item = { id: idUnique('s'), titre: '', desc: '', statut: 'a_signer', date: Dates.today(), url: '', ...champs };
+    this.commit((s) => {
+      const id = s.projetActifId;
+      if (!s.signatures[id]) s.signatures[id] = [];
+      s.signatures[id].unshift(item);
+    });
+    this._pousserItem('signatures', item);
   },
 
   /** Demande où en est la rédaction ; le script crée le Google Docs à la fin. */

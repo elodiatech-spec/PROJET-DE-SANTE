@@ -461,6 +461,45 @@ const CHAPITRES_REDACTION = [
     resume: "Tableau des signataires, engagement collectif, conclusion." },
 ];
 
+/**
+ * Actes et documents générés avec Claude à partir du projet de santé et des
+ * sources officielles. Doit concorder avec ACTES_GENERES du script (contrôlé
+ * par tests/actes.mjs) : le contenu attendu reste côté serveur.
+ * `signature` : 'renforcee' (DocuSeal, WM Goodflag en secours), 'interne'
+ * (outil ElodiaTech) ou 'aucune'. `types` / `modeles` : même règle que les
+ * prestations.
+ */
+const ACTES_GENERES = [
+  {id: "statuts_sisa",titre: "Statuts de la SISA",groupe: "Constitution",types: ["MSP"],modeles: ["sisa"],categorie: "Juridique",signature: "renforcee",prestation: "P17"},
+  {id: "ri_sisa",titre: "Règlement intérieur de la SISA",groupe: "Constitution",types: ["MSP"],modeles: ["sisa"],categorie: "Juridique",signature: "interne",prestation: "P17"},
+  {id: "statuts_assoc",titre: "Statuts de l'association gestionnaire",groupe: "Constitution",types: ["CDS"],modeles: ["assoc"],categorie: "Juridique",signature: "renforcee",prestation: "P17"},
+  {id: "pacte_associes",titre: "Pacte d'associés",groupe: "Constitution",types: ["MSP"],categorie: "Juridique",signature: "renforcee",prestation: ""},
+  {id: "charte_interne",titre: "Charte interne de la maison de santé",groupe: "Fonctionnement",types: ["MSP"],categorie: "Juridique",signature: "interne",prestation: "P35"},
+  {id: "reglement_fonctionnement",titre: "Règlement de fonctionnement du centre de santé",groupe: "Fonctionnement",types: ["CDS"],categorie: "Juridique",signature: "interne",prestation: "P35"},
+  {id: "organigramme",titre: "Organigramme et gouvernance",groupe: "Fonctionnement",categorie: "Projet",signature: "aucune",prestation: ""},
+  {id: "adhesion_ancs",titre: "Demande d'adhésion à l'accord national des centres de santé",groupe: "Assurance Maladie et finances",types: ["CDS"],categorie: "Finances",signature: "renforcee",prestation: "P41"},
+  {id: "budget",titre: "Budget prévisionnel et plan de financement",groupe: "Assurance Maladie et finances",categorie: "Finances",signature: "aucune",prestation: ""},
+  {id: "convention_ccas",titre: "Convention avec le CCAS ou la collectivité",groupe: "Partenariats",categorie: "Partenariats",signature: "interne",prestation: "P23"},
+  {id: "convention_hopital",titre: "Convention avec l'établissement de santé",groupe: "Partenariats",categorie: "Partenariats",signature: "renforcee",prestation: "P24"},
+  {id: "convention_domicile",titre: "Convention avec un service à domicile (HAD, SSIAD)",groupe: "Partenariats",categorie: "Partenariats",signature: "interne",prestation: "P24"},
+  {id: "convention_plateau",titre: "Convention avec un laboratoire, une pharmacie ou un cabinet de radiologie",groupe: "Partenariats",categorie: "Partenariats",signature: "interne",prestation: "P24"},
+  {id: "convention_cpts",titre: "Convention avec la CPTS",groupe: "Partenariats",categorie: "Partenariats",signature: "interne",prestation: "P24"},
+  {id: "convention_prevention",titre: "Convention de partenariat de prévention",groupe: "Partenariats",categorie: "Partenariats",signature: "interne",prestation: "P25"},
+  {id: "contrat_medecin",titre: "Contrat de travail du médecin salarié",groupe: "Ressources humaines",types: ["CDS"],categorie: "Équipe",signature: "renforcee",prestation: ""},
+  {id: "contrats_salaries",titre: "Contrat de travail d'un professionnel de santé salarié",groupe: "Ressources humaines",types: ["CDS"],categorie: "Équipe",signature: "renforcee",prestation: ""},
+  {id: "mise_a_disposition",titre: "Convention de mise à disposition des locaux",groupe: "Locaux",categorie: "Immobilier",signature: "renforcee",prestation: ""},
+  {id: "cahier_locaux",titre: "Cahier des charges des locaux",groupe: "Locaux",categorie: "Immobilier",signature: "aucune",prestation: ""},
+  {id: "rapport_annuel",titre: "Rapport annuel d'activité",groupe: "Suivi",categorie: "Projet",signature: "interne",prestation: ""},
+  {id: "avenant_pds",titre: "Avenant au projet de santé",groupe: "Suivi",categorie: "Projet",signature: "interne",prestation: ""},
+
+];
+
+const SIGNATURES_ACTE = {
+  renforcee: { label: 'Signature renforcée', detail: 'DocuSeal, WM Goodflag en secours' },
+  interne:   { label: 'Signature interne', detail: 'outil de signature ElodiaTech' },
+  aucune:    { label: 'Sans signature', detail: '' },
+};
+
 /** États d'un chapitre en rédaction. */
 const STATUTS_REDACTION = {
   '':       { label: 'À rédiger',          couleur: 'neutre', icone: 'fa-regular fa-circle' },
