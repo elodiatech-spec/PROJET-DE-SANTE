@@ -60,6 +60,29 @@ de la formule.
 
 ---
 
+## Parcours administratif (audit du 26 novembre 2026)
+
+La feuille de route suit le parcours réel de chaque structure :
+
+| | MSP (SISA) | Centre de santé (association) |
+|---|---|---|
+| Personne morale | P39 — Immatriculation de la SISA (guichet unique INPI) | P40 — Déclaration de l'association (e-création) |
+| Jalon | P44 — Équipe médicale minimale réunie | P44 — Équipe médicale minimale réunie |
+| ARS | P38, P19, P37 | P36, P43 — Agrément (dentaire, ophtalmologie, orthoptie ; « Non nécessaire » par défaut), P38, P19, P37 |
+| Assurance Maladie | P20 — ACI (circuit d'instruction détaillé) | P41 — Adhésion à l'accord national (ANCS) |
+| Label | P42 — Déclaration d'intention France Santé | P42 — Déclaration d'intention France Santé |
+
+- `prerequis` : tant que le jalon P44 n'est ni validé ni « Non nécessaire », P38, P19, P36, P20 et P41
+  ne peuvent pas passer « À valider » ou « Validé ».
+- `modeles` : la forme juridique du projet, quand elle est connue, l'emporte sur le type de structure.
+- `portail` : le lien du guichet en ligne s'affiche sur la carte de la prestation.
+- En fin de feuille de route, la carte « Après votre formule » liste les démarches réglementaires
+  hors formule (à la charge du client), l'ouverture, puis le suivi après l'ouverture.
+- Questionnaire : champs « Label France Santé » et « Activité dentaire, ophtalmologique ou orthoptique ».
+
+Le catalogue de l'onglet Catalogue du script est régénéré depuis `config.js` ; `tests/parcours.mjs`
+vérifie qu'ils concordent.
+
 ## Rédaction du projet de santé avec Claude (expert)
 
 Page **Projet de santé**, carte « Rédaction avec Claude », visible par l'expert seul. Un bouton par
@@ -138,7 +161,7 @@ plateforme-projet-sante/
 │   ├── css/app.css               Design system : thèmes clair/sombre, composants, responsive
 │   ├── img/                      Logo ElodiaTech (complet, wordmark, marque carrée)
 │   └── js/
-│       ├── config.js             Référentiels : formules, lots, 37 prestations, modules, FAQ, ERP
+│       ├── config.js             Référentiels : formules, lots, 43 prestations, modules, FAQ, ERP
 │       ├── store.js              État, persistance, sélecteurs calculés, adaptateur Google Sheets
 │       ├── views.js              Rendu des 21 vues
 │       └── app.js                Navigation, interactions, modales, graphiques, carte
@@ -224,6 +247,8 @@ node tests/televersement.mjs
 node tests/avancement.mjs
 node tests/lecture-fichier.mjs
 node tests/questionnaire.mjs
+node tests/redaction.mjs
+node tests/parcours.mjs
 ```
 
 **aller-retour** vérifie l'intégration Google Sheets de bout en bout : les actions de

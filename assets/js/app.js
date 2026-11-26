@@ -1038,11 +1038,23 @@ const App = {
 
     /* --- Prestations --- */
     'changer-statut'(el) {
+      // Un jalon non atteint retient les étapes qui en dépendent avant soumission.
+      const manquants = ['a_valider', 'valide'].includes(el.value) ? Store.prerequisManquants(el.dataset.id) : [];
+      if (manquants.length) {
+        el.value = Store.prestations().find((x) => x.id === el.dataset.id)?.etat.statut || 'a_faire';
+        toast(`Jalon non atteint : « ${manquants.map((m) => m.titre).join(' », « ')} ». Validez-le, ou passez-le « Non nécessaire ».`, 'warn');
+        return;
+      }
       Store.majPrestation(el.dataset.id, { statut: el.value });
       toast(`Statut mis à jour : ${STATUTS[el.value].label}.`, 'ok');
     },
 
     'valider-prestation'(el) {
+      const manquants = Store.prerequisManquants(el.dataset.id);
+      if (manquants.length) {
+        toast(`Cette étape attend d'abord : « ${manquants.map((m) => m.titre).join(' », « ')} ».`, 'warn');
+        return;
+      }
       Store.majPrestation(el.dataset.id, { statut: 'valide' });
       const p = PRESTATIONS.find((x) => x.id === el.dataset.id);
       toast(`« ${p?.titre || 'Prestation'} » validée. Merci !`, 'ok');
@@ -1059,6 +1071,11 @@ const App = {
         soustitre: `${lot.nom} · livrable : ${p.livrable}`,
         corps: `
           <p class="text-sm text-soft">${esc(p.desc)}</p>
+          ${p.etapes ? `<div class="card card--flat" style="margin-top:14px">
+              <div class="text-xs text-muted fw-800">Circuit d'instruction</div>
+              <ol class="etapes-liste">${p.etapes.map((e) => `<li>${esc(e)}</li>`).join('')}</ol>
+              <p class="text-xs text-muted" style="margin-top:8px">La note de suivi indique l'étape en cours.</p>
+            </div>` : ''}
           <div class="grid grid-2" style="margin-top:16px">
             <div><span class="text-xs text-muted">Statut</span><br>${badgeStatut(p.etat.statut)}</div>
             <div><span class="text-xs text-muted">Charge indicative</span><br><strong class="text-sm">${p.jours} jours</strong></div>

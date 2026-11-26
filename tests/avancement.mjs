@@ -47,8 +47,11 @@ const controles = [];
 const verifier = (intitule, ok, detail) => controles.push([intitule, ok, detail]);
 
 const prestations = Store.prestations();
-const cible = prestations[0];
-const autre = prestations[1];
+// Une prestation encore « À faire » : l'écarter ne retire que du travail
+// restant, l'avancement ne peut donc pas baisser. (Écarter une prestation
+// déjà validée, elle, ferait légitimement baisser la moyenne.)
+const cible = prestations.find((p) => p.etat.statut === 'a_faire');
+const autre = prestations.find((p) => p.id !== cible.id && p.lot === cible.lot && p.etat.statut !== 'valide') || prestations[1];
 
 const avant = Store.avancement();
 const totalAvant = Store.prestationsApplicables().length;

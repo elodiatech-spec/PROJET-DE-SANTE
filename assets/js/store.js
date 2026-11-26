@@ -57,13 +57,26 @@ const Dates = {
  *
  * `typeStructure` ('MSP' ou 'CDS') écarte les formalités propres à l'autre
  * type — l'engagement de conformité ne concerne que les centres de santé.
- * Omis, aucun filtrage n'est appliqué : le catalogue complet du périmètre.
+ * `modeleJuridique` ('sisa', 'assoc'), quand il est connu, départage les
+ * prestations qui portent `modeles` : un centre de santé porté par une
+ * collectivité n'a pas d'association à déclarer. Inconnu, `types` décide.
+ * Sans type, aucun filtrage : le catalogue complet du périmètre.
  */
-function prestationsDeFormule(codeFormule, typeStructure) {
+function prestationsDeFormule(codeFormule, typeStructure, modeleJuridique) {
   const formule = FORMULES[codeFormule];
   if (!formule) return [];
-  return PRESTATIONS.filter((p) => formule.lots.includes(p.lot)
-    && (!p.types || !typeStructure || p.types.includes(typeStructure)));
+  return PRESTATIONS.filter((p) => formule.lots.includes(p.lot) && prestationApplicable(p, typeStructure, modeleJuridique));
+}
+
+function prestationApplicable(p, typeStructure, modeleJuridique) {
+  if (!typeStructure) return true;
+  if (p.modeles && modeleJuridique && MODELES_JURIDIQUES[modeleJuridique]) return p.modeles.includes(modeleJuridique);
+  return !p.types || p.types.includes(typeStructure);
+}
+
+/** État d'une prestation encore jamais suivie : « À faire », sauf exception du catalogue. */
+function etatInitialPrestation(presta, echeance = '') {
+  return { statut: presta.statutDefaut || 'a_faire', echeance, dateRealisation: '', note: '', livrableUrl: '' };
 }
 
 /**
@@ -89,6 +102,7 @@ function seedPrestations(codeFormule, dateDebut, nbValidees, overrides = {}, ret
     else if (i <= nbValidees + 2) statut = 'en_cours';
     else statut = 'a_faire';
 
+    if (p.statutDefaut) statut = p.statutDefaut;
     if (overrides[p.id]) statut = overrides[p.id];
 
     let echeance;
@@ -592,14 +606,46 @@ const Store = {
   prestations(projetId) {
     const p = this.projet(projetId);
     if (!p) return [];
-    return prestationsDeFormule(p.formule, p.type).map((presta) => ({
+    return prestationsDeFormule(p.formule, p.type, p.modeleJuridique).map((presta) => ({
       ...presta,
       // `variantes` réécrit titre, libellé du livrable ou description selon le
       // type de structure : une MSP tient une charte interne là où un centre de
       // santé tient un règlement de fonctionnement.
       ...(presta.variantes?.[p.type] || {}),
-      etat: p.prestations[presta.id] || { statut: 'a_faire', echeance: '', dateRealisation: '', note: '', livrableUrl: '' },
+      etat: p.prestations[presta.id] || etatInitialPrestation(presta),
     }));
+  },
+
+  /**
+   * Prérequis non atteints d'une prestation : les jalons qu'elle attend
+   * (`prerequis`), ni validés ni écartés comme non nécessaires.
+   */
+  prerequisManquants(idPrestation, projetId) {
+    const liste = this.prestations(projetId);
+    const presta = liste.find((x) => x.id === idPrestation);
+    if (!presta?.prerequis) return [];
+    return presta.prerequis
+      .map((id) => liste.find((x) => x.id === id))
+      .filter((j) => j && !['valide', 'bloque'].includes(j.etat.statut));
+  },
+
+  /**
+   * Ce qui reste après le périmètre souscrit, pour que le client sache où
+   * s'arrête l'accompagnement : prestations du catalogue hors formule (pour
+   * son type de structure), puis l'ouverture et le suivi qui durent.
+   */
+  apresPerimetre(projetId) {
+    const p = this.projet(projetId);
+    if (!p) return { horsFormule: [], ouvertureCouverte: false, suivi: [] };
+    const formule = FORMULES[p.formule];
+    const horsFormule = PRESTATIONS.filter((x) => !formule.lots.includes(x.lot)
+      && prestationApplicable(x, p.type, p.modeleJuridique))
+      .map((x) => ({ ...x, ...(x.variantes?.[p.type] || {}) }));
+    return {
+      horsFormule,
+      ouvertureCouverte: formule.lots.includes('LG'),
+      suivi: APRES_PERIMETRE.suivi.filter((e) => !e.types || e.types.includes(p.type)),
+    };
   },
 
   /**
@@ -1124,14 +1170,12 @@ const Store = {
       if (!p || !FORMULES[codeFormule]) return;
       p.formule = codeFormule;
       let curseur = 0;
-      prestationsDeFormule(codeFormule, p.type).forEach((presta) => {
+      prestationsDeFormule(codeFormule, p.type, p.modeleJuridique).forEach((presta) => {
         curseur += presta.jours;
         if (!p.prestations[presta.id]) {
           p.prestations[presta.id] = {
-            statut: 'a_faire',
-            echeance: Dates.addDays(p.dateDebut, curseur),
-            dateRealisation: '',
-            note: '', livrableUrl: '', majLe: Dates.today(),
+            ...etatInitialPrestation(presta, Dates.addDays(p.dateDebut, curseur)),
+            majLe: Dates.today(),
           };
           ajoutees.push(presta.id);
         }

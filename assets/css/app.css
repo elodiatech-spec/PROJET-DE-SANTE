@@ -1222,3 +1222,12 @@ select { cursor: pointer; }
 .redac-details { margin-top: 6px; }
 .redac-details ul { margin: 6px 0 0 18px; padding: 0; }
 @media (max-width: 640px) { .redac-ligne .row-between { flex-direction: column; align-items: flex-start; gap: 6px; } }
+
+/* ---- Jalons, portails et fin de périmètre (feuille de route) ---- */
+.presta__prerequis { margin: 8px 0 0; padding: 6px 10px; border-radius: 8px; background: rgba(232,163,61,.12); color: var(--text, inherit); }
+.presta__prerequis i { color: #e8a33d; }
+.presta__portail { margin-top: 8px; }
+.apres-liste { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; font-size: .9rem; }
+.apres-liste .badge { margin-right: 6px; }
+.apres-titre { margin: 18px 0 0; font-size: .95rem; }
+.etapes-liste { margin: 8px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: .88rem; }

@@ -314,6 +314,10 @@ function cartePrestation(p, index) {
        </button>`
     : '';
 
+  // Jalons attendus : la prestation ne peut être ni soumise ni validée avant.
+  const manquants = p.etat.statut === 'valide' || p.etat.statut === 'bloque' ? [] : Store.prerequisManquants(p.id);
+  const portail = p.portail ? PORTAILS.find((x) => x.id === p.portail) : null;
+
   const boutonDetail = `<button class="btn btn--ghost btn--sm" data-action="detail-prestation" data-id="${esc(p.id)}">
       <i class="fa-solid fa-circle-info"></i> Détail
     </button>`;
@@ -321,7 +325,7 @@ function cartePrestation(p, index) {
   return `<article class="presta presta--${esc(p.etat.statut)}">
       <div class="presta__num">${esc(String(index).padStart(2, '0'))}</div>
       <div class="presta__body">
-        <h4 class="presta__title">${esc(p.titre)}</h4>
+        <h4 class="presta__title">${p.jalon ? '<span class="badge badge--warn" style="margin-right:6px"><i class="fa-solid fa-flag"></i> Jalon</span>' : ''}${esc(p.titre)}</h4>
         <p class="presta__desc">${esc(p.desc)}</p>
         <div class="presta__meta">
           <span><i class="fa-solid fa-file-lines"></i> ${esc(p.livrable)}</span>
@@ -333,6 +337,15 @@ function cartePrestation(p, index) {
           ${p.etat.dateRealisation ? `<span class="text-ok"><i class="fa-solid fa-calendar-check"></i> Réalisée le ${esc(Dates.format(p.etat.dateRealisation))}</span>` : ''}
           ${p.etat.note ? `<span><i class="fa-solid fa-note-sticky"></i> ${esc(p.etat.note)}</span>` : ''}
         </div>
+        ${repereQuestionnaire(p)}
+        ${manquants.length ? `<p class="presta__prerequis text-xs">
+            <i class="fa-solid fa-lock"></i> En attente du jalon : ${manquants.map((m) => `<strong>${esc(m.titre)}</strong>`).join(', ')}.
+            Cette étape ne peut être soumise ni validée avant.</p>` : ''}
+        ${portail ? `<div class="row-tight presta__portail">
+            ${portail.liens.map((l) => `<a class="btn btn--sm ${l.primaire ? '' : 'btn--ghost'}" href="${esc(urlSure(l.url))}" target="_blank" rel="noopener noreferrer">
+                <i class="fa-solid fa-arrow-up-right-from-square"></i> ${esc(l.label)}</a>`).join('')}
+            <span class="text-xs text-muted">${esc(portail.nom)}</span>
+          </div>` : ''}
         ${annexesPrestation(p)}
       </div>
       <div class="presta__actions">
@@ -340,6 +353,64 @@ function cartePrestation(p, index) {
         <div class="row-tight">${actionClient}${boutonDetail}</div>
       </div>
     </article>`;
+}
+
+/** Réponse du client qui éclaire une prestation (`repere`), si elle existe. */
+function repereQuestionnaire(p) {
+  if (!p.repere) return '';
+  const rub = QUESTIONNAIRE.find((r) => r.id === p.repere.rubrique);
+  const champ = rub?.champs.find((c) => c.id === p.repere.champ);
+  const v = Store.reponsesRubrique(p.repere.rubrique)[p.repere.champ];
+  if (!champ || !v) return '';
+  return `<p class="text-xs" style="margin:8px 0 0"><i class="fa-solid fa-clipboard-list"></i>
+      Informations du projet — ${esc(champ.label)} : <strong>${esc(v)}</strong></p>`;
+}
+
+/**
+ * Fin de la feuille de route : où s'arrête la formule souscrite, ce qui reste
+ * alors à la charge du client jusqu'à l'ouverture, et les obligations qui
+ * suivent l'ouverture — quelle que soit la formule.
+ */
+function carteApresPerimetre(projet, formule, expert) {
+  const a = Store.apresPerimetre(projet.id);
+  const vous = expert ? 'le client' : 'vous';
+  const charge = expert ? 'à la charge du client' : 'à votre charge';
+
+  // Les démarches réglementaires d'abord : sans elles, pas d'ouverture.
+  const estReglementaire = (x) => !!(x.reglementaire || LOTS[x.lot].reglementaire) && !x.jalon;
+  const reglementaires = a.horsFormule.filter(estReglementaire);
+  const autres = a.horsFormule.filter((x) => !estReglementaire(x) && !x.jalon);
+  const item = (x) => `<li><span class="badge badge--neutre">${esc(LOTS[x.lot].nom)}</span> ${esc(x.titre)}</li>`;
+
+  const horsFormule = a.horsFormule.length ? `
+      <p class="text-sm">La formule ${esc(formule.code)} s'arrête à la dernière étape ci-dessus.</p>
+      ${reglementaires.length ? `
+        <h4 class="apres-titre"><i class="fa-solid fa-scale-balanced"></i> Démarches réglementaires ${charge}</h4>
+        <p class="text-xs text-muted">Indispensables à l'ouverture, elles ne sont pas comprises dans la formule.</p>
+        <ul class="apres-liste">${reglementaires.map(item).join('')}</ul>` : ''}
+      <h4 class="apres-titre"><i class="fa-solid fa-door-open"></i> Ouverture</h4>
+      <ul class="apres-liste"><li>${esc(APRES_PERIMETRE.ouverture)} — ${charge}.</li></ul>
+      ${autres.length ? `
+        <h4 class="apres-titre"><i class="fa-solid fa-plus"></i> Prestations disponibles dans une formule supérieure</h4>
+        <ul class="apres-liste">${autres.map(item).join('')}</ul>` : ''}`
+    : `<p class="text-sm">${a.ouvertureCouverte
+        ? `La formule ${esc(formule.code)} couvre l'ensemble du parcours, jusqu'à l'ouverture de la structure.`
+        : `Toutes les démarches du catalogue sont comprises dans la formule ${esc(formule.code)}.`}</p>`;
+
+  return `<div class="card">
+      <div class="card__head">
+        <div>
+          <h3 class="card__title"><i class="fa-solid fa-signs-post"></i> Après votre formule</h3>
+          <p class="card__subtitle">Ce que ${vous} ${expert ? 'conduit' : 'conduisez'} hors du périmètre souscrit, puis les obligations qui suivent l'ouverture.</p>
+        </div>
+        <span class="badge badge--accent"><i class="fa-solid fa-tag"></i> Formule ${esc(formule.code)}</span>
+      </div>
+      ${horsFormule}
+      <h4 class="apres-titre"><i class="fa-solid fa-arrows-rotate"></i> Après l'ouverture</h4>
+      <ul class="apres-liste">
+        ${a.suivi.map((e) => `<li><strong>${esc(e.titre)}</strong><br><span class="text-xs text-muted">${esc(e.detail)}</span></li>`).join('')}
+      </ul>
+    </div>`;
 }
 
 /** Catégorie documentaire par défaut d'une prestation, d'après son lot. */
@@ -1037,6 +1108,8 @@ const Views = {
           </div>
         </div>`;
       }).join('') : empty('Aucune prestation', 'Aucune prestation ne correspond aux filtres sélectionnés.', 'fa-solid fa-filter')}
+
+      ${(filtres.lot || filtres.statut || filtres.q) ? '' : carteApresPerimetre(projet, formule, expert)}
     </section>`;
   },
 
