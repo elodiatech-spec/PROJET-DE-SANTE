@@ -169,6 +169,10 @@ var ONGLETS = {
     "maj_le",
     "maj_par"
   ],
+  "Redaction": [
+    "projet_id", "chapitre", "statut", "lot_id", "doc_id", "doc_url", "version",
+    "maj_le", "message", "fil", "consignes", "a_completer"
+  ],
   "Prestataires": [
     "id",
     "nom",
@@ -2261,6 +2265,8 @@ function onOpen() {
     .addItem('Générer les liens clients', 'genererJetonsClients')
     .addSeparator()
     .addItem('Créer les dossiers Drive manquants', 'creerTousLesDossiers')
+    .addSeparator()
+    .addItem('Définir ma clé Claude (rédaction du projet de santé)', 'definirCleClaude')
     .addToUi();
 }
 
@@ -2675,6 +2681,9 @@ function construireDonnees(projetIdUnique) {
   // L'équipe ElodiaTech ne concerne que l'expert : le client connaît déjà
   // son référent par la fiche de son projet.
   if (!projetIdUnique) {
+    // Rédaction avec Claude : brouillons et consignes restent chez l'expert.
+    // Le client ne lit un chapitre qu'une fois validé, par ses documents.
+    donnees.redaction = donneesRedaction_(projets);
     donnees.experts = lireOnglet('Experts').map(function (r) {
       return {
         id: r.id, nom: r.nom || '', fonction: r.fonction || '',
@@ -2745,6 +2754,12 @@ var ECRITURE = {
     onglet: 'Prestations', cles: ['projet_id', 'prestation_id'],
     champs: { statut: 'statut', echeance: 'echeance', dateRealisation: 'date_realisation',
               note: 'note', livrableUrl: 'livrable_url' }
+  },
+  // Seul le statut se modifie par cette voie (validation d'un chapitre) ;
+  // le reste de la ligne est écrit par le script au fil de la rédaction.
+  redaction: {
+    onglet: 'Redaction', cles: ['projet_id', 'chapitre'],
+    champs: { statut: 'statut' }
   },
   documents: {
     onglet: 'Documents', cles: ['projet_id', 'id'],
@@ -2854,6 +2869,15 @@ function doPost(e) {
       return json({ ok: true, fichier: lireFichierDuProjet(requete, acces) });
     }
 
+    // --- Rédaction d'un chapitre avec Claude : réservée à l'expert ---
+    // Aucun verrou pendant l'envoi : l'assemblage du dossier prend plusieurs
+    // secondes et ne doit pas bloquer les écritures. Le suivi prend le sien.
+    if (requete.action === 'redigerChapitre' || requete.action === 'suivreRedaction') {
+      if (acces.role !== 'expert') throw new Error('Réservé à l\'expert.');
+      return json({ ok: true, redaction: requete.action === 'redigerChapitre'
+        ? redigerChapitre(requete) : suivreRedaction(requete) });
+    }
+
     // --- Écriture ---
     verrou.waitLock(25000);   // deux écritures simultanées décaleraient les lignes
 
@@ -2917,6 +2941,17 @@ function executerEcriture(op, acces) {
   if (op.entite === 'questionnaire') {
     if (op.action === 'delete' && acces && acces.role === 'expert') return supprimerLigne(conf, cles);
     payload = questionnaireValide(cles[1], payload, acces);
+  }
+
+  if (op.entite === 'redaction') {
+    // Valider un chapitre rédigé, ou revenir sur cette validation : rien d'autre.
+    if (op.action === 'delete') throw new Error('Suppression non autorisée.');
+    var ligneR = ligneRedaction_(cles[0], cles[1]);
+    if (!ligneR || ['pret', 'valide'].indexOf(String(ligneR.statut)) === -1) {
+      throw new Error('Ce chapitre n\'a pas de version rédigée à valider.');
+    }
+    if (['pret', 'valide'].indexOf(String(payload.statut)) === -1) throw new Error('Statut non permis.');
+    payload = { statut: payload.statut };
   }
 
   if (op.action === 'delete') return supprimerLigne(conf, cles);
@@ -3311,6 +3346,651 @@ function formaterOctets(octets) {
   if (octets < 1024) return octets + ' o';
   if (octets < 1048576) return Math.round(octets / 1024) + ' Ko';
   return (octets / 1048576).toFixed(1).replace('.', ',') + ' Mo';
+}
+
+/* ==========================================================================
+   RÉDACTION DU PROJET DE SANTÉ AVEC CLAUDE — réservée à l'expert
+
+   Chaque chapitre est rédigé par Claude à partir de tout ce que le dossier
+   contient : fiche du projet, informations fournies par le client, partenaires,
+   financements, fichiers déposés dans « 01 — Projet de santé » (données
+   CartoSanté, INSEE, ODISSÉ… téléchargées par l'expert) et faits retenus par
+   les chapitres déjà rédigés, pour que l'ensemble reste cohérent.
+
+   La demande part en lot (API Message Batches) : la rédaction d'un chapitre
+   long dépasse la durée qu'Apps Script accorde à un appel direct, et le lot
+   coûte moitié moins. L'application vient ensuite demander où en est le lot ;
+   une fois terminé, le chapitre devient un Google Docs dans le dossier
+   « 01 — Projet de santé ».
+
+   La clé de l'API reste dans les propriétés du script : elle n'apparaît ni
+   dans le dépôt, ni dans le navigateur, ni dans la feuille.
+   ========================================================================== */
+
+var PROPRIETE_CLE_CLAUDE = 'CLAUDE_API_KEY';
+var PROPRIETE_MODELE_CLAUDE = 'CLAUDE_MODELE';
+var MODELE_CLAUDE_DEFAUT = 'claude-opus-5-5';
+var URL_LOTS_CLAUDE = 'https://api.anthropic.com/v1/messages/batches';
+var VERSION_API_CLAUDE = '2026-10-21';
+var JETONS_SORTIE_MAX = 64000;
+
+/** Bornes de ce qui est joint à une demande. */
+var SOURCES_MAX_FICHIERS = 12;
+var SOURCES_MAX_OCTETS_FICHIER = 8 * 1024 * 1024;
+var SOURCES_MAX_OCTETS_TOTAL = 24 * 1024 * 1024;
+var SOURCES_MAX_CARACTERES_TEXTE = 120000;   // par document Google ou fichier texte
+var MODELE_MAX_CARACTERES = 60000;
+
+/** Plan général imposé, rappelé à chaque demande pour situer le chapitre. */
+var PLAN_GENERAL_PDS = [
+  'INTRODUCTION', 'PRÉAMBULE', 'SOMMAIRE',
+  '1. Diagnostic territorial et contexte sanitaire (1.1 Territoire ; 1.2 Population ; 1.3 ZIP / QPV si présence ; 1.4 Offre de soins ; 1.5 Besoins du territoire)',
+  "2. Organisation de l'exercice coordonné (2.1 Professionnels impliqués ; 2.2 Pilotage et fonctionnement ; 2.3 Projet de santé : objectifs et valeurs, axes, actions, moyens matériels et financiers ; 2.4 Projet immobilier)",
+  "3. Organisation de l'accès aux soins (3.1 Prise en charge des patients : accès et continuité, plan de gestion des crises, permanence des soins ; 3.2 Soins spécialisés et paramédicaux hors les murs ; 3.3 Missions de santé publique ; 3.4 Qualité de la prise en charge)",
+  '4. Organisation du travail en équipe (4.1 Coordination ; 4.2 Coopérations formalisées ; 4.3 DPC ; 4.4 Suivi, évaluation, amélioration continue ; 4.5 Accueil d\'étudiants, recherche)',
+  "5. Partage d'informations (5.1 Entre professionnels ; 5.2 Vers les professionnels extérieurs ; 5.3 Accès du patient à ses informations ; 5.4 Communication externe)",
+  '6. Signature du projet de santé', 'CONCLUSION'
+].join('\n');
+
+/**
+ * Chapitres rédigeables. `modele` : Google Docs d'un projet déjà livré, lu
+ * pour sa structure et son ton — jamais pour ses chiffres. `methode` choisit
+ * la grille d'analyse imposée. `prestations` : étapes de la feuille de route
+ * soumises au client quand le chapitre est validé.
+ */
+var CHAPITRES_REDACTION = [
+  { id: 'intro', titre: 'Introduction et préambule', methode: 'cadre', modele: '', prestations: [],
+    plan: "INTRODUCTION : objet du document, porteur, territoire, nature de la structure (MSP ou centre de santé) et cadre réglementaire.\n"
+        + "PRÉAMBULE : genèse du projet, démarche suivie, professionnels à l'initiative, engagements et calendrier." },
+  { id: 'ch1', titre: '1. Diagnostic territorial et contexte sanitaire', methode: 'diagnostic',
+    modele: '13BuJJLZJ4HG37An03KpQahucpkNMJC88L1UvNgLuwAs', prestations: ['P06', 'P07'],
+    plan: "1.1. Territoire\n1.2. Population\n1.3. Z.I.P / QPV (uniquement si le territoire compte une zone d'intervention prioritaire ou un quartier prioritaire de la politique de la ville)\n1.4. Offre de soins\n1.5. Besoins du territoire" },
+  { id: 'ch2', titre: "2. Organisation de l'exercice coordonné", methode: 'diagnostic',
+    modele: '1HEtv2V5NTL3sVqlDpLto5wkH2uSSmuOKhaiAZQ_dnbo', prestations: ['P08', 'P09', 'P10'],
+    plan: "2.1. Professionnels impliqués dans la démarche (en interne ; en externe : partenaires médicaux, partenaires sociaux — hub, CCAS —, partenaires de prévention)\n2.2. Pilotage et fonctionnement\n2.3. Projet de santé\n2.3.1. Objectifs et valeurs\n2.3.2. Axes du projet de santé\n2.3.3. Actions du projet de santé\n2.3.4. Moyens matériels et financiers\n2.4. Projet immobilier" },
+  { id: 'ch3', titre: "3. Organisation de l'accès aux soins", methode: 'organisation',
+    modele: '1tzEgbmxwHPNyo1UTPeM8ILqVqWooNrY3-DHqcb5W61A', prestations: ['P11', 'P12'],
+    plan: "3.1. Organisation de la prise en charge des patients\n3.1.1. Accès aux soins et continuité des soins\n3.1.2. Plan de gestion des crises et des événements majeurs\n3.1.3. Permanence des soins\n3.2. Organisation d'une diversité de services de soins médicaux spécialisés et paramédicaux hors les murs\n3.3. Missions de santé publique\n3.4. La qualité de la prise en charge" },
+  { id: 'ch4', titre: '4. Organisation du travail en équipe', methode: 'organisation',
+    modele: '1sLh8rVofOsz9k6xFhisRwiNcLHl-W6_kBcSjPY1k1sc', prestations: ['P13', 'P15'],
+    plan: "4.1. Coordination de l'exercice pluriprofessionnel\n4.2. Formalisation de coopérations pluriprofessionnelles (conventions, protocoles, partenariats)\n4.3. Développement professionnel continu\n4.4. Suivi, évaluation et amélioration continue\n4.5. Accueil d'étudiants — Recherche" },
+  { id: 'ch5', titre: "5. Partage d'informations", methode: 'cadre',
+    modele: '1fkLrAIIbdAlKt5dHYYU2P2kz2VifdZnnS8d_bhYBA94', prestations: ['P14'],
+    plan: "5.1. Entre les professionnels impliqués dans la démarche\n5.2. En direction des professionnels extérieurs (en interne ; en externe : partenaires médicaux, partenaires sociaux — hub, CCAS —, partenaires de prévention)\n5.3. Accès du patient aux informations médicales le concernant\n5.4. Communication externe et visibilité" },
+  { id: 'ch6', titre: '6. Signature du projet de santé et conclusion', methode: 'cadre',
+    modele: '1I2NxLzcLKdmxDmf4i-yMHW7qY0k_7G1cbsjKaIyBOfA', prestations: [],
+    plan: "6. SIGNATURE DU PROJET DE SANTÉ : tableau des signataires (nom, profession, qualité, date, signature) reprenant les professionnels impliqués, engagement collectif.\nCONCLUSION : synthèse des axes, des engagements et de la trajectoire du projet." }
+];
+
+var REDACTION_COLONNES = ONGLETS['Redaction'];
+
+/* ---------------------------------------------------- Menu de la clé ---- */
+
+/** Menu « Définir ma clé Claude ». Son premier lancement fait aussi accorder
+ *  au script le droit d'appeler un service extérieur. */
+function definirCleClaude() {
+  var ui = SpreadsheetApp.getUi();
+  var reponse = ui.prompt('Clé de l\'API Claude',
+    "Collez la clé créée sur console.anthropic.com (elle commence par « sk-ant- »).\n\n"
+    + "Elle est conservée dans les propriétés de ce script uniquement : ni dans la feuille, "
+    + "ni dans l'application, ni dans le dépôt GitHub.",
+    ui.ButtonSet.OK_CANCEL);
+  if (reponse.getSelectedButton() !== ui.Button.OK) return;
+
+  var cle = reponse.getResponseText().trim();
+  if (cle.indexOf('sk-ant-') !== 0) {
+    ui.alert('Clé non reconnue', 'Une clé de l\'API Claude commence par « sk-ant- ». Rien n\'a été enregistré.', ui.ButtonSet.OK);
+    return;
+  }
+  PropertiesService.getScriptProperties().setProperty(PROPRIETE_CLE_CLAUDE, cle);
+
+  var essai = testerCleClaude_(cle);
+  ui.alert(essai.ok ? 'Clé enregistrée et vérifiée' : 'Clé enregistrée, mais l\'essai a échoué',
+    essai.ok
+      ? 'La rédaction avec Claude est disponible dans l\'application, page « Projet de santé ».'
+      : essai.message + '\n\nVérifiez la clé et le crédit disponible sur console.anthropic.com, puis recommencez.',
+    ui.ButtonSet.OK);
+}
+
+/** Interroge la liste des lots : un appel sans coût qui valide la clé. */
+function testerCleClaude_(cle) {
+  try {
+    var rep = UrlFetchApp.fetch(URL_LOTS_CLAUDE + '?limit=1', {
+      method: 'get', headers: entetesClaude_(cle), muteHttpExceptions: true
+    });
+    var code = rep.getResponseCode();
+    if (code === 200) return { ok: true };
+    return { ok: false, message: 'Réponse ' + code + ' : ' + messageErreurClaude_(rep.getContentText()) };
+  } catch (e) {
+    return { ok: false, message: String(e && e.message ? e.message : e) };
+  }
+}
+
+function cleClaude_() {
+  var cle = PropertiesService.getScriptProperties().getProperty(PROPRIETE_CLE_CLAUDE);
+  if (!cle) {
+    throw new Error("La clé de l'API Claude n'est pas encore définie. Dans la feuille de base, "
+      + 'menu ElodiaTech → « Définir ma clé Claude ».');
+  }
+  return cle;
+}
+
+function entetesClaude_(cle) {
+  return { 'x-api-key': cle, 'anthropic-version': VERSION_API_CLAUDE };
+}
+
+function messageErreurClaude_(texte) {
+  try {
+    var j = JSON.parse(texte);
+    if (j && j.error && j.error.message) return j.error.message;
+  } catch (e) { /* texte brut */ }
+  return String(texte || '').slice(0, 300);
+}
+
+/* ------------------------------------------------- Onglet Redaction ---- */
+
+function feuilleRedaction_() {
+  var classeur = SpreadsheetApp.getActive();
+  var feuille = classeur.getSheetByName('Redaction');
+  if (feuille) return feuille;
+  // Créé à la première demande : aucune manipulation préalable de la feuille.
+  feuille = classeur.insertSheet('Redaction');
+  feuille.getRange(1, 1, 1, REDACTION_COLONNES.length).setValues([REDACTION_COLONNES])
+    .setFontWeight('bold').setFontColor('#ffffff').setBackground('#1e95cb');
+  feuille.setFrozenRows(1);
+  return feuille;
+}
+
+function ligneRedaction_(projetId, chapitre) {
+  return lireOnglet('Redaction').filter(function (r) {
+    return String(r.projet_id) === projetId && String(r.chapitre) === chapitre;
+  })[0] || null;
+}
+
+function ecrireRedaction_(projetId, chapitre, champs) {
+  feuilleRedaction_();
+  var conf = { onglet: 'Redaction', cles: ['projet_id', 'chapitre'], champs: {} };
+  REDACTION_COLONNES.slice(2).forEach(function (c) { conf.champs[c] = c; });
+  champs.maj_le = new Date().toISOString();
+  ecrireLigne(conf, [projetId, chapitre], champs);
+}
+
+/** Lignes de rédaction, pour la vue de l'expert. */
+function donneesRedaction_(projets) {
+  var parProjet = {};
+  projets.forEach(function (p) { parProjet[p.id] = {}; });
+  lireOnglet('Redaction').forEach(function (r) {
+    var groupe = parProjet[r.projet_id];
+    if (!groupe || !chapitreRedaction_(String(r.chapitre))) return;
+    groupe[r.chapitre] = {
+      statut: String(r.statut || ''),
+      docId: String(r.doc_id || ''),
+      docUrl: String(r.doc_url || ''),
+      version: Number(r.version) || 0,
+      majLe: String(r.maj_le || ''),
+      message: String(r.message || ''),
+      consignes: String(r.consignes || ''),
+      aCompleter: String(r.a_completer || ''),
+      enCours: String(r.statut) === 'en_cours'
+    };
+  });
+  return parProjet;
+}
+
+function chapitreRedaction_(id) {
+  for (var i = 0; i < CHAPITRES_REDACTION.length; i++) {
+    if (CHAPITRES_REDACTION[i].id === id) return CHAPITRES_REDACTION[i];
+  }
+  return null;
+}
+
+/* ------------------------------------------------- Envoi de la demande -- */
+
+/**
+ * Action « redigerChapitre » : assemble le dossier et soumet la rédaction.
+ * @returns {{statut:string, lotId:string, sources:Array, ignores:Array}}
+ */
+function redigerChapitre(requete) {
+  var projetId = String(requete.projetId || '');
+  var chapitre = chapitreRedaction_(String(requete.chapitre || ''));
+  if (!projetId) throw new Error('Projet non précisé.');
+  if (!chapitre) throw new Error('Chapitre inconnu.');
+
+  var projet = construireDonnees(projetId);
+  if (!projet.projets.length) throw new Error('Projet introuvable.');
+
+  var cle = cleClaude_();
+  var consignes = String(requete.consignes || '').slice(0, 8000);
+
+  var existant = ligneRedaction_(projetId, chapitre.id);
+  if (existant && String(existant.statut) === 'en_cours') {
+    throw new Error('Une rédaction de ce chapitre est déjà en cours.');
+  }
+
+  var dossier = sousDossierCategorie(dossierDuProjet(projetId), 'Projet');
+  var dejaRediges = lireOnglet('Redaction')
+    .filter(function (r) { return String(r.projet_id) === projetId && r.doc_id; })
+    .map(function (r) { return String(r.doc_id); });
+  var sources = sourcesDuDossier_(dossier, dejaRediges);
+
+  var corps = {
+    requests: [{
+      custom_id: (projetId + '-' + chapitre.id).replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 64),
+      params: {
+        model: PropertiesService.getScriptProperties().getProperty(PROPRIETE_MODELE_CLAUDE) || MODELE_CLAUDE_DEFAUT,
+        max_tokens: JETONS_SORTIE_MAX,
+        output_config: { effort: 'high' },
+        system: consigneSysteme_(),
+        messages: [{ role: 'user', content: contenuDemande_(projetId, projet, chapitre, consignes, sources) }]
+      }
+    }]
+  };
+
+  var rep = UrlFetchApp.fetch(URL_LOTS_CLAUDE, {
+    method: 'post', contentType: 'application/json', headers: entetesClaude_(cle),
+    payload: JSON.stringify(corps), muteHttpExceptions: true
+  });
+  if (rep.getResponseCode() !== 200) {
+    throw new Error('Claude a refusé la demande (' + rep.getResponseCode() + ') : '
+      + messageErreurClaude_(rep.getContentText()));
+  }
+  var lot = JSON.parse(rep.getContentText());
+
+  var noms = sources.lus.map(function (s) { return s.nom; });
+  ecrireRedaction_(projetId, chapitre.id, {
+    statut: 'en_cours', lot_id: lot.id, consignes: consignes,
+    message: 'Rédaction demandée. Sources jointes : ' + (noms.length ? noms.join(', ') : 'aucune')
+      + (sources.ignores.length ? '. Non lues : ' + sources.ignores.join(', ') : '') + '.'
+  });
+
+  return { statut: 'en_cours', lotId: lot.id, sources: noms, ignores: sources.ignores };
+}
+
+/** Règles de rédaction, communes à tous les chapitres. */
+function consigneSysteme_() {
+  return [
+    "Tu es consultant expert en centres de santé, maisons de santé pluriprofessionnelles (MSP), CPTS, exercice coordonné, santé publique, diagnostic territorial et ingénierie de projet de santé, au sein du cabinet ElodiaTech.",
+    "Tu rédiges un chapitre du projet de santé d'une structure d'exercice coordonné. Le document est destiné à l'ARS, à l'Assurance Maladie, aux collectivités, aux fédérations et aux professionnels de la structure. Il doit pouvoir être déposé sans réécriture majeure.",
+    "",
+    "RÈGLES ABSOLUES SUR LES DONNÉES",
+    "- N'invente jamais une donnée statistique, un effectif, un nom, une date, un montant ou un engagement. Tout chiffre vient des pièces fournies (sources jointes, informations du client, fiche du projet) et porte sa source et son année entre parenthèses, par exemple (INSEE, RP 2021).",
+    "- Si une donnée nécessaire manque, écris à sa place : [donnée à compléter : <indicateur précis> — source à mobiliser : <INSEE, CartoSanté, ODISSÉ, Observatoire des territoires, POSS, IEDOM, DREES, ARS, Assurance Maladie, Santé publique France>].",
+    "- Une information du client qui demande vérification, ou une référence réglementaire dont tu n'es pas certain, est suivie de [à confirmer].",
+    "- Les références réglementaires citées doivent exister : Code de la santé publique (articles L.1411-11-1, L.6323-1 et suivants pour les centres de santé, L.6323-3 pour les MSP), accord conventionnel interprofessionnel du 20 avril 2017 (ACI), accord national des centres de santé, référentiels HAS, FNCS et AVECsanté. En cas de doute sur un numéro d'article, cite le texte sans le numéro.",
+    "- Le chapitre modèle éventuellement fourni sert pour la structure, le niveau de détail et le ton. Ne reprends jamais ses chiffres, ses noms ni ses constats : ils concernent un autre territoire.",
+    "",
+    "STYLE",
+    "- Style institutionnel, professionnel, technique, compatible ARS. Aucun langage commercial, aucune formule vague, aucune généralité non démontrée : chaque affirmation s'appuie sur une donnée, une analyse ou une référence réglementaire.",
+    "- Du texte rédigé, personnalisé au territoire et à l'équipe, et pas seulement des tableaux : chaque tableau ou graphique est précédé d'une phrase qui l'introduit et suivi d'une analyse.",
+    "- Écris en français, avec les noms réels de la structure, de la commune et des professionnels tels qu'ils figurent dans les pièces.",
+    "",
+    "FORMAT DE SORTIE — respecte-le exactement",
+    "1. Le chapitre en HTML simple, entre <chapitre> et </chapitre>. Balises permises : h1 (titre du chapitre, une seule fois), h2, h3, h4, p, ul, ol, li, strong, em, table, thead, tbody, tr, th, td, blockquote, br. Aucun attribut de style, aucune classe.",
+    "   - Encadré de synthèse : <blockquote> contenant un <p><strong>Observations</strong> …</p>, etc.",
+    "   - Graphique : <figure data-graphique='{JSON}'></figure> où JSON vaut {\"type\":\"barres|lignes|secteurs|pyramide\",\"titre\":\"…\",\"source\":\"…\",\"categories\":[\"…\"],\"series\":[{\"nom\":\"…\",\"valeurs\":[nombres]}]}. Pour une pyramide des âges : categories = tranches d'âge, deux séries « Hommes » et « Femmes ». Pour des secteurs : une seule série. N'emploie un graphique que si toutes ses valeurs figurent dans les pièces ; sinon écris <p>[Figure à insérer : <type> — <ce qu'elle montre> — source : <…>]</p>.",
+    "   - Logigramme ou schéma d'organisation : décris-le en liste ordonnée claire, précédée de <p>[Schéma à insérer : <titre>]</p>.",
+    "2. Entre <fil> et </fil>, un objet JSON {\"faits\":[\"…\"]} : 10 à 25 faits établis dans ce chapitre que les chapitres suivants devront reprendre à l'identique (axes retenus, chiffres clés avec leur source, partenaires, horaires, organisation décidée).",
+    "3. Entre <a_completer> et </a_completer>, la liste en texte simple, une ligne par élément, des données et validations qui restent à obtenir.",
+    "Rien d'autre en dehors de ces trois blocs."
+  ].join('\n');
+}
+
+/** Grille d'analyse imposée selon la nature du chapitre. */
+function methodeChapitre_(methode) {
+  if (methode === 'diagnostic') {
+    return "Pour chaque indicateur : donnée du territoire, comparaison au département, à la région et à la France, analyse des écarts, enjeux, risques. "
+      + "Chaque sous-partie se termine par un encadré <blockquote> en trois paragraphes : Observations, Analyse, Conséquences pour le projet de santé. "
+      + "Illustre par des graphiques (histogrammes, courbes d'évolution, secteurs, pyramide des âges) quand les données le permettent ; chaque graphique est suivi de son analyse.";
+  }
+  if (methode === 'organisation') {
+    return "Mets chaque organisation décrite en corrélation logique avec les axes du projet de santé (cite l'axe concerné). "
+      + "Chaque sous-partie se termine par un encadré <blockquote> en quatre paragraphes : Observations, Analyse, Conséquences pour le projet de santé et l'organisation, Impact pour les populations cibles du territoire. "
+      + "Ajoute des tableaux d'organisation (qui fait quoi, quand, avec quel outil) et des logigrammes décrits.";
+  }
+  return "Rédige un texte structuré et argumenté, relié aux axes du projet de santé et aux constats du diagnostic. Ajoute des tableaux lorsque l'information s'y prête.";
+}
+
+/** Contenu du message : pièces du dossier, puis la demande elle-même. */
+function contenuDemande_(projetId, donnees, chapitre, consignes, sources) {
+  var blocs = [];
+  var p = donnees.projets[0];
+
+  var fiche = {
+    nom: p.nom, type: p.type, commune: p.ville, departement: p.departement, adresse: p.adresse,
+    modele_juridique: p.modeleJuridique, nombre_professionnels: p.equipe, surface_m2: p.surface,
+    date_de_debut_accompagnement: p.dateDebut, referent_client: p.client && p.client.nom,
+    fonction_referent: p.client && p.client.fonction
+  };
+  blocs.push(texteBloc_('<fiche_projet>\n' + JSON.stringify(fiche, null, 1) + '\n</fiche_projet>'));
+
+  var q = (donnees.questionnaire || {})[projetId] || {};
+  var reponses = {};
+  Object.keys(q).forEach(function (rub) { reponses[rub] = q[rub].donnees; });
+  blocs.push(texteBloc_('<informations_client>\n'
+    + (Object.keys(reponses).length ? JSON.stringify(reponses, null, 1) : 'Aucune information renseignée par le client.')
+    + '\n</informations_client>'));
+
+  var partenaires = (donnees.partenaires || {})[projetId] || [];
+  var financements = (donnees.financements || {})[projetId] || [];
+  blocs.push(texteBloc_('<partenaires>\n' + JSON.stringify(partenaires) + '\n</partenaires>\n'
+    + '<financements>\n' + JSON.stringify(financements) + '\n</financements>'));
+
+  var fil = lireOnglet('Redaction')
+    .filter(function (r) { return String(r.projet_id) === projetId && r.chapitre !== chapitre.id && r.fil; })
+    .map(function (r) { return '[' + r.chapitre + '] ' + r.fil; });
+  blocs.push(texteBloc_('<fil_conducteur>\n'
+    + (fil.length ? fil.join('\n') : 'Aucun chapitre rédigé auparavant.') + '\n</fil_conducteur>'));
+
+  if (chapitre.modele) {
+    var modele = '';
+    try { modele = exporterTexteGoogle_(chapitre.modele, 'text/plain').slice(0, MODELE_MAX_CARACTERES); }
+    catch (e) { modele = ''; }
+    if (modele) {
+      blocs.push(texteBloc_('<chapitre_modele>\nExemple d\'un projet livré pour un AUTRE territoire. '
+        + 'Structure et ton uniquement ; aucun chiffre ni constat à reprendre.\n\n' + modele + '\n</chapitre_modele>'));
+    }
+  }
+
+  sources.lus.forEach(function (s) {
+    blocs.push(texteBloc_('<source nom="' + s.nom.replace(/"/g, "'") + '">'));
+    blocs.push(s.bloc);
+  });
+  if (!sources.lus.length) {
+    blocs.push(texteBloc_('<sources>Aucun fichier source dans le dossier « 01 — Projet de santé ». '
+      + 'Toute donnée statistique doit donc être signalée à compléter.</sources>'));
+  }
+
+  blocs.push(texteBloc_([
+    'Rédige maintenant le chapitre suivant du projet de santé de « ' + p.nom + ' ».',
+    '', 'CHAPITRE : ' + chapitre.titre, '', 'SOUS-PARTIES ATTENDUES :', chapitre.plan,
+    '', 'MÉTHODE : ' + methodeChapitre_(chapitre.methode),
+    '', 'PLAN GÉNÉRAL DU DOCUMENT (pour situer le chapitre) :', PLAN_GENERAL_PDS,
+    '', 'Reste cohérent avec le fil conducteur des chapitres déjà rédigés.',
+    consignes ? '\nCONSIGNES PARTICULIÈRES DE L\'EXPERT :\n' + consignes : ''
+  ].join('\n')));
+
+  return blocs;
+}
+
+function texteBloc_(t) { return { type: 'text', text: t }; }
+
+/**
+ * Fichiers du dossier « 01 — Projet de santé » et de ses sous-dossiers
+ * directs, convertis en blocs lisibles par Claude.
+ * @param {Array<string>} exclus chapitres déjà rédigés, qui passent par le fil conducteur.
+ */
+function sourcesDuDossier_(dossier, exclus) {
+  var fichiers = [];
+  var collecter = function (d) {
+    var it = d.getFiles();
+    while (it.hasNext()) fichiers.push(it.next());
+  };
+  collecter(dossier);
+  var sous = dossier.getFolders();
+  while (sous.hasNext()) collecter(sous.next());
+
+  var lus = [], ignores = [], total = 0;
+  fichiers.forEach(function (f) {
+    var nom = f.getName();
+    if (exclus.indexOf(f.getId()) !== -1) return;
+    if (lus.length >= SOURCES_MAX_FICHIERS) { ignores.push(nom + ' (nombre maximal atteint)'); return; }
+
+    var type = String(f.getMimeType() || '');
+    try {
+      var bloc = null, poids = 0;
+      if (type === 'application/vnd.google-apps.document') {
+        var t = exporterTexteGoogle_(f.getId(), 'text/plain').slice(0, SOURCES_MAX_CARACTERES_TEXTE);
+        bloc = texteBloc_(t); poids = t.length;
+      } else if (type === 'application/vnd.google-apps.spreadsheet') {
+        var csv = exporterTexteGoogle_(f.getId(), 'text/csv').slice(0, SOURCES_MAX_CARACTERES_TEXTE);
+        bloc = texteBloc_('Premier onglet, au format CSV :\n' + csv); poids = csv.length;
+      } else if (type === 'application/pdf' || /^image\/(png|jpeg|gif|webp)$/.test(type)
+                 || /^text\//.test(type) || type === 'application/json') {
+        var octets = f.getBlob().getBytes();
+        poids = octets.length;
+        if (poids > SOURCES_MAX_OCTETS_FICHIER) { ignores.push(nom + ' (' + formaterOctets(poids) + ', trop volumineux)'); return; }
+        if (type === 'application/pdf') {
+          bloc = { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: Utilities.base64Encode(octets) } };
+        } else if (type.indexOf('image/') === 0) {
+          bloc = { type: 'image', source: { type: 'base64', media_type: type, data: Utilities.base64Encode(octets) } };
+        } else {
+          bloc = texteBloc_(f.getBlob().getDataAsString('UTF-8').slice(0, SOURCES_MAX_CARACTERES_TEXTE));
+        }
+      } else {
+        ignores.push(nom + ' (format non lu : convertissez-le en Google Docs, Google Sheets ou PDF)');
+        return;
+      }
+      if (total + poids > SOURCES_MAX_OCTETS_TOTAL) { ignores.push(nom + ' (volume total atteint)'); return; }
+      total += poids;
+      lus.push({ nom: nom, bloc: bloc });
+    } catch (e) {
+      ignores.push(nom + ' (lecture impossible)');
+    }
+  });
+  return { lus: lus, ignores: ignores };
+}
+
+/** Texte d'un fichier Google, par l'export de l'API Drive. */
+function exporterTexteGoogle_(fileId, mimeType) {
+  var rep = UrlFetchApp.fetch('https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(fileId)
+    + '/export?mimeType=' + encodeURIComponent(mimeType), {
+    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true
+  });
+  if (rep.getResponseCode() !== 200) throw new Error('export impossible (' + rep.getResponseCode() + ')');
+  return rep.getContentText('UTF-8');
+}
+
+/* ------------------------------------------------- Suivi et réception -- */
+
+/**
+ * Action « suivreRedaction » : interroge le lot ; s'il est terminé, crée le
+ * Google Docs du chapitre et enregistre le fil conducteur.
+ */
+function suivreRedaction(requete) {
+  var projetId = String(requete.projetId || '');
+  var chapitre = chapitreRedaction_(String(requete.chapitre || ''));
+  if (!projetId || !chapitre) throw new Error('Projet ou chapitre non précisé.');
+
+  // Deux onglets ouverts interrogeraient le même lot : un seul doit créer le document.
+  var verrou = LockService.getScriptLock();
+  verrou.waitLock(60000);
+  try {
+    var ligne = ligneRedaction_(projetId, chapitre.id);
+    if (!ligne) throw new Error('Aucune rédaction demandée pour ce chapitre.');
+    if (String(ligne.statut) !== 'en_cours') return etatRedaction_(projetId, chapitre.id);
+
+    var cle = cleClaude_();
+    var rep = UrlFetchApp.fetch(URL_LOTS_CLAUDE + '/' + encodeURIComponent(String(ligne.lot_id)), {
+      headers: entetesClaude_(cle), muteHttpExceptions: true
+    });
+    if (rep.getResponseCode() !== 200) {
+      throw new Error('Suivi impossible (' + rep.getResponseCode() + ') : ' + messageErreurClaude_(rep.getContentText()));
+    }
+    var lot = JSON.parse(rep.getContentText());
+    if (lot.processing_status !== 'ended') return etatRedaction_(projetId, chapitre.id);
+
+    var resultats = UrlFetchApp.fetch(lot.results_url, { headers: entetesClaude_(cle), muteHttpExceptions: true });
+    var resultat = null;
+    String(resultats.getContentText('UTF-8')).split('\n').forEach(function (l) {
+      if (!l.trim()) return;
+      try { resultat = JSON.parse(l).result; } catch (e) { /* ligne illisible */ }
+    });
+
+    if (!resultat || resultat.type !== 'succeeded') {
+      var motif = !resultat ? 'aucun résultat renvoyé'
+        : resultat.type === 'errored' ? ('erreur : ' + ((resultat.error && resultat.error.error && resultat.error.error.message)
+            || (resultat.error && resultat.error.message) || 'inconnue'))
+        : resultat.type === 'expired' ? 'délai dépassé' : 'demande annulée';
+      ecrireRedaction_(projetId, chapitre.id, { statut: 'erreur', message: 'Rédaction non aboutie : ' + motif + '.' });
+      return etatRedaction_(projetId, chapitre.id);
+    }
+
+    var texte = (resultat.message.content || [])
+      .filter(function (b) { return b.type === 'text'; })
+      .map(function (b) { return b.text; }).join('\n');
+    var html = extraireBloc_(texte, 'chapitre');
+    if (!html) {
+      ecrireRedaction_(projetId, chapitre.id, { statut: 'erreur',
+        message: 'Réponse inattendue : le chapitre est absent'
+          + (resultat.message.stop_reason === 'max_tokens' ? ' (longueur maximale atteinte)' : '') + '.' });
+      return etatRedaction_(projetId, chapitre.id);
+    }
+
+    var projet = lireOnglet('Projets').filter(function (r) { return r.id === projetId; })[0] || {};
+    var version = (Number(ligne.version) || 0) + 1;
+    var titreDoc = 'PDS — ' + (projet.nom || projetId) + ' — ' + chapitre.titre + ' — v' + version;
+    var dossier = sousDossierCategorie(dossierDuProjet(projetId), 'Projet');
+    var doc = creerGoogleDoc_(titreDoc, mettreEnForme_(html, chapitre, projet), dossier.getId());
+
+    var fil = extraireBloc_(texte, 'fil');
+    try { fil = JSON.stringify((JSON.parse(fil).faits || []).slice(0, 40)); } catch (e) { fil = String(fil || '').slice(0, 8000); }
+
+    ecrireRedaction_(projetId, chapitre.id, {
+      statut: 'pret', doc_id: doc.id, doc_url: doc.url, version: version,
+      fil: String(fil).slice(0, 20000),
+      a_completer: extraireBloc_(texte, 'a_completer').trim().slice(0, 20000),
+      message: 'Version ' + version + ' rédigée'
+        + (resultat.message.stop_reason === 'max_tokens' ? ' — attention : longueur maximale atteinte, fin du chapitre à vérifier' : '') + '.'
+    });
+    return etatRedaction_(projetId, chapitre.id);
+  } finally {
+    try { verrou.releaseLock(); } catch (ignore) { /* rien */ }
+  }
+}
+
+function etatRedaction_(projetId, chapitreId) {
+  var projets = [{ id: projetId }];
+  return donneesRedaction_(projets)[projetId][chapitreId] || null;
+}
+
+function extraireBloc_(texte, balise) {
+  var m = String(texte || '').match(new RegExp('<' + balise + '>([\\s\\S]*?)</' + balise + '>'));
+  if (m) return m[1].trim();
+  // Réponse tronquée : on garde ce qui suit la balise ouvrante.
+  var debut = String(texte || '').indexOf('<' + balise + '>');
+  return debut >= 0 ? String(texte).slice(debut + balise.length + 2).trim() : '';
+}
+
+/* ------------------------------------------------ Mise en forme du Doc -- */
+
+var COULEURS_PDS = { titre: '#0b3c5d', accent: '#1e95cb', entete: '#e6f3fa', bordure: '#b9d7e8', encadre: '#f3f8fb' };
+var PALETTE_GRAPHIQUES = ['#1e95cb', '#0b3c5d', '#f2a541', '#5bb381', '#c75c5c', '#8a6fb3'];
+
+/** HTML final : balises nettoyées, styles en ligne, graphiques rendus en images. */
+function mettreEnForme_(html, chapitre, projet) {
+  var propre = String(html)
+    .replace(/<(script|style|iframe|object|embed|svg|form)[\s\S]*?<\/\1>/gi, '')
+    .replace(/<(img|link|meta|input)\b[^>]*>/gi, '')
+    .replace(/\son\w+\s*=\s*("[^"]*"|'[^']*')/gi, '');
+
+  // Graphiques : rendus par le service Charts, insérés en image.
+  propre = propre.replace(/<figure\s+data-graphique\s*=\s*'([^']*)'\s*>\s*<\/figure>/gi, function (tout, json) {
+    return figureGraphique_(json);
+  }).replace(/<figure\s+data-graphique\s*=\s*"([^"]*)"\s*>\s*<\/figure>/gi, function (tout, json) {
+    return figureGraphique_(json.replace(/&quot;/g, '"'));
+  });
+
+  // Attributs retirés (sauf fusion de cellules), puis styles imposés.
+  propre = propre.replace(/<(h[1-4]|p|ul|ol|li|table|thead|tbody|tr|blockquote|strong|em)\s[^>]*>/gi, '<$1>');
+  propre = propre.replace(/<(th|td)\s([^>]*)>/gi, function (tout, balise, attrs) {
+    var garde = (attrs.match(/(colspan|rowspan)\s*=\s*"?\d+"?/gi) || []).join(' ');
+    return '<' + balise + (garde ? ' ' + garde : '') + '>';
+  });
+
+  // Google Docs ignore le fond d'un bloc de citation à l'import : l'encadré
+  // devient un tableau d'une cellule, dont le fond, lui, est conservé.
+  propre = propre.replace(/<blockquote>/gi, '<table><tr><td data-encadre="1">')
+                 .replace(/<\/blockquote>/gi, '</td></tr></table>');
+
+  var police = "font-family:Arial,sans-serif;";
+  var styles = {
+    h1: police + 'font-size:20pt;color:' + COULEURS_PDS.titre + ';border-bottom:2pt solid ' + COULEURS_PDS.accent + ';padding-bottom:4pt;',
+    h2: police + 'font-size:15pt;color:' + COULEURS_PDS.titre + ';margin-top:18pt;',
+    h3: police + 'font-size:12.5pt;color:' + COULEURS_PDS.accent + ';margin-top:12pt;',
+    h4: police + 'font-size:11pt;color:' + COULEURS_PDS.titre + ';',
+    p: police + 'font-size:10.5pt;line-height:1.35;text-align:justify;',
+    li: police + 'font-size:10.5pt;line-height:1.3;',
+    table: 'border-collapse:collapse;width:100%;margin:6pt 0;',
+    th: police + 'font-size:9.5pt;background-color:' + COULEURS_PDS.entete + ';color:' + COULEURS_PDS.titre + ';border:1pt solid ' + COULEURS_PDS.bordure + ';padding:4pt;text-align:left;',
+    td: police + 'font-size:9.5pt;border:1pt solid ' + COULEURS_PDS.bordure + ';padding:4pt;vertical-align:top;',
+    encadre: police + 'background-color:' + COULEURS_PDS.encadre + ';border:1pt solid ' + COULEURS_PDS.bordure
+      + ';border-left:4pt solid ' + COULEURS_PDS.accent + ';padding:6pt 10pt;vertical-align:top;'
+  };
+  propre = propre.replace(/<td data-encadre="1">/g, '<td style="' + styles.encadre + '">');
+  delete styles.encadre;
+  Object.keys(styles).forEach(function (b) {
+    propre = propre.replace(new RegExp('<' + b + '(\\s[^>]*)?>', 'gi'), function (tout, attrs) {
+      if (/style=/.test(attrs || '')) return tout;
+      return '<' + b + (attrs || '') + ' style="' + styles[b] + '">';
+    });
+  });
+
+  var bandeau = '<p style="' + police + 'font-size:9pt;color:#5b6b7b;">Projet de santé — '
+    + echapperHtml_(projet.nom || '') + (projet.ville ? ' (' + echapperHtml_(projet.ville) + ')' : '')
+    + ' · ElodiaTech — Ingénierie médicale · document de travail rédigé le '
+    + Utilities.formatDate(new Date(), 'America/Martinique', 'dd/MM/yyyy') + '</p>';
+
+  return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>' + echapperHtml_(chapitre.titre)
+    + '</title></head><body>' + bandeau + propre + '</body></html>';
+}
+
+/** Rend un graphique décrit en JSON ; à défaut, laisse un emplacement signalé. */
+function figureGraphique_(json) {
+  var g;
+  try { g = JSON.parse(json); } catch (e) { return '<p>[Figure à insérer : description illisible]</p>'; }
+  var titre = String(g.titre || 'Graphique');
+  var legende = '<p style="font-family:Arial,sans-serif;font-size:9pt;color:#5b6b7b;text-align:center;"><em>'
+    + echapperHtml_(titre) + (g.source ? ' — Source : ' + echapperHtml_(String(g.source)) : '') + '</em></p>';
+  try {
+    var categories = (g.categories || []).map(String);
+    var series = (g.series || []).filter(function (s) { return s && (s.valeurs || []).length === categories.length; });
+    if (!categories.length || !series.length) throw new Error('données incomplètes');
+    if (g.type === 'secteurs') series = series.slice(0, 1);
+
+    var table = Charts.newDataTable().addColumn(Charts.ColumnType.STRING, 'Catégorie');
+    series.forEach(function (s) { table.addColumn(Charts.ColumnType.NUMBER, String(s.nom || '')); });
+    categories.forEach(function (c, i) {
+      table.addRow([c].concat(series.map(function (s) { return Number(s.valeurs[i]) || 0; })));
+    });
+
+    var constructeur = g.type === 'lignes' ? Charts.newLineChart()
+      : g.type === 'secteurs' ? Charts.newPieChart()
+      : g.type === 'pyramide' ? Charts.newBarChart()
+      : Charts.newColumnChart();
+    var graphique = constructeur.setDataTable(table.build()).setTitle(titre)
+      .setDimensions(900, g.type === 'pyramide' ? 560 : 460)
+      .setColors(PALETTE_GRAPHIQUES.slice(0, Math.max(series.length, g.type === 'secteurs' ? categories.length : 1)))
+      .setLegendPosition(Charts.Position.BOTTOM)
+      .build();
+    var png = graphique.getAs('image/png').getBytes();
+    return '<p style="text-align:center;"><img width="600" src="data:image/png;base64,'
+      + Utilities.base64Encode(png) + '"></p>' + legende;
+  } catch (e) {
+    return '<p>[Figure à insérer : ' + echapperHtml_(titre) + ']</p>' + legende;
+  }
+}
+
+function echapperHtml_(t) {
+  return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/** Crée un Google Docs à partir de HTML, par l'envoi multipartite de l'API Drive. */
+function creerGoogleDoc_(nom, html, dossierId) {
+  var frontiere = 'elodiatech' + Utilities.getUuid().replace(/-/g, '');
+  var meta = JSON.stringify({ name: nom, mimeType: 'application/vnd.google-apps.document', parents: [dossierId] });
+  var corps = '--' + frontiere + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' + meta
+    + '\r\n--' + frontiere + '\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n' + html
+    + '\r\n--' + frontiere + '--';
+  var rep = UrlFetchApp.fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink', {
+    method: 'post', contentType: 'multipart/related; boundary=' + frontiere,
+    payload: Utilities.newBlob(corps, 'text/plain').getBytes(),
+    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true
+  });
+  if (rep.getResponseCode() !== 200) {
+    throw new Error('Création du Google Docs impossible (' + rep.getResponseCode() + ').');
+  }
+  var f = JSON.parse(rep.getContentText());
+  return { id: f.id, url: f.webViewLink || ('https://docs.google.com/document/d/' + f.id + '/edit') };
 }
 
 /* ==========================================================================
