@@ -340,6 +340,20 @@ function demoDonnees() {
       'cds-gros-morne': [],
       'cds-cayenne': [],
     },
+    // Informations fournies par le client (module « Informations du projet »).
+    // Une entrée par rubrique de QUESTIONNAIRE : { donnees, majLe, majPar }.
+    questionnaire: {
+      'msp-fort-de-france': {
+        structure: { majPar: 'client', majLe: `${j(-3)}T10:00:00.000Z`, donnees: {
+          type: 'Maison de santé pluriprofessionnelle (MSP)', nom: 'MSP Caraïbes', forme: 'SISA',
+          commune: 'Fort-de-France', porteur: 'Dr Exemple, médecin généraliste' } },
+        horaires: { majPar: 'client', majLe: `${j(-3)}T10:05:00.000Z`, donnees: {
+          horaires: [{ site: 'Site principal', lun: '7 h – 19 h', mar: '7 h – 19 h', mer: '7 h – 19 h', jeu: '7 h – 19 h', ven: '7 h – 19 h', sam: '8 h – 12 h' }] } },
+      },
+      'msp-pointe-a-pitre': {},
+      'cds-gros-morne': {},
+      'cds-cayenne': {},
+    },
     // Demandes de pièces propres à un dossier, ajoutées par l'expert en plus
     // du socle de PIECES_DOSSIER.
     pieces: {
@@ -465,7 +479,7 @@ const Store = {
       });
       ['projets', 'documents', 'signatures', 'messages', 'evenements',
        'comptesRendus', 'financements', 'partenaires', 'pieces', 'prestataires',
-       'intervenantsImmo'].forEach((cle) => {
+       'intervenantsImmo', 'questionnaire'].forEach((cle) => {
         if (sauvegarde[cle]) this.state[cle] = sauvegarde[cle];
       });
     }
@@ -516,7 +530,7 @@ const Store = {
       if (this.state.reglages.source === 'sheets') {
         ['projets', 'documents', 'signatures', 'messages', 'evenements',
          'comptesRendus', 'financements', 'partenaires', 'pieces',
-         'experts', 'prestataires'].forEach((cle) => {
+         'experts', 'prestataires', 'questionnaire'].forEach((cle) => {
           delete aEnregistrer[cle];
         });
       }
@@ -818,6 +832,17 @@ const Store = {
         titre: `${aValider.length} livrable${aValider.length > 1 ? 's' : ''} à valider`,
         texte: aValider.map((x) => x.titre).slice(0, 3).join(' · '),
         route: 'feuille-route',
+      });
+    }
+
+    // Informations du projet encore incomplètes.
+    const q = this.completudeQuestionnaire(projetId);
+    if (q.pct < 100) {
+      n.push({
+        ton: 'info', icone: 'fa-solid fa-clipboard-list',
+        titre: `Informations du projet : ${q.pct} % renseignées`,
+        texte: `${q.total - q.faits} élément${q.total - q.faits > 1 ? 's' : ''} attendu${q.total - q.faits > 1 ? 's' : ''} pour la rédaction du projet de santé`,
+        route: 'questionnaire',
       });
     }
 
@@ -1394,6 +1419,78 @@ const Store = {
     });
     const p = this.liste('partenaires').find((x) => x.id === partId);
     if (p) this._pousserItem('partenaires', p);
+  },
+
+  /* ---- Questionnaire (« Informations du projet ») ---- */
+
+  /** Réponses d'un projet : { rubrique: { donnees, majLe, majPar } }. */
+  questionnaire(projetId) {
+    const id = projetId || this.state.projetActifId;
+    return (this.state.questionnaire && this.state.questionnaire[id]) || {};
+  },
+
+  reponsesRubrique(rubriqueId, projetId) {
+    return this.questionnaire(projetId)[rubriqueId]?.donnees || {};
+  },
+
+  /** Documents déposés depuis un champ « fichiers » : rattachés par `Q:rubrique.champ`. */
+  fichiersQuestion(rubriqueId, champId, projetId) {
+    return this.liste('documents', projetId).filter((d) => d.piece === `Q:${rubriqueId}.${champId}`);
+  },
+
+  champRempli(rubrique, champ, projetId) {
+    if (champ.type === 'fichiers') return this.fichiersQuestion(rubrique.id, champ.id, projetId).length > 0;
+    const v = this.reponsesRubrique(rubrique.id, projetId)[champ.id];
+    if (champ.type === 'tableau') {
+      return Array.isArray(v) && v.some((l) => Object.values(l || {}).some((x) => String(x || '').trim()));
+    }
+    return String(v || '').trim() !== '';
+  },
+
+  /** Champs obligatoires d'une rubrique, en tenant compte du choix des axes. */
+  champsRequis(rubrique, projetId) {
+    return rubrique.champs.filter((c) => {
+      if (!c.requis) return false;
+      return true;
+    }).concat(
+      // Si le client propose lui-même ses axes, le tableau devient attendu.
+      rubrique.id === 'axes' && /^Je propose/.test(this.reponsesRubrique('axes', projetId).choix || '')
+        ? rubrique.champs.filter((c) => c.id === 'axes') : [],
+    );
+  },
+
+  completudeRubrique(rubrique, projetId) {
+    const requis = this.champsRequis(rubrique, projetId);
+    const faits = requis.filter((c) => this.champRempli(rubrique, c, projetId)).length;
+    return { faits, total: requis.length, pct: requis.length ? Math.round((100 * faits) / requis.length) : 100 };
+  },
+
+  completudeQuestionnaire(projetId) {
+    let faits = 0, total = 0;
+    QUESTIONNAIRE.forEach((r) => {
+      const c = this.completudeRubrique(r, projetId);
+      faits += c.faits; total += c.total;
+    });
+    return { faits, total, pct: total ? Math.round((100 * faits) / total) : 100 };
+  },
+
+  /**
+   * Enregistre une rubrique. `pousser:false` garde la saisie en cours sans
+   * l'envoyer (ajout ou retrait d'une ligne de tableau avant enregistrement).
+   */
+  enregistrerRubrique(rubriqueId, donnees, { pousser = true } = {}) {
+    const projetId = this.state.projetActifId;
+    const entree = {
+      donnees,
+      majLe: pousser ? new Date().toISOString() : (this.questionnaire()[rubriqueId]?.majLe || ''),
+      majPar: pousser ? (this.estExpert() ? 'expert' : 'client') : (this.questionnaire()[rubriqueId]?.majPar || ''),
+    };
+    this.commit((s) => {
+      if (!s.questionnaire) s.questionnaire = {};
+      if (!s.questionnaire[projetId]) s.questionnaire[projetId] = {};
+      s.questionnaire[projetId][rubriqueId] = entree;
+    });
+    if (pousser) this.pousser('questionnaire', `${projetId}:${rubriqueId}`, { donnees: JSON.stringify(donnees) });
   },
 
   /* ---- Recherche globale ---- */

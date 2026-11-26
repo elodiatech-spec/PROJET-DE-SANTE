@@ -44,7 +44,7 @@ Un document déposé dans `03 — Dossier ARS` se référence dans le coffre-for
    **« Initialiser la base (onglets + données de démonstration) »**.
 5. Autorisez le script lorsque Google le demande (première exécution uniquement).
 
-Les 14 onglets sont créés, mis en forme et remplis :
+Les 15 onglets sont créés, mis en forme et remplis :
 
 | Onglet | Contenu |
 |---|---|
@@ -54,6 +54,7 @@ Les 14 onglets sont créés, mis en forme et remplis :
 | `Catalogue` | Référence des 37 prestations et de leur rattachement aux formules |
 | `Documents`, `Signatures`, `Messages`, `Evenements`, `ComptesRendus`, `Financements`, `Partenaires` | Données de suivi |
 | `Pieces` | Demandes de pièces propres à un dossier, ajoutées par l'expert |
+| `Questionnaire` | Informations du projet fournies par le client : une ligne par projet et par rubrique (réponses en JSON) |
 | `Experts`, `Prestataires` | Référentiels communs à tous les dossiers |
 
 > Pour partir d'une base vierge, choisissez plutôt **« Créer les onglets vides seulement »**.

@@ -409,6 +409,38 @@ const App = {
     d.setAttribute('aria-hidden', String(!ouvert));
   },
 
+  /**
+   * Lit les saisies d'une rubrique du questionnaire dans la page.
+   * Les lignes de tableau entièrement vides sont écartées.
+   */
+  lireRubrique(rubId, { garderVides = false } = {}) {
+    const r = QUESTIONNAIRE.find((x) => x.id === rubId);
+    const donnees = { ...Store.reponsesRubrique(rubId) };
+    if (!r) return donnees;
+    r.champs.forEach((c) => {
+      if (c.type === 'fichiers') return;
+      if (c.type === 'tableau') {
+        const lignes = [];
+        document.querySelectorAll(`[data-q-cellule^="${rubId}.${c.id}."]`).forEach((el) => {
+          const [, , i, col] = el.dataset.qCellule.split('.');
+          if (!lignes[i]) lignes[i] = {};
+          lignes[i][col] = el.value.trim();
+        });
+        const toutes = Array.from(lignes, (l) => l || {});
+        donnees[c.id] = garderVides ? toutes : toutes.filter((l) => Object.values(l).some((v) => v));
+        return;
+      }
+      const champ = document.querySelector(`[data-q-champ="${rubId}.${c.id}"]`);
+      if (champ) donnees[c.id] = champ.value.trim();
+    });
+    return donnees;
+  },
+
+  /** Après un nouveau rendu, ramène l'écran sur la rubrique en cours. */
+  revenirA(idElement) {
+    setTimeout(() => document.getElementById(idElement)?.scrollIntoView({ block: 'start' }), 0);
+  },
+
   /* ======================================================================
      ÉVÉNEMENTS
      ====================================================================== */
@@ -796,6 +828,82 @@ const App = {
      ACTIONS (data-action="…")
      ====================================================================== */
   actions: {
+
+    /* --- Informations du projet (questionnaire) --- */
+    'q-enregistrer'(el) {
+      const rub = el.dataset.rub;
+      Store.enregistrerRubrique(rub, App.lireRubrique(rub));
+      App.revenirA(`q-${rub}`);
+      const r = QUESTIONNAIRE.find((x) => x.id === rub);
+      toast(Store.ecritureActive()
+        ? `« ${r ? r.titre : rub} » enregistré.`
+        : `« ${r ? r.titre : rub} » enregistré dans ce navigateur (démonstration).`, 'ok');
+    },
+
+    'q-ajouter-ligne'(el) {
+      const { rub, champ } = el.dataset;
+      const donnees = App.lireRubrique(rub, { garderVides: true });
+      donnees[champ] = (Array.isArray(donnees[champ]) ? donnees[champ] : []).concat([{}]);
+      // Saisie gardée localement : l'envoi au serveur se fait à l'enregistrement.
+      Store.enregistrerRubrique(rub, donnees, { pousser: false });
+      App.revenirA(`q-${rub}`);
+    },
+
+    'q-retirer-ligne'(el) {
+      const { rub, champ } = el.dataset;
+      const donnees = App.lireRubrique(rub, { garderVides: true });
+      const lignes = Array.isArray(donnees[champ]) ? donnees[champ] : [];
+      const i = Number(el.dataset.ligne);
+      const pleine = lignes[i] && Object.values(lignes[i]).some((v) => String(v || '').trim());
+      const retirer = () => {
+        lignes.splice(i, 1);
+        donnees[champ] = lignes;
+        Store.enregistrerRubrique(rub, donnees, { pousser: false });
+        App.revenirA(`q-${rub}`);
+        toast('Ligne retirée. Cliquez sur « Enregistrer » pour confirmer.', 'info');
+      };
+      if (!pleine) { retirer(); return; }
+      Modal.confirmer({
+        titre: 'Retirer cette ligne ?',
+        texte: 'Elle disparaîtra de la rubrique dès que vous aurez enregistré.',
+        libelle: 'Retirer',
+        onConfirm: retirer,
+      });
+    },
+
+    'q-deposer'(el) {
+      const { rub, champ } = el.dataset;
+      const r = QUESTIONNAIRE.find((x) => x.id === rub);
+      const c = r && r.champs.find((x) => x.id === champ);
+      if (!c) return;
+
+      if (!Store.ecritureActive()) {
+        toast('Le dépôt de fichiers demande la connexion à la base Google.', 'warn');
+        return;
+      }
+      // Les saisies en cours de la rubrique sont gardées avant l'ouverture de la fenêtre.
+      Store.enregistrerRubrique(rub, App.lireRubrique(rub), { pousser: false });
+      const projet = Store.projet();
+
+      Modal.televersement({
+        categorie: c.categorie || 'Projet',
+        titre: c.label,
+        soustitre: `Le fichier est rangé dans le dossier « ${c.categorie || 'Projet'} » de votre projet. `
+                 + `${formaterOctets(TAILLE_MAX_DEPOT)} au maximum par fichier.`,
+        onFichier: (reference, categorieChoisie) => {
+          Store.ajouterDocument({
+            nom: reference.nom,
+            cat: categorieChoisie,
+            type: formatFichier(reference.nom),
+            url: reference.url,
+            taille: reference.taille,
+            piece: `Q:${rub}.${champ}`,
+            auteur: Store.estExpert() ? projet.consultant?.nom : projet.client?.nom,
+          });
+          App.revenirA(`q-${rub}`);
+        },
+      });
+    },
 
     /* --- Navigation & coque --- */
     aller(el) { App.aller(el.dataset.route); },

@@ -1184,6 +1184,30 @@ select { cursor: pointer; }
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
 
+/* ==========================================================================
+   Informations du projet (questionnaire)
+   ========================================================================== */
+.row-between { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); flex-wrap: wrap; }
+.q-sommaire { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-4); }
+.q-puce {
+  display: inline-flex; align-items: center; gap: 7px; padding: 6px 11px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--surface-2); color: var(--text-soft);
+  font-size: .74rem; font-weight: 700; text-decoration: none;
+}
+.q-puce span { font-variant-numeric: tabular-nums; color: var(--text-muted); }
+.q-puce:hover { border-color: var(--brand-500); color: var(--text); }
+.q-puce--ok { border-color: color-mix(in srgb, var(--ok-500) 45%, transparent); }
+.q-puce--ok span { color: var(--ok-500); }
+.q-puce--warn span { color: var(--warn-500); }
+.q-table { min-width: 760px; }
+.q-table td { padding: 6px 6px; }
+.q-table input, .q-table select { width: 100%; min-width: 90px; padding: 7px 8px; font-size: .78rem; }
+.q-fiche { border: 1px solid var(--border); border-radius: var(--r-md); padding: var(--sp-3); margin-bottom: var(--sp-2); background: var(--surface-2); }
+.q-fiche textarea { min-height: 64px; }
+.q-fichiers { display: flex; flex-direction: column; gap: var(--sp-2); align-items: flex-start; }
+.q-fichiers .file-row { width: 100%; }
+[id^="q-"].card { scroll-margin-top: 90px; }
+
 @media print {
   .topbar, .sidebar, .drawer, .toast-root, .breadcrumb, .btn, .sidebar-backdrop { display: none !important; }
   .content { padding: 0; }

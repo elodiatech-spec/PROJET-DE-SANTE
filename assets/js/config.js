@@ -309,6 +309,8 @@ const POLES = [
 const MODULES = [
   { id: 'dashboard',    pole: 'pilotage',  label: "Vue d'ensemble",          icone: 'fa-solid fa-chart-pie',            formules: null },
   { id: 'feuille-route',pole: 'pilotage',  label: 'Feuille de route',        icone: 'fa-solid fa-list-check',           formules: null },
+  // Les informations que le client fournit pour la rédaction du projet de santé.
+  { id: 'questionnaire',pole: 'pilotage',  label: 'Informations du projet',  icone: 'fa-solid fa-clipboard-list',       formules: null },
 
   { id: 'projet-sante', pole: 'ingenierie',label: 'Projet de santé',         icone: 'fa-solid fa-book-medical',         formules: null,               lot: 'LA' },
   { id: 'juridique',    pole: 'ingenierie',label: 'Structuration juridique', icone: 'fa-solid fa-scale-balanced',       formules: ['F2', 'F3'],       lot: 'LB' },
@@ -682,4 +684,123 @@ const FICHE_CLIENT = [
     { chemin: 'surface', label: 'Surface des locaux (m²)', type: 'number', placeholder: '240' },
     { chemin: 'notes',   label: 'Notes internes', type: 'textarea', placeholder: 'Contexte, points de vigilance, historique…' },
   ]},
+];
+
+/* ==========================================================================
+   QUESTIONNAIRE — informations fournies par le client
+   --------------------------------------------------------------------------
+   Huit rubriques, renseignées par le client et complétables par l'expert.
+   Les identifiants des rubriques et des champs doivent rester identiques à
+   QUESTIONNAIRE_CHAMPS dans apps-script/Code.gs : le serveur refuse tout
+   champ qu'il ne connaît pas.
+   Types : texte, zone, choix, tableau (colonnes), fichiers (dépôt Drive).
+   ========================================================================== */
+const Q_OUI_NON = ['Oui', 'Non', 'En cours'];
+const QUESTIONNAIRE = [
+  {
+    id: 'structure', titre: 'Votre structure', icone: 'fa-solid fa-hospital',
+    aide: 'Le type de structure, sa forme juridique, le porteur du projet et le coordinateur.',
+    champs: [
+      { id: 'type', label: 'Type de structure', type: 'choix', requis: true,
+        options: ['Maison de santé pluriprofessionnelle (MSP)', 'Centre de santé pluriprofessionnel', 'Centre de santé médical', 'Centre de santé dentaire', 'Centre de santé infirmier'] },
+      { id: 'nom', label: 'Nom de la structure', type: 'texte', requis: true },
+      { id: 'forme', label: 'Forme juridique', type: 'choix',
+        options: ['SISA', 'SISA en cours de constitution', 'Association loi 1901', 'SCIC', 'Collectivité territoriale', 'Mutuelle', 'Autre', 'Je ne sais pas encore'] },
+      { id: 'commune', label: "Commune d'implantation principale", type: 'texte', requis: true },
+      { id: 'porteur', label: 'Porteur du projet (nom, profession)', type: 'texte', requis: true },
+      { id: 'coordinateur', label: 'Coordinateur pressenti (nom, fonction)', type: 'texte' },
+      { id: 'coord_contact', label: 'Coordonnées du coordinateur (courriel, téléphone)', type: 'texte' },
+    ],
+  },
+  {
+    id: 'equipe', titre: 'Professionnels impliqués', icone: 'fa-solid fa-user-doctor',
+    aide: 'Chaque professionnel engagé dans le projet, son statut et son rôle.',
+    champs: [
+      { id: 'pros', label: 'Professionnels', type: 'tableau', requis: true, ligne: 'Professionnel',
+        colonnes: [
+          { id: 'nom', label: 'Nom' }, { id: 'prenom', label: 'Prénom' },
+          { id: 'profession', label: 'Profession', options: ['Médecin généraliste', 'Médecin spécialiste', 'Infirmier(ère)', 'IPA', 'Pharmacien(ne)', 'Masseur-kinésithérapeute', 'Sage-femme', 'Chirurgien-dentiste', 'Orthophoniste', 'Podologue', 'Diététicien(ne)', 'Psychologue', 'Orthoptiste', 'Secrétaire médical(e)', 'Coordinateur(trice)', 'Autre'] },
+          { id: 'site', label: 'Site' },
+          { id: 'statut', label: 'Statut', options: ['Associé', 'Salarié', 'Collaborateur', 'Partenaire externe', 'En cours de recrutement'] },
+          { id: 'etp', label: 'Temps (ETP)' },
+          { id: 'role', label: 'Rôle dans le projet' },
+          { id: 'engagement', label: 'Engagement', options: ['Confirmé', 'En cours', 'Pressenti'] },
+        ] },
+      { id: 'secretariat', label: 'Secrétariat et accueil (organisation, temps)', type: 'zone' },
+    ],
+  },
+  {
+    id: 'assistants', titre: 'Assistants médicaux', icone: 'fa-solid fa-user-nurse',
+    aide: "La présence d'assistants médicaux, ou votre souhait d'en recruter.",
+    champs: [
+      { id: 'presence', label: "Des assistants médicaux travaillent-ils (ou travailleront-ils) dans la structure ?", type: 'choix', requis: true,
+        options: ['Oui', 'Non', 'Recrutement souhaité'] },
+      { id: 'liste', label: 'Assistants médicaux', type: 'tableau', ligne: 'Assistant(e)',
+        colonnes: [{ id: 'nom', label: 'Nom' }, { id: 'medecin', label: 'Médecin(s) rattaché(s)' }, { id: 'etp', label: 'Temps (ETP)' },
+          { id: 'date', label: "Date d'embauche" }, { id: 'aide', label: "Aide à l'emploi", options: ['Obtenue', 'Demandée', 'À demander', 'Je ne sais pas'] }] },
+    ],
+  },
+  {
+    id: 'locaux', titre: 'Adresses et locaux', icone: 'fa-solid fa-building',
+    aide: "Vos sites d'exercice, le plan des locaux et, le cas échéant, votre projet immobilier.",
+    champs: [
+      { id: 'sites', label: "Sites d'exercice", type: 'tableau', requis: true, ligne: 'Site',
+        colonnes: [{ id: 'nom', label: 'Nom du site' }, { id: 'adresse', label: 'Adresse' }, { id: 'cp', label: 'Code postal' },
+          { id: 'commune', label: 'Commune' }, { id: 'acces', label: 'Étage, accès' }] },
+      { id: 'plan', label: 'Plan des locaux', type: 'fichiers', categorie: 'Immobilier', requis: true },
+      { id: 'occupation', label: "Mode d'occupation", type: 'choix', options: ['Propriété', 'Location', 'Mise à disposition par la collectivité', 'Mise à disposition (autre)', 'Mixte'] },
+      { id: 'surface', label: 'Surface totale (m²)', type: 'texte' },
+      { id: 'pieces', label: "Composition des locaux (cabinets, salle d'attente, salle de soins, salle de réunion…)", type: 'zone' },
+      { id: 'pmr', label: 'Accessibilité aux personnes à mobilité réduite', type: 'choix', options: ['Conforme', 'Partiellement conforme', 'Non conforme', 'Je ne sais pas'] },
+      { id: 'projet_immo', label: 'Projet immobilier (construction, extension, calendrier)', type: 'zone' },
+    ],
+  },
+  {
+    id: 'horaires', titre: "Horaires d'ouverture", icone: 'fa-solid fa-clock',
+    aide: "Les horaires d'ouverture de chaque site, par exemple « 7 h – 12 h / 14 h – 19 h ».",
+    champs: [
+      { id: 'horaires', label: 'Horaires par site', type: 'tableau', requis: true, ligne: 'Site',
+        colonnes: [{ id: 'site', label: 'Site' }, { id: 'lun', label: 'Lundi' }, { id: 'mar', label: 'Mardi' }, { id: 'mer', label: 'Mercredi' },
+          { id: 'jeu', label: 'Jeudi' }, { id: 'ven', label: 'Vendredi' }, { id: 'sam', label: 'Samedi' }] },
+      { id: 'precisions', label: 'Précisions (fermetures, consultations sans rendez-vous, gardes)', type: 'zone' },
+    ],
+  },
+  {
+    id: 'axes', titre: 'Axes du projet de santé', icone: 'fa-solid fa-bullseye',
+    aide: 'Proposez les axes de votre projet, ou laissez ElodiaTech vous en proposer à partir du diagnostic du territoire.',
+    champs: [
+      { id: 'choix', label: 'Comment souhaitez-vous définir les axes ?', type: 'choix', requis: true,
+        options: ['Je propose les axes de mon projet', "Je souhaite qu'ElodiaTech me propose des axes", 'Je propose des pistes, à compléter par ElodiaTech'] },
+      { id: 'axes', label: 'Axes envisagés', type: 'tableau', ligne: 'Axe', long: true,
+        colonnes: [{ id: 'intitule', label: "Intitulé de l'axe" }, { id: 'constat', label: 'Pourquoi cet axe (besoin constaté)', long: true },
+          { id: 'actions', label: 'Actions envisagées', long: true }, { id: 'public', label: 'Patients concernés' }] },
+      { id: 'valeurs', label: "Valeurs et principes de l'équipe", type: 'zone' },
+    ],
+  },
+  {
+    id: 'moyens', titre: 'Moyens financiers et matériels', icone: 'fa-solid fa-coins',
+    aide: 'Votre plan de financement et vos équipements. Les montants non confirmés seront signalés comme tels.',
+    champs: [
+      { id: 'plan_fin', label: 'Plan de financement', type: 'tableau', requis: true, ligne: 'Financement',
+        colonnes: [{ id: 'financeur', label: 'Financeur' }, { id: 'dispositif', label: 'Dispositif' }, { id: 'montant', label: 'Montant (€)' },
+          { id: 'objet', label: 'Objet' }, { id: 'statut', label: 'Statut', options: ['Obtenu', 'Demandé', 'À solliciter', 'À confirmer'] }] },
+      { id: 'aci', label: 'Accord conventionnel interprofessionnel (ACI)', type: 'choix', options: ['Signé', 'Signature prévue', 'Non concerné', 'Je ne sais pas'] },
+      { id: 'apports', label: 'Apports des associés, de la collectivité ou de partenaires', type: 'zone' },
+      { id: 'docs_fin', label: 'Budget prévisionnel, plan de financement, bilans', type: 'fichiers', categorie: 'Finances' },
+      { id: 'equipements', label: 'Équipements (acquis ou à acquérir)', type: 'tableau', requis: true, ligne: 'Équipement',
+        colonnes: [{ id: 'equipement', label: 'Équipement' }, { id: 'quantite', label: 'Quantité' }, { id: 'site', label: 'Site' },
+          { id: 'statut', label: 'Statut', options: ['Acquis', 'À acquérir'] }] },
+      { id: 'materiel_note', label: 'Précisions sur le matériel (mutualisation, télémédecine…)', type: 'zone' },
+    ],
+  },
+  {
+    id: 'logiciel', titre: 'Logiciel médical', icone: 'fa-solid fa-laptop-medical',
+    aide: 'Votre logiciel métier et vos outils numériques.',
+    champs: [
+      { id: 'logiciel', label: 'Logiciel médical (dossier patient)', type: 'texte', requis: true },
+      { id: 'rdv', label: 'Prise de rendez-vous en ligne (plateforme)', type: 'texte' },
+      { id: 'telemed', label: 'Solution de téléconsultation', type: 'texte' },
+      { id: 'outils', label: "Autres outils (messagerie sécurisée, agenda partagé, outil de coordination)", type: 'zone' },
+    ],
+  },
 ];
