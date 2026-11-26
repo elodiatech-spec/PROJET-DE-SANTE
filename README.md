@@ -60,6 +60,37 @@ de la formule.
 
 ---
 
+## Informations du projet (questionnaire)
+
+Le module **Pilotage → Informations du projet** recueille, auprès du client, les éléments
+nécessaires à la rédaction du projet de santé, en huit rubriques :
+
+| Rubrique | Contenu |
+|---|---|
+| Votre structure | MSP ou centre de santé, nom, forme juridique, commune, porteur, coordinateur |
+| Professionnels impliqués | Tableau des professionnels (profession, statut, temps, rôle, engagement), secrétariat |
+| Assistants médicaux | Présence ou souhait de recrutement, tableau des assistants |
+| Adresses et locaux | Sites, **plan des locaux** (dépôt dans « 05 — Immobilier »), occupation, surface, accessibilité, projet immobilier |
+| Horaires d'ouverture | Horaires par site et par jour |
+| Axes du projet de santé | Axes proposés par le client, ou demande de proposition par ElodiaTech |
+| Moyens financiers et matériels | Plan de financement, ACI, apports, documents (dépôt dans « 04 — Finances »), équipements |
+| Logiciel médical | Logiciel métier, rendez-vous en ligne, téléconsultation, outils |
+
+Le client renseigne chaque rubrique puis l'enregistre ; l'expert voit les mêmes réponses et peut
+les compléter. Chaque rubrique indique sa date d'enregistrement et son auteur, fixés par le
+serveur. Une notification rappelle au client le pourcentage d'éléments attendus encore manquants.
+
+Les réponses sont rangées dans l'onglet **Questionnaire** de la base (une ligne par projet et
+par rubrique, réponses au format JSON). Le serveur n'accepte que les rubriques et les champs
+déclarés dans `QUESTIONNAIRE_CHAMPS` (`apps-script/Code.gs`), qui doivent rester identiques à
+`QUESTIONNAIRE` (`assets/js/config.js`) : le test `questionnaire` vérifie cette concordance.
+
+**Mise en service** : après avoir collé la nouvelle version du script, lancez
+**ElodiaTech → Mettre à jour la structure** pour créer l'onglet `Questionnaire`, puis
+redéployez une nouvelle version de l'application web.
+
+---
+
 ## Statuts d'une prestation
 
 L'avancement global n'est pas saisi à la main : il est calculé à partir du statut de chaque prestation.
@@ -171,6 +202,7 @@ node tests/isolation.mjs
 node tests/televersement.mjs
 node tests/avancement.mjs
 node tests/lecture-fichier.mjs
+node tests/questionnaire.mjs
 ```
 
 **aller-retour** vérifie l'intégration Google Sheets de bout en bout : les actions de
@@ -184,6 +216,10 @@ sa catégorie, un jeton client peut-il déposer chez un autre, un refus est-il t
 
 **avancement** couvre le calcul : une prestation « Non nécessaire » est-elle bien exclue du
 pourcentage, du ratio affiché et des alertes de retard, sans disparaître de la feuille de route.
+
+**questionnaire** couvre le module « Informations du projet » : le client n'écrit que dans son
+projet, les rubriques et champs inconnus sont écartés, la taille est bornée, l'auteur et la date
+sont fixés par le serveur, et les champs de l'application concordent avec ceux du script.
 
 **lecture-fichier** éprouve le contrôle le plus sensible de la passerelle. Le script lit les
 fichiers avec les droits du compte propriétaire : il pourrait donc renvoyer n'importe quel

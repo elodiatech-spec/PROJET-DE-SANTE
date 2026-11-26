@@ -162,6 +162,13 @@ var ONGLETS = {
     "tel",
     "principal"
   ],
+  "Questionnaire": [
+    "projet_id",
+    "rubrique",
+    "donnees",
+    "maj_le",
+    "maj_par"
+  ],
   "Prestataires": [
     "id",
     "nom",
@@ -184,6 +191,25 @@ var ENTITES_PAR_PROJET = {
   // Demandes de pièces ajoutées par l'expert, en plus du socle du catalogue.
   pieces:        { onglet: 'Pieces',        champs: ['id', 'nom', 'cat', 'par', 'aide', 'pour'] }
 };
+
+/**
+ * QUESTIONNAIRE — informations fournies par le client pour la rédaction du
+ * projet de santé. Une ligne par projet et par rubrique ; la colonne
+ * « donnees » contient les réponses au format JSON.
+ * Seuls les champs listés ici sont acceptés : tout autre champ envoyé par
+ * le navigateur est ignoré, quel que soit le rôle.
+ */
+var QUESTIONNAIRE_CHAMPS = {
+  structure:  ['type', 'nom', 'forme', 'porteur', 'coordinateur', 'coord_contact', 'commune'],
+  equipe:     ['pros', 'secretariat'],
+  assistants: ['presence', 'liste'],
+  locaux:     ['sites', 'occupation', 'surface', 'pieces', 'pmr', 'projet_immo'],
+  horaires:   ['horaires', 'precisions'],
+  axes:       ['choix', 'axes', 'valeurs'],
+  moyens:     ['plan_fin', 'aci', 'apports', 'equipements', 'materiel_note'],
+  logiciel:   ['logiciel', 'rdv', 'telemed', 'outils']
+};
+var QUESTIONNAIRE_TAILLE_MAX = 45000;   // caractères par rubrique (limite d'une cellule : 50 000)
 
 /** Colonnes de la feuille exposées à l'application sous un autre nom. */
 var ALIAS_LECTURE = {
@@ -2626,6 +2652,17 @@ function construireDonnees(projetIdUnique) {
 
   var donnees = { projets: projets };
 
+  // Questionnaire : réponses par projet et par rubrique.
+  donnees.questionnaire = {};
+  projets.forEach(function (p) { donnees.questionnaire[p.id] = {}; });
+  lireOnglet('Questionnaire').forEach(function (r) {
+    var groupe = donnees.questionnaire[r.projet_id];
+    if (!groupe || !QUESTIONNAIRE_CHAMPS[r.rubrique]) return;
+    var contenu = {};
+    try { contenu = JSON.parse(String(r.donnees || '{}')) || {}; } catch (e) { contenu = {}; }
+    groupe[r.rubrique] = { donnees: contenu, majLe: String(r.maj_le || ''), majPar: String(r.maj_par || '') };
+  });
+
   // Annuaire des prestataires : commun à tous, visible aussi par le client.
   donnees.prestataires = lireOnglet('Prestataires').map(function (r) {
     return {
@@ -2740,6 +2777,10 @@ var ECRITURE = {
     onglet: 'Partenaires', cles: ['projet_id', 'id'],
     champs: { nom: 'nom', type: 'type', statut: 'statut' }
   },
+  questionnaire: {
+    onglet: 'Questionnaire', cles: ['projet_id', 'rubrique'],
+    champs: { donnees: 'donnees', majLe: 'maj_le', majPar: 'maj_par' }
+  },
   pieces: {
     onglet: 'Pieces', cles: ['projet_id', 'id'],
     champs: { nom: 'nom', cat: 'cat', par: 'par', aide: 'aide', pour: 'pour' }
@@ -2765,6 +2806,7 @@ var ECRITURES_CLIENT = {
   prestations: ['statut'],   // valider un livrable qui lui est soumis
   messages: null,            // null = tous les champs de l'entité
   documents: null,           // référencer une pièce qu'il a déposée
+  questionnaire: ['donnees'],// renseigner les informations de son projet
 };
 
 function doPost(e) {
@@ -2872,8 +2914,58 @@ function executerEcriture(op, acces) {
     }
   }
 
+  if (op.entite === 'questionnaire') {
+    if (op.action === 'delete' && acces && acces.role === 'expert') return supprimerLigne(conf, cles);
+    payload = questionnaireValide(cles[1], payload, acces);
+  }
+
   if (op.action === 'delete') return supprimerLigne(conf, cles);
   return ecrireLigne(conf, cles, payload);   // 'upsert' et 'update'
+}
+
+/**
+ * Contrôle une rubrique du questionnaire avant écriture : rubrique connue,
+ * champs autorisés uniquement, taille bornée. L'horodatage et l'auteur sont
+ * fixés ici, jamais repris du navigateur.
+ */
+function questionnaireValide(rubrique, payload, acces) {
+  var permis = QUESTIONNAIRE_CHAMPS[rubrique];
+  if (!permis) throw new Error('Rubrique inconnue : ' + rubrique);
+
+  var brut = payload.donnees;
+  var objet;
+  try { objet = typeof brut === 'string' ? JSON.parse(brut || '{}') : (brut || {}); }
+  catch (e) { throw new Error('Réponses illisibles pour la rubrique ' + rubrique + '.'); }
+  if (!objet || typeof objet !== 'object' || Array.isArray(objet)) {
+    throw new Error('Réponses illisibles pour la rubrique ' + rubrique + '.');
+  }
+
+  var propre = {};
+  permis.forEach(function (champ) {
+    if (objet[champ] === undefined) return;
+    var v = objet[champ];
+    if (Array.isArray(v)) {
+      propre[champ] = v.slice(0, 80).map(function (ligne) {
+        var l = {};
+        Object.keys(ligne || {}).slice(0, 20).forEach(function (k) {
+          l[String(k).slice(0, 40)] = String(ligne[k] == null ? '' : ligne[k]).slice(0, 3000);
+        });
+        return l;
+      });
+    } else {
+      propre[champ] = String(v == null ? '' : v).slice(0, 5000);
+    }
+  });
+
+  var texte = JSON.stringify(propre);
+  if (texte.length > QUESTIONNAIRE_TAILLE_MAX) {
+    throw new Error('Rubrique trop longue : raccourcissez les textes ou déposez un document.');
+  }
+  return {
+    donnees: texte,
+    majLe: new Date().toISOString(),
+    majPar: acces && acces.role === 'client' ? 'client' : 'expert'
+  };
 }
 
 function ecrireLigne(conf, cles, payload) {

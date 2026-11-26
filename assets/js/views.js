@@ -570,6 +570,74 @@ function annexesPrestation(p) {
 /* --------------------------------------------------------------------------
    Les vues
    -------------------------------------------------------------------------- */
+/* ---- Questionnaire : rendu des champs ---- */
+function champQuestionnaire(rub, champ, valeurs) {
+  const id = `q-${rub.id}-${champ.id}`;
+  const v = valeurs[champ.id];
+  const label = `<label class="field__label" for="${id}">${esc(champ.label)}${champ.requis ? ' *' : ''}</label>`;
+  const attr = `data-q-champ="${esc(rub.id)}.${esc(champ.id)}"`;
+
+  if (champ.type === 'texte') {
+    return `<div class="field">${label}<input type="text" id="${id}" ${attr} value="${esc(v || '')}"></div>`;
+  }
+  if (champ.type === 'zone') {
+    return `<div class="field" style="grid-column:1 / -1">${label}<textarea id="${id}" ${attr} rows="3">${esc(v || '')}</textarea></div>`;
+  }
+  if (champ.type === 'choix') {
+    return `<div class="field">${label}<select id="${id}" ${attr}>
+        <option value="">— Choisir —</option>
+        ${champ.options.map((o) => `<option ${o === v ? 'selected' : ''}>${esc(o)}</option>`).join('')}
+      </select></div>`;
+  }
+  if (champ.type === 'fichiers') {
+    const fichiers = Store.fichiersQuestion(rub.id, champ.id);
+    return `<div class="field" style="grid-column:1 / -1">${label}
+      <div class="q-fichiers">
+        ${fichiers.length ? fichiers.map((f) => `<div class="file-row">
+            <div class="file-icon"><i class="${iconeFichier(f.type)}"></i></div>
+            <div class="grow"><div class="text-sm fw-800 truncate">${esc(f.nom)}</div>
+              <div class="text-xs text-muted">${esc(f.taille || '')} · ${esc(Dates.format(f.date))}</div></div>
+            ${f.url ? boutonApercu(f.url, f.nom, 'Visualiser') : ''}
+          </div>`).join('') : '<div class="text-xs text-muted"><i class="fa-solid fa-circle-info"></i> Aucun fichier déposé.</div>'}
+        <button class="btn btn--sm" data-action="q-deposer" data-rub="${esc(rub.id)}" data-champ="${esc(champ.id)}">
+          <i class="fa-solid fa-cloud-arrow-up"></i> Déposer un fichier
+        </button>
+      </div></div>`;
+  }
+  if (champ.type === 'tableau') {
+    const lignes = Array.isArray(v) && v.length ? v : [{}];
+    const cellule = (c, l, i) => {
+      const a = `data-q-cellule="${esc(rub.id)}.${esc(champ.id)}.${i}.${esc(c.id)}" aria-label="${esc(c.label)}"`;
+      const val = l[c.id] || '';
+      if (c.options) {
+        return `<select ${a}><option value=""></option>${c.options.map((o) => `<option ${o === val ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
+      }
+      if (c.long) return `<textarea ${a} rows="2">${esc(val)}</textarea>`;
+      return `<input type="text" ${a} value="${esc(val)}">`;
+    };
+    const retirer = (i) => `<button class="btn btn--ghost btn--sm" data-action="q-retirer-ligne" data-rub="${esc(rub.id)}"
+        data-champ="${esc(champ.id)}" data-ligne="${i}" title="Retirer cette ligne"><i class="fa-solid fa-xmark"></i></button>`;
+    const ajouter = `<button class="btn btn--sm" style="margin-top:8px;align-self:flex-start" data-action="q-ajouter-ligne" data-rub="${esc(rub.id)}" data-champ="${esc(champ.id)}">
+        <i class="fa-solid fa-plus"></i> Ajouter une ligne</button>`;
+
+    // Colonnes de texte long : une fiche par ligne plutôt qu'un tableau étroit.
+    if (champ.long) {
+      return `<div class="field" style="grid-column:1 / -1">${label}
+        ${lignes.map((l, i) => `<div class="q-fiche">
+            <div class="row-between"><span class="text-xs fw-800">${esc(champ.ligne || 'Ligne')} ${i + 1}</span>${retirer(i)}</div>
+            <div class="grid grid-2">${champ.colonnes.map((c) => `<div class="field" ${c.long ? 'style="grid-column:1 / -1"' : ''}>
+                <span class="field__label">${esc(c.label)}</span>${cellule(c, l, i)}</div>`).join('')}</div>
+          </div>`).join('')}${ajouter}</div>`;
+    }
+    return `<div class="field" style="grid-column:1 / -1">${label}
+      <div class="table-wrap"><table class="table q-table">
+        <thead><tr>${champ.colonnes.map((c) => `<th>${esc(c.label)}</th>`).join('')}<th></th></tr></thead>
+        <tbody>${lignes.map((l, i) => `<tr>${champ.colonnes.map((c) => `<td>${cellule(c, l, i)}</td>`).join('')}<td>${retirer(i)}</td></tr>`).join('')}</tbody>
+      </table></div>${ajouter}</div>`;
+  }
+  return '';
+}
+
 const Views = {
 
   /* ====================== VUE D'ENSEMBLE ====================== */
@@ -1403,6 +1471,66 @@ const Views = {
         <div class="card__head"><h3 class="card__title"><i class="fa-solid fa-list-check"></i> Prestations du lot partenariats</h3></div>
         <div class="stack-sm">${prestas.map((p) => cartePrestation(p, ++n)).join('')}</div>
       </div>
+    </section>`;
+  },
+
+  /* ====================== INFORMATIONS DU PROJET ====================== */
+  questionnaire() {
+    const expert = Store.estExpert();
+    const projet = Store.projet();
+    const global = Store.completudeQuestionnaire();
+    const q = Store.questionnaire();
+
+    return `
+    <section class="view stack">
+      <div class="card">
+        <div class="card__head">
+          <div>
+            <h2 class="card__title"><i class="fa-solid fa-clipboard-list"></i> Informations du projet</h2>
+            <p class="card__subtitle">${expert
+              ? `Les informations fournies par ${esc(projet.client?.nom || 'le client')} pour la rédaction du projet de santé. Vous pouvez les compléter.`
+              : 'Ces informations servent à rédiger votre projet de santé. Renseignez chaque rubrique puis cliquez sur « Enregistrer » ; vous pouvez revenir les modifier à tout moment.'}</p>
+          </div>
+        </div>
+        <div class="progress-row">
+          <span class="progress-row__label">Éléments attendus renseignés</span>
+          <span class="progress-row__value">${global.pct} %</span>
+        </div>
+        ${progressBar(global.pct, 'lg')}
+        <div class="q-sommaire">
+          ${QUESTIONNAIRE.map((r) => {
+            const c = Store.completudeRubrique(r);
+            const ton = c.pct >= 100 ? 'ok' : (q[r.id] ? 'warn' : 'muted');
+            return `<a class="q-puce q-puce--${ton}" href="#q-${esc(r.id)}"><i class="${esc(r.icone)}"></i> ${esc(r.titre)}
+              <span>${c.pct >= 100 ? '<i class="fa-solid fa-check"></i>' : `${c.faits}/${c.total}`}</span></a>`;
+          }).join('')}
+        </div>
+      </div>
+
+      ${QUESTIONNAIRE.map((r) => {
+        const entree = q[r.id];
+        const valeurs = entree?.donnees || {};
+        const c = Store.completudeRubrique(r);
+        const maj = entree?.majLe
+          ? `Enregistré le ${esc(Dates.format(entree.majLe.slice(0, 10)))} par ${entree.majPar === 'client' ? (expert ? 'le client' : 'vous') : 'ElodiaTech'}`
+          : 'Pas encore renseigné';
+        return `<div class="card" id="q-${esc(r.id)}">
+          <div class="card__head">
+            <div>
+              <h3 class="card__title"><i class="${esc(r.icone)}"></i> ${esc(r.titre)}</h3>
+              <p class="card__subtitle">${esc(r.aide)}</p>
+            </div>
+            ${c.pct >= 100 ? badge('Complet', 'ok', 'fa-solid fa-check') : badge(`${c.faits}/${c.total} attendus`, 'warn')}
+          </div>
+          <div class="grid grid-2">${r.champs.map((ch) => champQuestionnaire(r, ch, valeurs)).join('')}</div>
+          <div class="row-between" style="margin-top:14px">
+            <span class="text-xs text-muted"><i class="fa-regular fa-clock"></i> ${maj}</span>
+            <button class="btn btn--primary btn--sm" data-action="q-enregistrer" data-rub="${esc(r.id)}">
+              <i class="fa-solid fa-floppy-disk"></i> Enregistrer
+            </button>
+          </div>
+        </div>`;
+      }).join('')}
     </section>`;
   },
 
