@@ -340,6 +340,9 @@ function demoDonnees() {
       'cds-gros-morne': [],
       'cds-cayenne': [],
     },
+    // Rédaction avec Claude : { [projetId]: { [chapitre]: { statut, docUrl, … } } }.
+    // Réservée à l'expert ; vide en démonstration, la rédaction exigeant le script.
+    redaction: {},
     // Informations fournies par le client (module « Informations du projet »).
     // Une entrée par rubrique de QUESTIONNAIRE : { donnees, majLe, majPar }.
     questionnaire: {
@@ -479,7 +482,7 @@ const Store = {
       });
       ['projets', 'documents', 'signatures', 'messages', 'evenements',
        'comptesRendus', 'financements', 'partenaires', 'pieces', 'prestataires',
-       'intervenantsImmo', 'questionnaire'].forEach((cle) => {
+       'intervenantsImmo', 'questionnaire', 'redaction'].forEach((cle) => {
         if (sauvegarde[cle]) this.state[cle] = sauvegarde[cle];
       });
     }
@@ -530,7 +533,7 @@ const Store = {
       if (this.state.reglages.source === 'sheets') {
         ['projets', 'documents', 'signatures', 'messages', 'evenements',
          'comptesRendus', 'financements', 'partenaires', 'pieces',
-         'experts', 'prestataires', 'questionnaire'].forEach((cle) => {
+         'experts', 'prestataires', 'questionnaire', 'redaction'].forEach((cle) => {
           delete aEnregistrer[cle];
         });
       }
@@ -1834,6 +1837,76 @@ const Store = {
       siteUrl: projet.siteUrl,
       notes: projet.notes,
     };
+  },
+
+  /* ---- Rédaction du projet de santé avec Claude (expert) ---- */
+
+  /** État des chapitres du projet actif : { [chapitre]: { statut, docUrl, … } }. */
+  redactionProjet(projetId) {
+    return (this.state.redaction || {})[projetId || this.state.projetActifId] || {};
+  },
+
+  _majRedaction(chapitre, etat, projetId) {
+    const id = projetId || this.state.projetActifId;
+    this.commit((s) => {
+      if (!s.redaction) s.redaction = {};
+      if (!s.redaction[id]) s.redaction[id] = {};
+      s.redaction[id][chapitre] = { ...(s.redaction[id][chapitre] || {}), ...etat };
+    });
+  },
+
+  /**
+   * Soumet la rédaction d'un chapitre. Le script assemble le dossier — fiche,
+   * informations du client, fichiers du dossier « 01 — Projet de santé »,
+   * chapitres déjà rédigés — et le confie à Claude.
+   */
+  async redigerChapitre(chapitre, consignes) {
+    if (!this.ecritureActive()) throw new Error('la source Google Sheets doit être connectée');
+    const projetId = this.state.projetActifId;
+    const rep = await SheetsAdapter.envoyer(this.state.reglages.webAppUrl, {
+      action: 'redigerChapitre', projetId, chapitre, consignes: consignes || '', ...this.porteCles(),
+    });
+    const r = rep.redaction || {};
+    this._majRedaction(chapitre, {
+      statut: 'en_cours', enCours: true, consignes: consignes || '', majLe: new Date().toISOString(),
+      message: `Rédaction demandée. Sources jointes : ${(r.sources || []).join(', ') || 'aucune'}`
+        + `${(r.ignores || []).length ? `. Non lues : ${r.ignores.join(', ')}` : ''}.`,
+    }, projetId);
+    return r;
+  },
+
+  /** Demande où en est la rédaction ; le script crée le Google Docs à la fin. */
+  async suivreRedaction(chapitre, projetId) {
+    const id = projetId || this.state.projetActifId;
+    const rep = await SheetsAdapter.envoyer(this.state.reglages.webAppUrl, {
+      action: 'suivreRedaction', projetId: id, chapitre, ...this.porteCles(),
+    });
+    if (rep.redaction) this._majRedaction(chapitre, rep.redaction, id);
+    return rep.redaction;
+  },
+
+  /**
+   * Valide un chapitre rédigé : il rejoint les documents du client, et les
+   * étapes correspondantes de la feuille de route lui sont soumises.
+   */
+  validerChapitre(chapitre) {
+    const etat = this.redactionProjet()[chapitre];
+    const def = CHAPITRES_REDACTION.find((c) => c.id === chapitre);
+    if (!etat?.docUrl || !def) return;
+
+    this._majRedaction(chapitre, { statut: 'valide' });
+    this.pousser('redaction', `${this.state.projetActifId}:${chapitre}`, { statut: 'valide' });
+
+    const nom = `Projet de santé — ${def.titre}`;
+    const existant = this.liste('documents').find((d) => d.piece === `RED-${chapitre}`);
+    if (existant) this.majDocument(existant.id, { nom, url: etat.docUrl, date: Dates.today() });
+    else this.ajouterDocument({ nom, url: etat.docUrl, cat: 'Projet', type: 'doc', auteur: 'ElodiaTech', piece: `RED-${chapitre}` });
+
+    const projet = this.projet();
+    def.prestations.forEach((pid) => {
+      const statut = projet?.prestations?.[pid]?.statut;
+      if (statut !== 'valide' && statut !== 'a_valider') this.majPrestation(pid, { statut: 'a_valider' });
+    });
   },
 
   async synchroniser() {

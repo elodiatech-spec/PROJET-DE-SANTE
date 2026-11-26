@@ -57,6 +57,36 @@ const App = {
     this.renderBreadcrumb();
     this.renderVue();
     this.renderNotifications();
+    this.planifierSuiviRedaction();
+  },
+
+  /**
+   * Tant qu'un chapitre est en cours de rédaction et que l'expert regarde la
+   * page du projet de santé, on demande au script où en est Claude, toutes
+   * les 40 secondes. Un seul minuteur à la fois.
+   */
+  _minuteurRedaction: null,
+  planifierSuiviRedaction() {
+    if (this._minuteurRedaction) return;
+    if (!Store.estExpert() || Store.state.route !== 'projet-sante' || !Store.ecritureActive()) return;
+    const enCours = () => CHAPITRES_REDACTION.filter((c) => Store.redactionProjet()[c.id]?.statut === 'en_cours');
+    if (!enCours().length) return;
+
+    this._minuteurRedaction = setTimeout(async () => {
+      const projetId = Store.state.projetActifId;
+      try {
+        for (const c of enCours()) {
+          const etat = await Store.suivreRedaction(c.id, projetId);
+          if (etat?.statut === 'pret') toast(`${c.titre} : brouillon prêt, à relire dans Google Docs.`, 'ok');
+          if (etat?.statut === 'erreur') toast(`${c.titre} : ${etat.message}`, 'danger');
+        }
+      } catch (err) {
+        toast(`Suivi de la rédaction impossible : ${err.message}`, 'warn');
+      } finally {
+        this._minuteurRedaction = null;
+        this.planifierSuiviRedaction();
+      }
+    }, 40000);
   },
 
   /**
@@ -1117,6 +1147,73 @@ const App = {
     },
 
     /* --- Projet de santé / identité --- */
+    /* --- Rédaction avec Claude --- */
+
+    'redac-rediger'(el) {
+      const id = el.dataset.chapitre;
+      const def = CHAPITRES_REDACTION.find((c) => c.id === id);
+      const etat = Store.redactionProjet()[id] || {};
+      if (!def) return;
+      if (!Store.ecritureActive()) {
+        toast('La rédaction passe par la base Google Sheets : connectez-la d\'abord.', 'warn');
+        return;
+      }
+
+      Modal.formulaire({
+        titre: `Rédiger — ${def.titre}`,
+        soustitre: etat.docUrl
+          ? 'Une nouvelle version sera créée à côté de la précédente, qui reste dans le dossier.'
+          : 'Claude reprend tout le dossier du projet. Vérifiez que les fichiers sources sont déposés dans « 01 — Projet de santé ».',
+        champs: [
+          { id: 'consignes', label: 'Consignes particulières (facultatif)', type: 'textarea', valeur: etat.consignes || '',
+            placeholder: 'Exemples : insister sur le diabète et l\'obésité ; retenir trois axes ; le local ouvre en septembre 2027…' },
+        ],
+        libelle: 'Lancer la rédaction',
+        onSubmit: async (v) => {
+          toast('Envoi du dossier à Claude…', 'info');
+          try {
+            const r = await Store.redigerChapitre(id, v.consignes);
+            toast(`Rédaction lancée avec ${(r.sources || []).length} fichier(s) source.`
+              + ((r.ignores || []).length ? ` ${r.ignores.length} fichier(s) non lu(s) : voir le détail.` : ''), 'ok');
+          } catch (err) {
+            toast(`Rédaction impossible : ${err.message}`, 'danger');
+          }
+        },
+      });
+    },
+
+    async 'redac-suivre'(el) {
+      const id = el.dataset.chapitre;
+      el.disabled = true;
+      try {
+        const etat = await Store.suivreRedaction(id);
+        toast(etat?.statut === 'en_cours' ? 'Claude rédige toujours ce chapitre.'
+          : etat?.statut === 'pret' ? 'Brouillon prêt.' : (etat?.message || 'État mis à jour.'),
+          etat?.statut === 'erreur' ? 'danger' : 'ok');
+      } catch (err) {
+        toast(`Vérification impossible : ${err.message}`, 'warn');
+      } finally {
+        el.disabled = false;
+      }
+    },
+
+    'redac-valider'(el) {
+      const id = el.dataset.chapitre;
+      const def = CHAPITRES_REDACTION.find((c) => c.id === id);
+      if (!def) return;
+      Modal.confirmer({
+        titre: `Valider — ${def.titre}`,
+        texte: 'Le chapitre rejoindra les documents du client'
+          + (def.prestations.length ? ', et les étapes correspondantes de sa feuille de route lui seront soumises pour validation.' : '.')
+          + ' Relisez-le et complétez les mentions [à compléter] avant de valider.',
+        libelle: 'Valider et transmettre',
+        onConfirm: () => {
+          Store.validerChapitre(id);
+          toast(`${def.titre} : transmis au client.`, 'ok');
+        },
+      });
+    },
+
     'enregistrer-gdoc'() {
       const url = document.getElementById('gdoc-url').value.trim();
       Store.majProjet({ gdocProjetSante: url });

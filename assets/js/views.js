@@ -367,6 +367,75 @@ function piecesDePrestation(idPrestation) {
  * dans le même champ `piece`. Le chapitre apparaît donc aussi dans le
  * coffre-fort, où il se cherche et se filtre comme toute autre pièce.
  */
+/**
+ * Espace de rédaction avec Claude, réservé à l'expert : un chapitre par ligne,
+ * dans l'ordre du plan ARS, avec son état, son brouillon et ses actions.
+ */
+function carteRedaction() {
+  const etats = Store.redactionProjet();
+  const actif = Store.ecritureActive();
+  const nbValides = CHAPITRES_REDACTION.filter((c) => etats[c.id]?.statut === 'valide').length;
+
+  const ligne = (c) => {
+    const e = etats[c.id] || {};
+    const st = STATUTS_REDACTION[e.statut || ''] || STATUTS_REDACTION[''];
+    const doc = urlSure(e.docUrl);
+    const enCours = e.statut === 'en_cours';
+    const aCompleter = String(e.aCompleter || '').split('\n').map((l) => l.trim()).filter(Boolean);
+
+    return `<div class="redac-ligne">
+        <div class="row-between">
+          <div class="grow">
+            <h4 class="redac-titre">${esc(c.titre)}</h4>
+            <p class="text-xs text-muted">${esc(c.resume)}</p>
+          </div>
+          <span class="badge badge--${st.couleur}"><i class="${st.icone}"></i> ${esc(st.label)}${e.version ? ` · v${esc(e.version)}` : ''}</span>
+        </div>
+        ${e.message ? `<p class="text-xs redac-message"><i class="fa-solid fa-circle-info"></i> ${esc(e.message)}
+          ${e.majLe ? `<span class="text-muted"> — ${esc(Dates.format(String(e.majLe).slice(0, 10)))}</span>` : ''}</p>` : ''}
+        ${aCompleter.length ? `<details class="redac-details"><summary class="text-xs fw-800">
+            ${aCompleter.length} élément${aCompleter.length > 1 ? 's' : ''} à compléter</summary>
+            <ul class="text-xs">${aCompleter.slice(0, 30).map((l) => `<li>${esc(l.replace(/^[-•]\s*/, ''))}</li>`).join('')}</ul>
+          </details>` : ''}
+        <div class="row-tight" style="margin-top:8px">
+          <button class="btn btn--sm ${doc ? '' : 'btn--primary'}" data-action="redac-rediger" data-chapitre="${esc(c.id)}"
+                  ${enCours || !actif ? 'disabled' : ''}>
+            <i class="fa-solid fa-wand-magic-sparkles"></i> ${doc ? 'Rédiger à nouveau' : 'Rédiger avec Claude'}
+          </button>
+          ${enCours ? `<button class="btn btn--sm" data-action="redac-suivre" data-chapitre="${esc(c.id)}">
+              <i class="fa-solid fa-rotate"></i> Vérifier maintenant</button>` : ''}
+          ${doc ? `<a class="btn btn--sm" href="${esc(doc)}" target="_blank" rel="noopener noreferrer">
+              <i class="fa-solid fa-file-word"></i> Ouvrir le Google Docs</a>` : ''}
+          ${doc && e.statut === 'pret' ? `<button class="btn btn--sm btn--primary" data-action="redac-valider" data-chapitre="${esc(c.id)}">
+              <i class="fa-solid fa-check"></i> Valider et transmettre au client</button>` : ''}
+        </div>
+      </div>`;
+  };
+
+  return `<div class="card">
+      <div class="card__head">
+        <div>
+          <h3 class="card__title"><i class="fa-solid fa-wand-magic-sparkles"></i> Rédaction avec Claude
+            <span class="badge badge--neutre" style="margin-left:6px"><i class="fa-solid fa-lock"></i> Visible par vous seul</span></h3>
+          <p class="card__subtitle">
+            Claude rédige chaque chapitre à partir du dossier : fiche du projet, informations du client,
+            partenaires, financements et fichiers déposés dans « 01 — Projet de santé » (exports CartoSanté,
+            INSEE, ODISSÉ… en PDF, Google Docs ou Google Sheets). Les chapitres déjà rédigés lui sont rappelés
+            pour garder un document cohérent. Toute donnée absente des sources est signalée
+            <em>[donnée à compléter]</em>, jamais inventée.
+          </p>
+        </div>
+        <span class="badge badge--${nbValides === CHAPITRES_REDACTION.length ? 'ok' : 'neutre'}">${nbValides} / ${CHAPITRES_REDACTION.length} validés</span>
+      </div>
+      ${actif ? '' : `<p class="text-xs text-muted"><i class="fa-solid fa-plug-circle-xmark"></i>
+          La rédaction s'effectue par la base Google Sheets : elle n'est pas disponible en démonstration.</p>`}
+      <p class="text-xs text-muted"><i class="fa-solid fa-clock"></i>
+        Une rédaction prend en général de 5 à 30 minutes. Vous pouvez quitter la page : le chapitre sera
+        récupéré à votre retour. Le brouillon n'est visible par le client qu'après votre validation.</p>
+      <div class="redac-liste">${CHAPITRES_REDACTION.map(ligne).join('')}</div>
+    </div>`;
+}
+
 function documentDeChapitre(num) {
   return Store.liste('documents').find((d) => d.piece === `CHAP${num}`) || null;
 }
@@ -1023,6 +1092,8 @@ const Views = {
           </div>
         </div>
       </div>
+
+      ${expert ? carteRedaction() : ''}
 
       <div class="card">
         <div class="card__head">

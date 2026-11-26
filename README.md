@@ -60,6 +60,27 @@ de la formule.
 
 ---
 
+## Rédaction du projet de santé avec Claude (expert)
+
+Page **Projet de santé**, carte « Rédaction avec Claude », visible par l'expert seul. Un bouton par
+chapitre du plan ARS (introduction et préambule, chapitres 1 à 6 et conclusion).
+
+1. Déposer les sources dans le dossier Drive **« 01 — Projet de santé »** du projet (ou un
+   sous-dossier) : exports CartoSanté, INSEE, ODISSÉ, POSS… en PDF, Google Docs ou Google Sheets.
+   Les fichiers Word ou Excel ne sont pas lus : les convertir en Google Docs / Sheets.
+2. « Rédiger avec Claude » : le script joint la fiche du projet, les informations du client,
+   les partenaires, les financements, les sources, un chapitre modèle (structure et ton seulement)
+   et les faits retenus par les chapitres déjà rédigés. La demande part par l'API Message Batches
+   (modèle `claude-opus-5-5`, propriété `CLAUDE_MODELE` pour en changer).
+3. L'application vérifie toutes les 40 secondes ; à la fin, le chapitre devient un Google Docs
+   mis en forme (titres, tableaux, encadrés, graphiques rendus en image) dans « 01 — Projet de santé ».
+4. « Valider et transmettre au client » : le chapitre rejoint les documents du client et les
+   prestations correspondantes passent « à valider ».
+
+Mise en service : menu **ElodiaTech → Définir ma clé Claude** dans la feuille de base (clé créée
+sur console.anthropic.com, conservée dans les propriétés du script). Les rédactions sont suivies
+dans l'onglet **Redaction**, créé automatiquement. Test : `node tests/redaction.mjs`.
+
 ## Informations du projet (questionnaire)
 
 Le module **Pilotage → Informations du projet** recueille, auprès du client, les éléments

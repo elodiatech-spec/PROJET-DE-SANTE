@@ -363,6 +363,38 @@ const CHAPITRES_PDS = [
 ];
 
 /**
+ * Chapitres rédigés avec Claude, dans l'ordre du plan ARS du projet de santé.
+ * Doit concorder avec CHAPITRES_REDACTION du script (contrôlé par
+ * tests/redaction.mjs) : le plan détaillé et le chapitre modèle restent côté
+ * serveur. `prestations` passent « à valider » chez le client à la validation.
+ */
+const CHAPITRES_REDACTION = [
+  { id: 'intro', titre: 'Introduction et préambule', prestations: [],
+    resume: "Objet du document, porteur, territoire, cadre réglementaire ; genèse et démarche du projet." },
+  { id: 'ch1', titre: '1. Diagnostic territorial et contexte sanitaire', prestations: ['P06', 'P07'],
+    resume: "Territoire, population, ZIP / QPV, offre de soins, besoins — comparés au département, à la région et à la France." },
+  { id: 'ch2', titre: "2. Organisation de l'exercice coordonné", prestations: ['P08', 'P09', 'P10'],
+    resume: "Professionnels et partenaires, pilotage, objectifs, axes, actions, moyens, projet immobilier." },
+  { id: 'ch3', titre: "3. Organisation de l'accès aux soins", prestations: ['P11', 'P12'],
+    resume: "Accès et continuité, gestion des crises, permanence des soins, hors les murs, santé publique, qualité." },
+  { id: 'ch4', titre: '4. Organisation du travail en équipe', prestations: ['P13', 'P15'],
+    resume: "Coordination, protocoles et conventions, DPC, évaluation et amélioration continue, accueil d'étudiants." },
+  { id: 'ch5', titre: "5. Partage d'informations", prestations: ['P14'],
+    resume: "Entre professionnels, vers l'extérieur, accès du patient à ses données, communication externe." },
+  { id: 'ch6', titre: '6. Signature du projet de santé et conclusion', prestations: [],
+    resume: "Tableau des signataires, engagement collectif, conclusion." },
+];
+
+/** États d'un chapitre en rédaction. */
+const STATUTS_REDACTION = {
+  '':       { label: 'À rédiger',          couleur: 'neutre', icone: 'fa-regular fa-circle' },
+  en_cours: { label: 'Rédaction en cours', couleur: 'info',   icone: 'fa-solid fa-spinner fa-spin' },
+  pret:     { label: 'Brouillon prêt',     couleur: 'warn',   icone: 'fa-solid fa-file-pen' },
+  valide:   { label: 'Validé',             couleur: 'ok',     icone: 'fa-solid fa-circle-check' },
+  erreur:   { label: 'Échec',              couleur: 'danger', icone: 'fa-solid fa-triangle-exclamation' },
+};
+
+/**
  * Pièces à réunir pour les demandes d'aides et le dossier ARS.
  *
  * `par` désigne qui fournit la pièce : le client détient les documents de sa

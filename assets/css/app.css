@@ -1213,3 +1213,12 @@ select { cursor: pointer; }
   .content { padding: 0; }
   .card { break-inside: avoid; border: 1px solid #ccc; box-shadow: none; }
 }
+
+/* ---- Rédaction avec Claude ---- */
+.redac-liste { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+.redac-ligne { border: 1px solid var(--border, rgba(148,163,184,.25)); border-radius: 10px; padding: 12px 14px; }
+.redac-titre { margin: 0 0 2px; font-size: .95rem; }
+.redac-message { margin: 8px 0 0; }
+.redac-details { margin-top: 6px; }
+.redac-details ul { margin: 6px 0 0 18px; padding: 0; }
+@media (max-width: 640px) { .redac-ligne .row-between { flex-direction: column; align-items: flex-start; gap: 6px; } }
