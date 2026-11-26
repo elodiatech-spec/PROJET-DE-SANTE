@@ -70,7 +70,9 @@ const CYCLE_STATUTS = ['a_faire', 'en_cours', 'a_valider', 'valide'];
 const LOTS = {
   L0: { id: 'L0', nom: 'Cadrage & démarrage', icone: 'fa-solid fa-flag-checkered', couleur: '#1e95cb' },
   LA: { id: 'LA', nom: 'Projet de santé', icone: 'fa-solid fa-book-medical', couleur: '#a5c836' },
-  LB: { id: 'LB', nom: 'Structuration juridique & dossier ARS', icone: 'fa-solid fa-scale-balanced', couleur: '#7c6bd4' },
+  // `reglementaire` : démarches sans lesquelles la structure ne peut ouvrir ;
+  // hors formule, elles restent à la charge du client, et le lui dire importe.
+  LB: { id: 'LB', nom: 'Structuration juridique & dossier ARS', icone: 'fa-solid fa-scale-balanced', couleur: '#7c6bd4', reglementaire: true },
   LC: { id: 'LC', nom: 'Financements & subventions', icone: 'fa-solid fa-sack-dollar', couleur: '#e8a33d' },
   LD: { id: 'LD', nom: 'Conventions & partenariats', icone: 'fa-solid fa-handshake', couleur: '#e0637e' },
   LE: { id: 'LE', nom: 'Prestataires & outils métier', icone: 'fa-solid fa-screwdriver-wrench', couleur: '#2aa79b' },
@@ -120,7 +122,7 @@ const FORMULES = {
 };
 
 /* --------------------------------------------------------------------------
-   Catalogue des prestations (34)
+   Catalogue des prestations
    acteur : qui produit — 'expert', 'client' ou 'mixte'
    jours  : charge indicative, sert à l'ordonnancement du rétroplanning
    -------------------------------------------------------------------------- */
@@ -187,8 +189,23 @@ const PRESTATIONS = [
      suivi d'une maison de santé. */
   { id: 'P17', lot: 'LB', titre: 'Structuration SISA ou association 1901', acteur: 'expert', jours: 10,
     actes: true,
-    desc: "Choix du véhicule juridique, rédaction des statuts, règlement intérieur, formalités d'immatriculation.",
+    desc: "Choix du véhicule juridique, rédaction des statuts et du règlement intérieur, préparation du dossier d'immatriculation.",
     livrable: 'Statuts & règlement intérieur' },
+  /* La personne morale n'existe qu'une fois immatriculée (SISA) ou déclarée
+     (association) : aucun dossier ARS ou CGSS ne se dépose avant. Chacune a son
+     guichet en ligne, référencé par `portail` (voir PORTAILS).
+     `modeles` restreint à une forme juridique quand elle est connue ; à défaut,
+     `types` s'applique (SISA pour une MSP, association pour un centre de santé). */
+  { id: 'P39', lot: 'LB', titre: 'Immatriculation de la SISA', acteur: 'expert', jours: 5,
+    types: ['MSP'], modeles: ['sisa'], portail: 'guichet-unique', categorieDoc: 'Juridique',
+    desc: "Télédéclaration de la SISA sur le guichet unique des formalités d'entreprises (INPI), "
+        + "suivi de l'immatriculation au registre du commerce et des sociétés.",
+    livrable: 'Extrait Kbis de la SISA' },
+  { id: 'P40', lot: 'LB', titre: "Déclaration de l'association", acteur: 'expert', jours: 5,
+    types: ['CDS'], modeles: ['assoc'], portail: 'e-creation', categorieDoc: 'Juridique',
+    desc: "Déclaration de création de l'association par le téléservice e-création, publication au Journal "
+        + "officiel des associations (JOAFE) et obtention du récépissé portant le numéro RNA.",
+    livrable: 'Récépissé de déclaration (n° RNA)' },
   { id: 'P35', lot: 'LB', titre: 'Règlement de fonctionnement', acteur: 'expert', jours: 5,
     actes: true,
     // Le même document ne porte pas le même nom des deux côtés : règlement de
@@ -202,17 +219,43 @@ const PRESTATIONS = [
         + "fonctionnement des instances, modalités d'accueil et de prise en charge.",
     livrable: 'Règlement de fonctionnement' },
   { id: 'P36', lot: 'LB', titre: "Engagement de conformité d'un centre de santé", acteur: 'expert', jours: 6,
-    types: ['CDS'], actes: true, categorieDoc: 'ARS',
+    types: ['CDS'], actes: true, categorieDoc: 'ARS', prerequis: ['P44'],
     desc: "Constitution et dépôt de l'engagement de conformité au référentiel national, préalable obligatoire "
         + "à l'ouverture d'un centre de santé, accompagné du projet de santé et du règlement de fonctionnement.",
     livrable: 'Engagement de conformité déposé' },
+  /* Loi n° 2023-378 du 19 mai 2023 : un centre de santé ayant une activité
+     dentaire, ophtalmologique ou orthoptique doit obtenir l'agrément du
+     directeur général de l'ARS avant d'ouvrir. Sans objet pour les autres :
+     la prestation naît « Non nécessaire » (`statutDefaut`). */
+  { id: 'P43', lot: 'LB', titre: 'Agrément des activités dentaire, ophtalmologique ou orthoptique', acteur: 'expert', jours: 8,
+    types: ['CDS'], statutDefaut: 'bloque', portail: 'agrement-cds', categorieDoc: 'ARS',
+    // La réponse du client au questionnaire, rappelée sur la carte : elle dit
+    // à l'expert s'il faut passer la prestation « À faire ».
+    repere: { rubrique: 'structure', champ: 'activites_agrement' },
+    desc: "Obligatoire pour un centre de santé exerçant l'une de ces activités : demande d'agrément provisoire "
+        + "avant l'ouverture (projet de santé, règlement de fonctionnement, déclarations de liens d'intérêts des "
+        + "dirigeants, contrats avec des sociétés tierces). L'agrément devient définitif un an après l'ouverture.",
+    livrable: 'Agrément provisoire de l\'ARS' },
+  /* Jalon : tant qu'il n'est pas validé, les étapes qui engagent l'équipe
+     devant l'ARS ou l'Assurance Maladie (`prerequis`) ne peuvent pas être
+     soumises ni validées. L'expert le passe « Non nécessaire » pour lever la
+     contrainte, par exemple quand l'équipe est réunie depuis le départ. */
+  { id: 'P44', lot: 'LB', titre: 'Équipe médicale minimale réunie', acteur: 'client', jours: 1, jalon: true,
+    variantes: {
+      MSP: { desc: "Au moins deux médecins généralistes et un auxiliaire médical engagés, condition d'une SISA "
+                 + "(art. L.4041-2 du Code de la santé publique) et du contrat ACI." },
+    },
+    desc: "Professionnels de santé recrutés ou engagés, au premier rang desquels le ou les médecins : "
+        + "l'équipe doit être constituée avant la signature du projet de santé et les démarches auprès de l'ARS "
+        + "et de l'Assurance Maladie.",
+    livrable: "Liste des professionnels engagés (RPPS)" },
   { id: 'P38', lot: 'LB', titre: 'Signatures du projet de santé en ligne', acteur: 'mixte', jours: 3,
-    actes: true,
+    actes: true, prerequis: ['P44'],
     desc: "Mise en signature électronique du projet de santé par l'ensemble des professionnels de l'équipe, "
         + "puis archivage de l'exemplaire signé.",
     livrable: 'Projet de santé signé par l\'équipe' },
   { id: 'P19', lot: 'LB', titre: 'Dépôt du projet de santé', acteur: 'expert', jours: 4,
-    courriel: 'ars-premier-recours', courrielAvecProjetSante: true,
+    courriel: 'ars-premier-recours', courrielAvecProjetSante: true, prerequis: ['P44'],
     desc: "Transmission du projet de santé signé à l'ARS, suivi de l'instruction et réponses aux demandes "
         + "de compléments.",
     livrable: 'Accusé de dépôt ARS' },
@@ -225,8 +268,41 @@ const PRESTATIONS = [
      L'ACI est une rémunération d'équipe versée par l'Assurance Maladie :
      sa place est parmi les financements, non dans la structuration juridique. */
   { id: 'P20', lot: 'LC', titre: 'Démarches ACI applicables', acteur: 'expert', jours: 6,
-    desc: "Vérification de l'éligibilité à l'ACI, montage du contrat tripartite et dépôt auprès de la CPAM.",
-    livrable: 'Contrat ACI déposé' },
+    types: ['MSP'], prerequis: ['P44'], reglementaire: true,
+    desc: "Vérification de l'éligibilité à l'ACI, montage du contrat tripartite et dépôt auprès de la caisse "
+        + "d'assurance maladie (CGSS dans les départements d'outre-mer).",
+    livrable: 'Contrat ACI signé',
+    // Circuit d'instruction, affiché dans le détail : la prestation reste une,
+    // la note de suivi dit où en est le dossier.
+    etapes: [
+      "Vérification de l'éligibilité : SISA immatriculée, projet de santé transmis à l'ARS, système d'information labellisé, équipe réunie",
+      'Montage du contrat tripartite et dépôt du dossier auprès de la caisse',
+      'Réception et examen du dossier par la caisse',
+      'Examen conjoint caisse – ARS (DCGDR et ARS)',
+      'Décision : signature du contrat, ou refus motivé ouvrant une voie de recours',
+    ] },
+  { id: 'P41', lot: 'LC', titre: "Adhésion à l'accord national des centres de santé", acteur: 'expert', jours: 6,
+    types: ['CDS'], prerequis: ['P44'], reglementaire: true,
+    desc: "Adhésion du centre de santé à l'accord national (ANCS) qui régit ses relations avec l'Assurance Maladie "
+        + "et ouvre droit à la rémunération forfaitaire : constitution et dépôt du dossier auprès de la caisse "
+        + "(CGSS dans les départements d'outre-mer), suivi de l'instruction.",
+    livrable: "Adhésion à l'accord national signée",
+    etapes: [
+      'Vérification des prérequis : engagement de conformité déposé, numéro FINESS attribué, équipe réunie',
+      "Constitution et dépôt du dossier d'adhésion auprès de la caisse",
+      'Instruction du dossier par la caisse',
+      "Décision : signature de l'adhésion, ou refus motivé ouvrant une voie de recours",
+    ] },
+  /* France Santé : réseau national labellisé par l'ARS. La déclaration
+     d'intention se dépose en ligne ; pour une MSP ou un centre de santé
+     conventionné, elle vaut contractualisation avec la caisse pour la
+     rémunération France Santé. */
+  { id: 'P42', lot: 'LC', titre: 'Déclaration d\'intention France Santé', acteur: 'expert', jours: 3,
+    portail: 'france-sante',
+    desc: "Vérification des critères du label (médecin traitant, offre infirmière, ouverture cinq jours sur sept, "
+        + "tarifs opposables, participation aux soins non programmés), dépôt de la déclaration d'intention en ligne, "
+        + "suivi de l'instruction par l'ARS jusqu'au courrier de labellisation.",
+    livrable: 'Courrier de labellisation France Santé' },
 
   { id: 'P21', lot: 'LC', titre: 'Identification des aides ARS', acteur: 'expert', jours: 5,
     desc: "Recensement des aides mobilisables (FIR, aides à l'installation, crédits d'amorçage) et montage des demandes.",
@@ -402,8 +478,8 @@ const STATUTS_REDACTION = {
  * `pour` indique à quel dossier elle sert, ce qui évite de la redemander.
  */
 const PIECES_DOSSIER = [
-  { id: 'D01', nom: 'Kbis ou récépissé de déclaration', cat: 'Juridique', par: 'client', pour: ['ARS', 'FIR', 'FEDER'],
-    aide: "Extrait Kbis pour une SISA, récépissé de déclaration en préfecture pour une association." },
+  { id: 'D01', nom: 'Kbis ou récépissé de déclaration', cat: 'Juridique', par: 'client', pour: ['ARS', 'FIR', 'FEDER', 'ACI', 'ANCS'],
+    aide: "Extrait Kbis pour une SISA (guichet unique de l'INPI), récépissé portant le numéro RNA pour une association (téléservice e-création)." },
   { id: 'D02', nom: 'Statuts signés de la structure', cat: 'Juridique', par: 'expert', pour: ['ARS', 'FIR', 'FEDER'],
     aide: "Rédigés par ElodiaTech, signés par les associés." },
   { id: 'D03', nom: 'RIB professionnel de la structure', cat: 'Finances', par: 'client', pour: ['FIR', 'FEDER', 'ACI'],
@@ -412,9 +488,9 @@ const PIECES_DOSSIER = [
     aide: "Le bail doit couvrir la durée d'engagement demandée par le financeur." },
   { id: 'D05', nom: 'Attestation RC professionnelle', cat: 'Juridique', par: 'client', pour: ['ARS'],
     aide: "Attestation en cours de validité, délivrée par votre assureur." },
-  { id: 'D06', nom: 'Liste des professionnels (RPPS / ADELI)', cat: 'Équipe', par: 'client', pour: ['ARS', 'ACI'],
+  { id: 'D06', nom: 'Liste des professionnels (RPPS / ADELI)', cat: 'Équipe', par: 'client', pour: ['ARS', 'ACI', 'ANCS', 'FRANCE_SANTE'],
     aide: "Nom, profession et numéro d'identification de chaque professionnel associé." },
-  { id: 'D07', nom: 'Projet de santé validé', cat: 'Projet', par: 'expert', pour: ['ARS', 'FIR', 'ACI'],
+  { id: 'D07', nom: 'Projet de santé validé', cat: 'Projet', par: 'expert', pour: ['ARS', 'FIR', 'ACI', 'ANCS'],
     aide: "Produit par ElodiaTech, validé par votre équipe." },
   { id: 'D08', nom: 'Budget prévisionnel & plan de financement', cat: 'Finances', par: 'expert', pour: ['FIR', 'FEDER'],
     aide: "Monté par ElodiaTech à partir de vos devis." },
@@ -468,6 +544,8 @@ const DOSSIERS_AIDE = {
   FIR:   { id: 'FIR',   label: 'Subvention FIR',         couleur: 'brand' },
   FEDER: { id: 'FEDER', label: 'Fonds européens FEDER',  couleur: 'info' },
   ACI:   { id: 'ACI',   label: 'Contrat ACI',            couleur: 'ok' },
+  ANCS:  { id: 'ANCS',  label: 'Accord national CDS',    couleur: 'ok' },
+  FRANCE_SANTE: { id: 'FRANCE_SANTE', label: 'Label France Santé', couleur: 'brand' },
 };
 
 /** Cahier des charges ERP — 19 critères en 4 groupes. */
@@ -501,7 +579,12 @@ const CAHIER_ERP = [
   ]},
 ];
 
-/** Liens vers les portails institutionnels. */
+/**
+ * Liens vers les portails institutionnels.
+ * `formules` : formules dont le module « Financements & aides » affiche le
+ * portail ; un portail référencé par une prestation (`portail`) s'affiche
+ * aussi sur sa carte, quelle que soit la page.
+ */
 const PORTAILS = [
   { id: 'stars-fir', nom: 'Stars FIR (ARS)', desc: "Dépôt des demandes de subvention au titre du Fonds d'intervention régional.",
     couleur: '#7c6bd4', formules: ['F2', 'F3'], liens: [
@@ -513,7 +596,47 @@ const PORTAILS = [
       { label: 'Compte association', url: 'https://synergie-europe.fr/e_synergie/inscription.do?typeTiers=association', primaire: true },
       { label: 'Compte entreprise / SISA', url: 'https://synergie-europe.fr/e_synergie/inscription.do?typeTiers=entreprise' },
     ]},
+  { id: 'france-sante', nom: 'France Santé', desc: "Déclaration d'intention de participation à France Santé, instruite par l'ARS.",
+    couleur: '#a5c836', formules: ['F2', 'F3'], liens: [
+      { label: 'Déposer la déclaration', url: 'https://demarche.numerique.gouv.fr/commencer/declaration-d-intention-france-sante', primaire: true },
+    ]},
+  { id: 'guichet-unique', nom: "Guichet unique des formalités d'entreprises (INPI)",
+    desc: "Immatriculation de la SISA au registre du commerce et des sociétés.",
+    couleur: '#7c6bd4', formules: [], liens: [
+      { label: 'Ouvrir le guichet unique', url: 'https://formalites.entreprises.gouv.fr/', primaire: true },
+    ]},
+  { id: 'e-creation', nom: 'e-création (service-public.gouv.fr)',
+    desc: "Déclaration de création d'une association et demande de publication au JOAFE.",
+    couleur: '#7c6bd4', formules: [], liens: [
+      { label: 'Déclarer l\'association', url: 'https://demarches.service-public.gouv.fr/asso_mademarche/CR/demarche', primaire: true },
+      { label: 'Fiche pratique', url: 'https://www.service-public.gouv.fr/associations/vosdroits/F1119' },
+    ]},
+  { id: 'agrement-cds', nom: 'Agrément des centres de santé', desc: "Demande d'agrément provisoire d'un centre de santé (activités dentaire, ophtalmologique, orthoptique).",
+    couleur: '#7c6bd4', formules: [], liens: [
+      { label: 'Déposer la demande', url: 'https://demarche.numerique.gouv.fr/commencer/agrement-centres-de-sante', primaire: true },
+    ]},
 ];
+
+/**
+ * Étapes qui suivent la dernière prestation du catalogue, communes à toutes
+ * les formules : l'ouverture, puis les obligations qui durent autant que la
+ * structure. `types` limite une étape à un type de structure.
+ */
+const APRES_PERIMETRE = {
+  ouverture: "Ouverture effective de la structure et démarrage de l'exercice coordonné",
+  suivi: [
+    { titre: 'Déclaration annuelle des indicateurs ACI', types: ['MSP'],
+      detail: "Chaque année, auprès de la caisse : elle conditionne le versement de la rémunération d'équipe." },
+    { titre: "Déclaration annuelle des indicateurs de l'accord national", types: ['CDS'],
+      detail: "Chaque année, auprès de la caisse : elle conditionne le versement de la rémunération forfaitaire." },
+    { titre: "Agrément définitif de l'ARS", types: ['CDS'],
+      detail: "Pour une activité dentaire, ophtalmologique ou orthoptique : l'agrément provisoire devient définitif un an après l'ouverture." },
+    { titre: 'Évaluation annuelle du projet de santé',
+      detail: "Bilan des actions et des indicateurs, présenté à l'équipe et tenu à la disposition de l'ARS." },
+    { titre: 'Actualisation du projet de santé',
+      detail: "Mise à jour à chaque évolution de l'équipe ou de l'organisation, et révision d'ensemble périodique (généralement tous les cinq ans)." },
+  ],
+};
 
 /**
  * Guichets qui reçoivent un dossier par courriel, référencés par la clé
@@ -586,8 +709,14 @@ const MODELES_JURIDIQUES = {
 const FAQ = [
   { q: "Quelle formule choisir pour ma structure ?", cat: 'Offre',
     r: "La Formule 1 convient si votre structure juridique existe déjà et que seul le projet de santé est à produire. La Formule 2 couvre la création complète (juridique, ARS, financements, partenariats). La Formule 3 ajoute l'identité visuelle, le site internet et l'accompagnement au déploiement jusqu'à l'ouverture." },
+  { q: "Mon centre de santé relève-t-il de l'ACI ?", cat: 'Financement',
+    r: "Non : l'ACI concerne les maisons de santé constituées en SISA. Un centre de santé adhère à l'accord national des centres de santé (ANCS), auprès de la caisse d'assurance maladie (CGSS dans les départements d'outre-mer), qui ouvre droit à sa propre rémunération forfaitaire." },
+  { q: "Qu'est-ce que le label France Santé ?", cat: 'Financement',
+    r: "Un réseau national de structures de proximité labellisées par l'ARS. La participation se déclare en ligne (« Déclaration d'intention de participation à France Santé ») ; pour une MSP ou un centre de santé conventionné, cette déclaration vaut contractualisation avec la caisse pour la rémunération France Santé. Les critères comprennent notamment un médecin traitant, une offre infirmière, une ouverture cinq jours sur sept, des tarifs opposables et la participation aux soins non programmés." },
+  { q: "Mon centre de santé a une activité dentaire ou ophtalmologique : que faut-il de plus ?", cat: 'ARS',
+    r: "Depuis la loi n° 2023-378 du 19 mai 2023, un centre de santé ayant une activité dentaire, ophtalmologique ou orthoptique doit obtenir un agrément du directeur général de l'ARS avant d'ouvrir. Cet agrément est d'abord provisoire et devient définitif un an après l'ouverture." },
   { q: "Comment percevoir la dotation ACI ?", cat: 'Financement',
-    r: "Il faut réunir au moins deux médecins généralistes et un auxiliaire médical, disposer d'un système d'information partagé labellisé Ségur, être constitué en SISA et disposer d'un projet de santé validé par l'ARS. Le contrat ACI est ensuite signé avec la CPAM et l'ARS." },
+    r: "Il faut réunir au moins deux médecins généralistes et un auxiliaire médical, disposer d'un système d'information partagé labellisé Ségur, être constitué en SISA et disposer d'un projet de santé validé par l'ARS. Le contrat ACI est ensuite signé avec la caisse d'assurance maladie (CGSS dans les départements d'outre-mer) et l'ARS." },
   { q: "Quelle différence entre une MSP et un centre de santé ?", cat: 'Juridique',
     r: "La MSP regroupe des professionnels libéraux qui restent indépendants, généralement en SISA. Le centre de santé emploie des professionnels salariés et est porté par une structure gestionnaire (association, mutuelle, collectivité). Le mode de financement et la gouvernance diffèrent." },
   { q: "Combien de temps dure l'instruction du dossier ARS ?", cat: 'ARS',
@@ -603,7 +732,7 @@ const FAQ = [
   { q: "Quel logiciel médical choisir ?", cat: 'Outils',
     r: "Le logiciel doit être labellisé Ségur pour ouvrir droit aux financements et permettre le partage d'informations. La sélection s'appuie sur un comparatif fonctionnel et des démonstrations organisées avec l'équipe." },
   { q: "Que se passe-t-il après l'ouverture de la structure ?", cat: 'Déploiement',
-    r: "Le projet de santé fait l'objet d'une évaluation annuelle, les indicateurs ACI sont déclarés chaque année et le projet doit être actualisé, généralement tous les cinq ans." },
+    r: "Le projet de santé fait l'objet d'une évaluation annuelle, les indicateurs ACI (MSP) ou de l'accord national (centre de santé) sont déclarés chaque année et le projet doit être actualisé, généralement tous les cinq ans. Ces étapes figurent en fin de feuille de route, quelle que soit la formule." },
 ];
 
 /** Catégories de documents du coffre-fort. */
@@ -739,6 +868,8 @@ const QUESTIONNAIRE = [
       { id: 'forme', label: 'Forme juridique', type: 'choix',
         options: ['SISA', 'SISA en cours de constitution', 'Association loi 1901', 'SCIC', 'Collectivité territoriale', 'Mutuelle', 'Autre', 'Je ne sais pas encore'] },
       { id: 'commune', label: "Commune d'implantation principale", type: 'texte', requis: true },
+      { id: 'activites_agrement', label: 'Activité dentaire, ophtalmologique ou orthoptique prévue', type: 'choix',
+        options: ['Oui', 'Non', 'Je ne sais pas'] },
       { id: 'porteur', label: 'Porteur du projet (nom, profession)', type: 'texte', requis: true },
       { id: 'coordinateur', label: 'Coordinateur pressenti (nom, fonction)', type: 'texte' },
       { id: 'coord_contact', label: 'Coordonnées du coordinateur (courriel, téléphone)', type: 'texte' },
@@ -816,7 +947,8 @@ const QUESTIONNAIRE = [
       { id: 'plan_fin', label: 'Plan de financement', type: 'tableau', requis: true, ligne: 'Financement',
         colonnes: [{ id: 'financeur', label: 'Financeur' }, { id: 'dispositif', label: 'Dispositif' }, { id: 'montant', label: 'Montant (€)' },
           { id: 'objet', label: 'Objet' }, { id: 'statut', label: 'Statut', options: ['Obtenu', 'Demandé', 'À solliciter', 'À confirmer'] }] },
-      { id: 'aci', label: 'Accord conventionnel interprofessionnel (ACI)', type: 'choix', options: ['Signé', 'Signature prévue', 'Non concerné', 'Je ne sais pas'] },
+      { id: 'aci', label: 'ACI (maison de santé) ou accord national des centres de santé', type: 'choix', options: ['Signé', 'Signature prévue', 'Non concerné', 'Je ne sais pas'] },
+      { id: 'france_sante', label: 'Label France Santé', type: 'choix', options: ['Label obtenu', 'Déclaration déposée', 'Non engagé', 'Je ne sais pas'] },
       { id: 'apports', label: 'Apports des associés, de la collectivité ou de partenaires', type: 'zone' },
       { id: 'docs_fin', label: 'Budget prévisionnel, plan de financement, bilans', type: 'fichiers', categorie: 'Finances' },
       { id: 'equipements', label: 'Équipements (acquis ou à acquérir)', type: 'tableau', requis: true, ligne: 'Équipement',

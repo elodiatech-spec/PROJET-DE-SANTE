@@ -204,13 +204,13 @@ var ENTITES_PAR_PROJET = {
  * le navigateur est ignoré, quel que soit le rôle.
  */
 var QUESTIONNAIRE_CHAMPS = {
-  structure:  ['type', 'nom', 'forme', 'porteur', 'coordinateur', 'coord_contact', 'commune'],
+  structure:  ['type', 'nom', 'forme', 'porteur', 'coordinateur', 'coord_contact', 'commune', 'activites_agrement'],
   equipe:     ['pros', 'secretariat'],
   assistants: ['presence', 'liste'],
   locaux:     ['sites', 'occupation', 'surface', 'pieces', 'pmr', 'projet_immo'],
   horaires:   ['horaires', 'precisions'],
   axes:       ['choix', 'axes', 'valeurs'],
-  moyens:     ['plan_fin', 'aci', 'apports', 'equipements', 'materiel_note'],
+  moyens:     ['plan_fin', 'aci', 'france_sante', 'apports', 'equipements', 'materiel_note'],
   logiciel:   ['logiciel', 'rdv', 'telemed', 'outils']
 };
 var QUESTIONNAIRE_TAILLE_MAX = 45000;   // caractères par rubrique (limite d'une cellule : 50 000)
@@ -241,7 +241,7 @@ var AMORCE = {
    "Onglet Prestations — une ligne par prestation et par projet. Statuts : a_faire, en_cours, a_valider, valide, bloque."
   ],
   [
-   "Onglet Catalogue   — référence en lecture seule des 37 prestations et de leur rattachement aux formules."
+   "Onglet Catalogue   — référence en lecture seule des 43 prestations et de leur rattachement aux formules."
   ],
   [
    "Autres onglets     — documents, signatures, messages, événements, comptes rendus, financements, partenaires."
@@ -1436,10 +1436,36 @@ var AMORCE = {
    "LB",
    "Structuration juridique & dossier ARS",
    "Structuration SISA ou association 1901",
-   "Choix du véhicule juridique, rédaction des statuts, règlement intérieur, formalités d'immatriculation.",
+   "Choix du véhicule juridique, rédaction des statuts et du règlement intérieur, préparation du dossier d'immatriculation.",
    "Statuts & règlement intérieur",
    "expert",
    10,
+   "",
+   "OUI",
+   "OUI"
+  ],
+  [
+   "P39",
+   "LB",
+   "Structuration juridique & dossier ARS",
+   "Immatriculation de la SISA",
+   "Télédéclaration de la SISA sur le guichet unique des formalités d'entreprises (INPI), suivi de l'immatriculation au registre du commerce et des sociétés.",
+   "Extrait Kbis de la SISA",
+   "expert",
+   5,
+   "",
+   "OUI",
+   "OUI"
+  ],
+  [
+   "P40",
+   "LB",
+   "Structuration juridique & dossier ARS",
+   "Déclaration de l'association",
+   "Déclaration de création de l'association par le téléservice e-création, publication au Journal officiel des associations (JOAFE) et obtention du récépissé portant le numéro RNA.",
+   "Récépissé de déclaration (n° RNA)",
+   "expert",
+   5,
    "",
    "OUI",
    "OUI"
@@ -1466,6 +1492,32 @@ var AMORCE = {
    "Engagement de conformité déposé",
    "expert",
    6,
+   "",
+   "OUI",
+   "OUI"
+  ],
+  [
+   "P43",
+   "LB",
+   "Structuration juridique & dossier ARS",
+   "Agrément des activités dentaire, ophtalmologique ou orthoptique",
+   "Obligatoire pour un centre de santé exerçant l'une de ces activités : demande d'agrément provisoire avant l'ouverture (projet de santé, règlement de fonctionnement, déclarations de liens d'intérêts des dirigeants, contrats avec des sociétés tierces). L'agrément devient définitif un an après l'ouverture.",
+   "Agrément provisoire de l'ARS",
+   "expert",
+   8,
+   "",
+   "OUI",
+   "OUI"
+  ],
+  [
+   "P44",
+   "LB",
+   "Structuration juridique & dossier ARS",
+   "Équipe médicale minimale réunie",
+   "Professionnels de santé recrutés ou engagés, au premier rang desquels le ou les médecins : l'équipe doit être constituée avant la signature du projet de santé et les démarches auprès de l'ARS et de l'Assurance Maladie.",
+   "Liste des professionnels engagés (RPPS)",
+   "client",
+   1,
    "",
    "OUI",
    "OUI"
@@ -1514,10 +1566,36 @@ var AMORCE = {
    "LC",
    "Financements & subventions",
    "Démarches ACI applicables",
-   "Vérification de l'éligibilité à l'ACI, montage du contrat tripartite et dépôt auprès de la CPAM.",
-   "Contrat ACI déposé",
+   "Vérification de l'éligibilité à l'ACI, montage du contrat tripartite et dépôt auprès de la caisse d'assurance maladie (CGSS dans les départements d'outre-mer).",
+   "Contrat ACI signé",
    "expert",
    6,
+   "",
+   "OUI",
+   "OUI"
+  ],
+  [
+   "P41",
+   "LC",
+   "Financements & subventions",
+   "Adhésion à l'accord national des centres de santé",
+   "Adhésion du centre de santé à l'accord national (ANCS) qui régit ses relations avec l'Assurance Maladie et ouvre droit à la rémunération forfaitaire : constitution et dépôt du dossier auprès de la caisse (CGSS dans les départements d'outre-mer), suivi de l'instruction.",
+   "Adhésion à l'accord national signée",
+   "expert",
+   6,
+   "",
+   "OUI",
+   "OUI"
+  ],
+  [
+   "P42",
+   "LC",
+   "Financements & subventions",
+   "Déclaration d'intention France Santé",
+   "Vérification des critères du label (médecin traitant, offre infirmière, ouverture cinq jours sur sept, tarifs opposables, participation aux soins non programmés), dépôt de la déclaration d'intention en ligne, suivi de l'instruction par l'ARS jusqu'au courrier de labellisation.",
+   "Courrier de labellisation France Santé",
+   "expert",
+   3,
    "",
    "OUI",
    "OUI"
