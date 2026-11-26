@@ -507,6 +507,82 @@ function carteRedaction() {
     </div>`;
 }
 
+/**
+ * Actes et documents générés avec Claude, réservés à l'expert : ceux qu'un
+ * modèle type ne suffit pas à produire. Validés, ils passent au client et,
+ * s'ils se signent, dans ses actes à signer.
+ */
+function carteActes() {
+  const etats = Store.actesProjet();
+  const actif = Store.ecritureActive();
+  const liste = Store.actesApplicables();
+  const groupes = [];
+  liste.forEach((a) => {
+    let g = groupes.find((x) => x.nom === a.groupe);
+    if (!g) groupes.push(g = { nom: a.groupe, actes: [] });
+    g.actes.push(a);
+  });
+
+  const ligne = (a) => {
+    const e = etats[a.id] || {};
+    const st = STATUTS_REDACTION[e.statut || ''] || STATUTS_REDACTION[''];
+    const doc = urlSure(e.docUrl);
+    const enCours = e.statut === 'en_cours';
+    const sig = SIGNATURES_ACTE[a.signature] || SIGNATURES_ACTE.aucune;
+    const aCompleter = String(e.aCompleter || '').split('\n').map((l) => l.trim()).filter(Boolean);
+    return `<div class="redac-ligne">
+        <div class="row-between">
+          <div class="grow">
+            <h4 class="redac-titre">${esc(a.titre)}</h4>
+            <p class="text-xs text-muted">${esc(sig.label)}${sig.detail ? ` — ${esc(sig.detail)}` : ''} · dossier « ${esc(a.categorie)} »</p>
+          </div>
+          <span class="badge badge--${st.couleur}"><i class="${st.icone}"></i> ${esc(st.label)}${e.version ? ` · v${esc(e.version)}` : ''}</span>
+        </div>
+        ${e.message ? `<p class="text-xs redac-message"><i class="fa-solid fa-circle-info"></i> ${esc(e.message)}</p>` : ''}
+        ${aCompleter.length ? `<details class="redac-details"><summary class="text-xs fw-800">
+            ${aCompleter.length} élément${aCompleter.length > 1 ? 's' : ''} à compléter ou vérifier</summary>
+            <ul class="text-xs">${aCompleter.slice(0, 30).map((l) => `<li>${esc(l.replace(/^[-•]\s*/, ''))}</li>`).join('')}</ul>
+          </details>` : ''}
+        <div class="row-tight" style="margin-top:8px">
+          <button class="btn btn--sm ${doc ? '' : 'btn--primary'}" data-action="acte-rediger" data-acte="${esc(a.id)}"
+                  ${enCours || !actif ? 'disabled' : ''}>
+            <i class="fa-solid fa-wand-magic-sparkles"></i> ${doc ? 'Rédiger à nouveau' : 'Rédiger avec Claude'}
+          </button>
+          ${enCours ? `<button class="btn btn--sm" data-action="acte-suivre" data-acte="${esc(a.id)}">
+              <i class="fa-solid fa-rotate"></i> Vérifier maintenant</button>` : ''}
+          ${doc ? `<a class="btn btn--sm" href="${esc(doc)}" target="_blank" rel="noopener noreferrer">
+              <i class="fa-solid fa-file-word"></i> Ouvrir le Google Docs</a>` : ''}
+          ${doc && e.statut === 'pret' ? `<button class="btn btn--sm btn--primary" data-action="acte-valider" data-acte="${esc(a.id)}">
+              <i class="fa-solid fa-check"></i> ${a.signature === 'aucune' ? 'Valider et transmettre' : 'Valider et mettre à la signature'}</button>` : ''}
+        </div>
+      </div>`;
+  };
+
+  const nbValides = liste.filter((a) => etats[a.id]?.statut === 'valide').length;
+  return `<div class="card">
+      <div class="card__head">
+        <div>
+          <h3 class="card__title"><i class="fa-solid fa-file-contract"></i> Actes et documents générés
+            <span class="badge badge--neutre" style="margin-left:6px"><i class="fa-solid fa-lock"></i> Visible par vous seul</span></h3>
+          <p class="card__subtitle">
+            Statuts, charte, règlement de fonctionnement, conventions, contrats : Claude les rédige à partir du
+            projet de santé (chapitres et fil conducteur), des informations du client et des sources officielles
+            déposées dans le Drive, dossier « Sources officielles des actes », un sous-dossier par document.
+            Toute donnée absente est signalée <em>[à compléter]</em>.
+          </p>
+        </div>
+        <span class="badge badge--${nbValides && nbValides === liste.length ? 'ok' : 'neutre'}">${nbValides} / ${liste.length} validés</span>
+      </div>
+      <p class="text-xs text-muted"><i class="fa-solid fa-scale-balanced"></i>
+        Chaque document est un projet : relisez-le, et faites valider les actes juridiques par un professionnel du droit
+        avant de les mettre à la signature. Validé, il rejoint les documents du client et, s'il se signe, ses actes à signer.</p>
+      ${actif ? '' : `<p class="text-xs text-muted"><i class="fa-solid fa-plug-circle-xmark"></i>
+          La rédaction s'effectue par la base Google Sheets : elle n'est pas disponible en démonstration.</p>`}
+      ${groupes.map((g) => `<h4 class="apres-titre">${esc(g.nom)}</h4>
+        <div class="redac-liste">${g.actes.map(ligne).join('')}</div>`).join('')}
+    </div>`;
+}
+
 function documentDeChapitre(num) {
   return Store.liste('documents').find((d) => d.piece === `CHAP${num}`) || null;
 }
@@ -1167,6 +1243,7 @@ const Views = {
       </div>
 
       ${expert ? carteRedaction() : ''}
+      ${expert ? carteActes() : ''}
 
       <div class="card">
         <div class="card__head">

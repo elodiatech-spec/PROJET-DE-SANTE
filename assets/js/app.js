@@ -70,7 +70,8 @@ const App = {
     if (this._minuteurRedaction) return;
     if (!Store.estExpert() || Store.state.route !== 'projet-sante' || !Store.ecritureActive()) return;
     const enCours = () => CHAPITRES_REDACTION.filter((c) => Store.redactionProjet()[c.id]?.statut === 'en_cours');
-    if (!enCours().length) return;
+    const actesEnCours = () => ACTES_GENERES.filter((a) => Store.actesProjet()[a.id]?.statut === 'en_cours');
+    if (!enCours().length && !actesEnCours().length) return;
 
     this._minuteurRedaction = setTimeout(async () => {
       const projetId = Store.state.projetActifId;
@@ -79,6 +80,11 @@ const App = {
           const etat = await Store.suivreRedaction(c.id, projetId);
           if (etat?.statut === 'pret') toast(`${c.titre} : brouillon prêt, à relire dans Google Docs.`, 'ok');
           if (etat?.statut === 'erreur') toast(`${c.titre} : ${etat.message}`, 'danger');
+        }
+        for (const a of actesEnCours()) {
+          const etat = await Store.suivreActe(a.id, projetId);
+          if (etat?.statut === 'pret') toast(`${a.titre} : projet prêt, à relire dans Google Docs.`, 'ok');
+          if (etat?.statut === 'erreur') toast(`${a.titre} : ${etat.message}`, 'danger');
         }
       } catch (err) {
         toast(`Suivi de la rédaction impossible : ${err.message}`, 'warn');
@@ -1195,6 +1201,68 @@ const App = {
           } catch (err) {
             toast(`Rédaction impossible : ${err.message}`, 'danger');
           }
+        },
+      });
+    },
+
+    'acte-rediger'(el) {
+      const id = el.dataset.acte;
+      const def = ACTES_GENERES.find((a) => a.id === id);
+      const etat = Store.actesProjet()[id] || {};
+      if (!def) return;
+      if (!Store.ecritureActive()) {
+        toast('La rédaction passe par la base Google Sheets : connectez-la d\'abord.', 'warn');
+        return;
+      }
+      Modal.formulaire({
+        titre: `Rédiger — ${def.titre}`,
+        soustitre: etat.docUrl
+          ? 'Une nouvelle version sera créée à côté de la précédente, qui reste dans le dossier.'
+          : `Claude reprend le projet de santé et les sources du dossier « Sources officielles des actes / ${def.titre} ».`,
+        champs: [
+          { id: 'consignes', label: 'Consignes particulières (facultatif)', type: 'textarea', valeur: etat.consignes || '',
+            placeholder: 'Exemples : partenaire concerné et son représentant ; capital de 1 500 € ; profession du salarié ; date d\'effet…' },
+        ],
+        libelle: 'Lancer la rédaction',
+        onSubmit: async (v) => {
+          toast('Envoi du dossier à Claude…', 'info');
+          try {
+            const r = await Store.redigerActe(id, v.consignes);
+            toast(`Rédaction lancée avec ${(r.sources || []).length} fichier(s) source.`, 'ok');
+          } catch (err) {
+            toast(`Rédaction impossible : ${err.message}`, 'danger');
+          }
+        },
+      });
+    },
+
+    async 'acte-suivre'(el) {
+      el.disabled = true;
+      try {
+        const etat = await Store.suivreActe(el.dataset.acte);
+        toast(etat?.statut === 'en_cours' ? 'Claude rédige toujours ce document.'
+          : etat?.statut === 'pret' ? 'Projet de document prêt.' : (etat?.message || 'État mis à jour.'),
+          etat?.statut === 'erreur' ? 'danger' : 'ok');
+      } catch (err) {
+        toast(`Vérification impossible : ${err.message}`, 'warn');
+      } finally {
+        el.disabled = false;
+      }
+    },
+
+    'acte-valider'(el) {
+      const def = ACTES_GENERES.find((a) => a.id === el.dataset.acte);
+      if (!def) return;
+      const signe = def.signature !== 'aucune';
+      Modal.confirmer({
+        titre: `Valider — ${def.titre}`,
+        texte: 'Le document rejoindra les documents du client'
+          + (signe ? `, et entrera dans ses actes à signer (${SIGNATURES_ACTE[def.signature].label.toLowerCase()}) : il vous restera à coller le lien de signature dans « Validation & signatures ».` : '.')
+          + ' Vérifiez auparavant que toutes les mentions [à compléter] sont traitées.',
+        libelle: signe ? 'Valider et mettre à la signature' : 'Valider et transmettre',
+        onConfirm: () => {
+          Store.validerActe(def.id);
+          toast(`${def.titre} : transmis au client${signe ? ' et mis à la signature' : ''}.`, 'ok');
         },
       });
     },

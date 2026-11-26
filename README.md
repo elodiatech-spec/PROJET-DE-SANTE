@@ -60,6 +60,24 @@ de la formule.
 
 ---
 
+## Actes et documents générés avec Claude (expert)
+
+Page **Projet de santé**, carte « Actes et documents générés ». Les documents qu'un modèle type ne
+suffit pas à produire (statuts de SISA ou d'association, règlement intérieur, pacte d'associés, charte
+interne, règlement de fonctionnement, organigramme, demande d'adhésion à l'accord national, budget,
+conventions de partenariat, contrats de travail en centre de santé, mise à disposition des locaux,
+cahier des charges, rapport annuel, avenant au projet de santé) suivent le circuit des chapitres :
+
+1. Sources officielles dans le Drive : « ElodiaTech — Projets de Santé / Sources officielles des
+   actes / <document> » (un sous-dossier par document, plus « 00 — Commun à tous les actes »).
+2. Claude reçoit le dossier du projet, le texte des chapitres rédigés (validés d'abord), le fil
+   conducteur, ces sources officielles et les pièces du dossier de la catégorie du client.
+3. Le projet de document devient un Google Docs dans le dossier de sa catégorie (« 02 — Juridique »…).
+4. « Valider et mettre à la signature » : document transmis au client, acte ajouté à « Validation &
+   signatures » (lien DocuSeal ou WM Goodflag à coller), prestation liée soumise au client.
+
+Onglet **Actes** créé automatiquement. Test : `node tests/actes.mjs`.
+
 ## Parcours administratif (audit du 26 novembre 2026)
 
 La feuille de route suit le parcours réel de chaque structure :
@@ -249,6 +267,7 @@ node tests/lecture-fichier.mjs
 node tests/questionnaire.mjs
 node tests/redaction.mjs
 node tests/parcours.mjs
+node tests/actes.mjs
 ```
 
 **aller-retour** vérifie l'intégration Google Sheets de bout en bout : les actions de
