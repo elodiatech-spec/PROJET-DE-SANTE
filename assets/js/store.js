@@ -1948,6 +1948,20 @@ const Store = {
     return r;
   },
 
+  /**
+   * Réunit les chapitres validés en un seul Google Docs (page de garde,
+   * sommaire, pied de page). Synchrone : quelques secondes.
+   */
+  async assemblerProjet() {
+    if (!this.ecritureActive()) throw new Error('la source Google Sheets doit être connectée');
+    const projetId = this.state.projetActifId;
+    const rep = await SheetsAdapter.envoyer(this.state.reglages.webAppUrl, {
+      action: 'assemblerProjet', projetId, ...this.porteCles(),
+    });
+    if (rep.redaction) this._majRedaction(DOCUMENT_FINAL.id, rep.redaction, projetId);
+    return rep.redaction;
+  },
+
   /* ---- Actes et documents générés (expert) ---- */
 
   /** Actes applicables au projet, selon son type et sa forme juridique. */
@@ -2054,13 +2068,16 @@ const Store = {
    */
   validerChapitre(chapitre) {
     const etat = this.redactionProjet()[chapitre];
-    const def = CHAPITRES_REDACTION.find((c) => c.id === chapitre);
+    const def = chapitreOuFinal(chapitre);
     if (!etat?.docUrl || !def) return;
 
     this._majRedaction(chapitre, { statut: 'valide' });
     this.pousser('redaction', `${this.state.projetActifId}:${chapitre}`, { statut: 'valide' });
 
-    const nom = `Projet de santé — ${def.titre}`;
+    // Le document final devient le projet de santé de référence du client.
+    if (chapitre === DOCUMENT_FINAL.id) this.majProjet({ gdocProjetSante: etat.docUrl });
+
+    const nom = chapitre === DOCUMENT_FINAL.id ? `Projet de santé — version ${etat.version || 1}` : `Projet de santé — ${def.titre}`;
     const existant = this.liste('documents').find((d) => d.piece === `RED-${chapitre}`);
     if (existant) this.majDocument(existant.id, { nom, url: etat.docUrl, date: Dates.today() });
     else this.ajouterDocument({ nom, url: etat.docUrl, cat: 'Projet', type: 'doc', auteur: 'ElodiaTech', piece: `RED-${chapitre}` });

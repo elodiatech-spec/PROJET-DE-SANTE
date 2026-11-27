@@ -533,6 +533,18 @@ const CHAPITRES_REDACTION = [
 ];
 
 /**
+ * Document final : les chapitres validés réunis en un seul Google Docs
+ * (page de garde, sommaire, pied de page). Validé, il devient le projet de
+ * santé du client et soumet l'étape « Document finalisé ».
+ */
+const DOCUMENT_FINAL = { id: 'final', titre: 'Document final du projet de santé', prestations: ['P16'] };
+
+/** Chapitre rédigé ou document final, par identifiant. */
+function chapitreOuFinal(id) {
+  return id === DOCUMENT_FINAL.id ? DOCUMENT_FINAL : CHAPITRES_REDACTION.find((c) => c.id === id);
+}
+
+/**
  * Actes et documents générés avec Claude à partir du projet de santé et des
  * sources officielles. Doit concorder avec ACTES_GENERES du script (contrôlé
  * par tests/actes.mjs) : le contenu attendu reste côté serveur.

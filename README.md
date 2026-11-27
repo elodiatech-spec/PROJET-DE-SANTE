@@ -117,6 +117,14 @@ chapitre du plan ARS (introduction et préambule, chapitres 1 à 6 et conclusion
    mis en forme (titres, tableaux, encadrés, graphiques rendus en image) dans « 01 — Projet de santé ».
 4. « Valider et transmettre au client » : le chapitre rejoint les documents du client et les
    prestations correspondantes passent « à valider ».
+5. « Assembler le document final » (dès qu'un chapitre est validé) : un seul Google Docs dans
+   « 01 — Projet de santé », versionné — page de garde (structure, type, adresse, ARS compétente
+   d'après le département, logo si un fichier image dont le nom contient « logo » est dans le
+   dossier Drive du projet), sommaire des titres, chapitres validés dans l'ordre du plan, pied de
+   page. Les chapitres manquants sont listés sur la page de garde (« document incomplet ») et le
+   nombre de mentions [à compléter] restantes est affiché. Validé, il devient le projet de santé
+   du client (lien de sa fiche) et soumet l'étape « Document finalisé » (P16). Pour un sommaire
+   paginé : menu Insertion › Table des matières de Google Docs.
 
 Mise en service : menu **ElodiaTech → Définir ma clé Claude** dans la feuille de base (clé créée
 sur console.anthropic.com, conservée dans les propriétés du script). Les rédactions sont suivies
