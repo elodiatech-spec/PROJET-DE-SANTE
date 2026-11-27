@@ -520,6 +520,9 @@ function carteRedaction() {
                   ${enCours || !actif ? 'disabled' : ''}>
             <i class="fa-solid fa-wand-magic-sparkles"></i> ${doc ? 'Rédiger à nouveau' : 'Rédiger avec Claude'}
           </button>
+          <button class="btn btn--sm btn--ghost" data-action="redac-importer" data-chapitre="${esc(c.id)}"
+                  ${enCours || !actif ? 'disabled' : ''} title="Rattacher un Google Docs déjà rédigé">
+            <i class="fa-solid fa-file-import"></i> Importer</button>
           ${enCours ? `<button class="btn btn--sm" data-action="redac-suivre" data-chapitre="${esc(c.id)}">
               <i class="fa-solid fa-rotate"></i> Vérifier maintenant</button>` : ''}
           ${doc ? `<a class="btn btn--sm" href="${esc(doc)}" target="_blank" rel="noopener noreferrer">

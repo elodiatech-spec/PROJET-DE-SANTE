@@ -206,7 +206,14 @@ const contexte = vm.createContext({
     base64Encode: (b) => Buffer.from(b).toString('base64'),
     newBlob: (s) => ({ getBytes: () => Buffer.from(String(s)) }),
   },
-  DriveApp: { getFolderById: (id) => { if (id !== ID_DOSSIER) throw new Error('dossier inconnu'); return dossierProjet; } },
+  DriveApp: {
+    getFolderById: (id) => { if (id !== ID_DOSSIER) throw new Error('dossier inconnu'); return dossierProjet; },
+    getFileById: (id) => {
+      if (id === 'IMPORTCH4abcdefghijklmnopqrstuvwxyz') return { getId: () => id, getName: () => 'CH4 existant', getMimeType: () => 'application/vnd.google-apps.document', getUrl: () => `https://docs.google.com/document/d/${id}/edit` };
+      if (id === 'IMPORTPDFabcdefghijklmnopqrstuvwxyz') return { getId: () => id, getName: () => 'x.pdf', getMimeType: () => 'application/pdf', getUrl: () => '' };
+      return { getName: () => 'Modèle d\'un autre projet' };
+    },
+  },
   ScriptApp: { getOAuthToken: () => 'jeton-oauth' },
   UrlFetchApp, Charts, DocumentApp,
   HtmlService: { createHtmlOutput: () => ({}), XFrameOptionsMode: {} },
@@ -393,6 +400,20 @@ const prep = expert({ action: 'preparerSources', projetId: P });
 verifier('préparation des dossiers de sources : réservée, sans erreur', !prep.erreur && typeof prep.crees === 'number', prep.erreur);
 const prepClient = appel({ jeton: JETON_CLIENT, action: 'preparerSources', projetId: P });
 verifier('client : ne peut pas créer les dossiers de sources', !!prepClient.erreur, prepClient.erreur);
+
+/* --- Import d'un chapitre existant --- */
+const impClient = appel({ jeton: JETON_CLIENT, action: 'importerChapitre', projetId: P, chapitre: 'ch4', url: 'https://docs.google.com/document/d/IMPORTCH4abcdefghijklmnopqrstuvwxyz/edit' });
+verifier('client : ne peut pas importer', !!impClient.erreur, impClient.erreur);
+const impPdf = expert({ action: 'importerChapitre', projetId: P, chapitre: 'ch4', url: 'https://drive.google.com/file/d/IMPORTPDFabcdefghijklmnopqrstuvwxyz/view' });
+verifier('import : un PDF est refusé', /Google Docs/.test(impPdf.erreur || ''), impPdf.erreur);
+const imp = expert({ action: 'importerChapitre', projetId: P, chapitre: 'ch4', url: 'https://docs.google.com/document/d/IMPORTCH4abcdefghijklmnopqrstuvwxyz/edit' });
+verifier('import : chapitre classé prêt, avec son document', imp.redaction?.statut === 'pret' && ligne('ch4').lot_id === 'import'
+  && ligne('ch4').doc_id === 'IMPORTCH4abcdefghijklmnopqrstuvwxyz', imp.erreur || JSON.stringify(ligne('ch4')));
+const avant5 = appels.length;
+expert({ action: 'redigerChapitre', projetId: P, chapitre: 'ch5' });
+const envoi5 = appels.slice(avant5).find((a) => a.opts.method === 'post' && a.url.endsWith('/batches'));
+const texte5 = envoi5 ? JSON.parse(envoi5.opts.payload).requests[0].params.messages[0].content.filter((b) => b.type === 'text').map((b) => b.text).join('\n') : '';
+verifier('chapitre 5 : le texte du chapitre 4 importé est joint', texte5.includes('<chapitre_deja_redige id="ch4">'), texte5.slice(0, 200));
 
 /* --- Concordance avec l'application --- */
 const ctx = vm.createContext({});

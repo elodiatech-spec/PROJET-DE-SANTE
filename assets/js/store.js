@@ -1948,6 +1948,17 @@ const Store = {
     return r;
   },
 
+  /** Rattache un Google Docs existant au chapitre (rédigé hors application). */
+  async importerChapitre(chapitre, url) {
+    if (!this.ecritureActive()) throw new Error('la source Google Sheets doit être connectée');
+    const projetId = this.state.projetActifId;
+    const rep = await SheetsAdapter.envoyer(this.state.reglages.webAppUrl, {
+      action: 'importerChapitre', projetId, chapitre, url, ...this.porteCles(),
+    });
+    if (rep.redaction) this._majRedaction(chapitre, rep.redaction, projetId);
+    return rep.redaction;
+  },
+
   /** Crée les sous-dossiers « Sources — … » du dossier 01 ; renvoie { crees, url }. */
   async preparerSources() {
     if (!this.ecritureActive()) throw new Error('la source Google Sheets doit être connectée');

@@ -3008,6 +3008,12 @@ function doPost(e) {
       var d01 = sousDossierCategorie(dossierDuProjet(String(requete.projetId || '')), 'Projet');
       return json({ ok: true, crees: assurerDossiersSources_(d01), url: d01.getUrl() });
     }
+    // Import d'un chapitre rédigé hors de l'application (Google Docs existant).
+    if (requete.action === 'importerChapitre') {
+      if (acces.role !== 'expert') throw new Error('Réservé à l\'expert.');
+      verrou.waitLock(25000);
+      return json({ ok: true, redaction: importerChapitre(requete) });
+    }
     // Assemblage du document final : quelques secondes, pas de lot Claude.
     if (requete.action === 'assemblerProjet') {
       if (acces.role !== 'expert') throw new Error('Réservé à l\'expert.');
@@ -3845,7 +3851,7 @@ function contenuDemande_(projetId, donnees, chapitre, consignes, sources) {
   var p = donnees.projets[0];
   var blocs = blocsDossier_(projetId, donnees, chapitre.id);
 
-  if (chapitre.modele) {
+  if (chapitre.modele && !modeleDuMemeProjet_(chapitre.modele, p.nom)) {
     var modele = '';
     try { modele = exporterTexteGoogle_(chapitre.modele, 'text/plain').slice(0, MODELE_MAX_CARACTERES); }
     catch (e) { modele = ''; }
@@ -3877,6 +3883,18 @@ function contenuDemande_(projetId, donnees, chapitre, consignes, sources) {
 }
 
 function texteBloc_(t) { return { type: 'text', text: t }; }
+
+function normaliser_(t) {
+  return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+/** Le chapitre modèle appartient-il au projet rédigé ? Il ne doit alors pas lui servir de modèle. */
+function modeleDuMemeProjet_(modeleId, nomProjet) {
+  var nom = normaliser_(nomProjet);
+  if (!nom) return false;
+  try { return normaliser_(DriveApp.getFileById(modeleId).getName()).indexOf(nom) !== -1; }
+  catch (e) { return false; }
+}
 
 /** Soumet une demande unique en lot ; renvoie le lot créé ({id, …}). */
 function envoyerLotClaude_(cle, identifiant, systeme, contenu, modele) {
@@ -3964,6 +3982,17 @@ function blocsDossier_(projetId, donnees, chapitreExclu) {
   var fil = lireOnglet('Redaction')
     .filter(function (r) { return String(r.projet_id) === projetId && r.chapitre !== chapitreExclu && r.fil; })
     .map(function (r) { return '[' + r.chapitre + '] ' + r.fil; });
+
+  // Chapitres importés (rédigés hors de l'application) : pas de fil, on joint leur texte.
+  lireOnglet('Redaction')
+    .filter(function (r) { return String(r.projet_id) === projetId && r.chapitre !== chapitreExclu
+      && String(r.lot_id) === LOT_IMPORT && r.doc_id && chapitreRedaction_(String(r.chapitre)); })
+    .forEach(function (r) {
+      var texte = '';
+      try { texte = exporterTexteGoogle_(String(r.doc_id), 'text/plain').slice(0, CHAPITRES_MAX_CARACTERES); } catch (e) { texte = ''; }
+      if (texte) blocs.push(texteBloc_('<chapitre_deja_redige id="' + r.chapitre + '">\nChapitre déjà rédigé et relu pour CE projet : '
+        + 'reprends à l\'identique ses chiffres, axes, partenaires et organisation.\n\n' + texte + '\n</chapitre_deja_redige>'));
+    });
   blocs.push(texteBloc_('<fil_conducteur>\n'
     + (fil.length ? fil.join('\n') : 'Aucun chapitre rédigé auparavant.') + '\n</fil_conducteur>'));
   return blocs;
@@ -4246,6 +4275,33 @@ function creerGoogleDoc_(nom, html, dossierId) {
    ========================================================================== */
 
 var CHAPITRE_FINAL = 'final';
+var LOT_IMPORT = 'import';
+
+/**
+ * Rattache un Google Docs existant à un chapitre : il est classé « brouillon
+ * prêt » (à valider), entre dans l'assemblage et sert de référence aux
+ * chapitres rédigés ensuite. Le document reste où il est.
+ */
+function importerChapitre(requete) {
+  var projetId = String(requete.projetId || '');
+  var chapitre = chapitreRedaction_(String(requete.chapitre || ''));
+  if (!projetId || !chapitre) throw new Error('Projet ou chapitre non précisé.');
+  var id = String(requete.url || '').match(/[-\w]{25,}/);
+  if (!id) throw new Error('Lien Google Docs non reconnu.');
+  var f;
+  try { f = DriveApp.getFileById(id[0]); } catch (e) { throw new Error('Document introuvable ou inaccessible.'); }
+  if (f.getMimeType() !== 'application/vnd.google-apps.document') {
+    throw new Error('Ce lien n\'est pas un Google Docs : convertissez d\'abord le fichier.');
+  }
+  var existant = ligneRedaction_(projetId, chapitre.id);
+  if (existant && String(existant.statut) === 'en_cours') throw new Error('Une rédaction de ce chapitre est en cours.');
+  ecrireRedaction_(projetId, chapitre.id, {
+    statut: 'pret', lot_id: LOT_IMPORT, doc_id: f.getId(), doc_url: f.getUrl(),
+    version: (Number(existant && existant.version) || 0) + 1, fil: '', a_completer: '',
+    message: 'Chapitre importé : « ' + f.getName() + ' ».'
+  });
+  return etatRedaction_(projetId, chapitre.id);
+}
 
 /** ARS compétente, d'après le département ; vide si inconnu (rien d'inventé). */
 var ARS_PAR_DEPARTEMENT = {
