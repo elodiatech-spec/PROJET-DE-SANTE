@@ -3632,6 +3632,19 @@ function definirCleClaude() {
     ui.ButtonSet.OK);
 }
 
+/**
+ * À lancer une fois depuis l'éditeur (▷ Exécuter) : Google n'accorde
+ * certaines autorisations qu'au moment où une fonction les utilise. Celle-ci
+ * touche l'appel à Claude et Google Docs, sans rien modifier, pour que la
+ * fenêtre d'autorisation les propose toutes en une seule fois.
+ */
+function autoriserServices() {
+  UrlFetchApp.fetch(URL_LOTS_CLAUDE + '?limit=1', { muteHttpExceptions: true });
+  try { DocumentApp.openById('verification-des-autorisations'); } catch (e) { /* identifiant fictif : seule l'autorisation compte */ }
+  DriveApp.getRootFolder();
+  console.log('Autorisations accordées : appel à Claude, Google Docs et Drive.');
+}
+
 /** Interroge la liste des lots : un appel sans coût qui valide la clé. */
 function testerCleClaude_(cle) {
   try {
