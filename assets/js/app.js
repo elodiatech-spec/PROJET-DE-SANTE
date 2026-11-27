@@ -287,14 +287,14 @@ const App = {
 
     // Garde-fou : le rendu ne doit jamais afficher un module hors périmètre
     // (formule non souscrite) ou réservé à l'expert.
-    if (!Store.moduleAccessible(route) || !Views[route]) {
+    if (!Store.moduleAccessible(route) || !Views[ALIAS_MODULES[route] || route]) {
       racine.innerHTML = empty(
         'Module indisponible',
         "Ce module n'est pas accessible avec la formule souscrite ou avec votre profil.",
         'fa-solid fa-lock');
       return;
     }
-    const vue = Views[route];
+    const vue = Views[ALIAS_MODULES[route] || route];
 
     racine.innerHTML = vue(this.filtres);
     document.title = `${MODULES.find((m) => m.id === route)?.label || ''} · ${APP.nom} ${APP.produit}`;
@@ -419,6 +419,7 @@ const App = {
      NAVIGATION
      ====================================================================== */
   aller(route) {
+    route = ALIAS_MODULES[route] || route;
     if (!Store.moduleAccessible(route)) {
       toast("Ce module n'est pas accessible avec la formule souscrite.", 'warn');
       return;
@@ -1102,7 +1103,7 @@ const App = {
                 </div>
               </div>
               <!-- Le « Lien du livrable » a été retiré : les pièces se déposent
-                   désormais depuis la prestation ou le coffre-fort, et le fichier
+                   désormais depuis la prestation ou l’espace Documents, et le fichier
                    part dans le bon sous-dossier Drive. Coller une adresse à la
                    main ne rangeait rien. -->
               <div class="field">
@@ -1675,7 +1676,7 @@ const App = {
         titre: 'Retirer la demande',
         texte: `« ${piece.nom} » ne sera plus demandée dans ce dossier.`
              + (piece.document
-                 ? ` Le document déjà fourni reste dans le coffre-fort, simplement détaché.`
+                 ? ` Le document déjà fourni reste dans l’espace Documents, simplement détaché.`
                  : ''),
         libelle: 'Retirer',
         danger: true,
@@ -1697,7 +1698,7 @@ const App = {
         titre: `Déposer — ${piece.nom}`,
         soustitre: piece.aide,
         champs: [
-          { id: 'existant', label: 'Un document déjà présent dans le coffre-fort ?', type: 'select',
+          { id: 'existant', label: 'Un document déjà présent dans l’espace Documents ?', type: 'select',
             options: [{ v: '', l: '— Non, je référence un nouveau fichier —' }]
               .concat(dejaLa.map((d) => ({ v: d.id, l: d.nom }))) },
           { id: 'nom', label: 'Nom du fichier', type: 'text',
@@ -1730,7 +1731,7 @@ const App = {
       const doc = Store.liste('documents').find((d) => d.piece === el.dataset.piece);
       if (!doc) return;
       Store.majDocument(doc.id, { piece: '' });
-      toast('Document détaché — il reste dans le coffre-fort.', 'ok');
+      toast('Document détaché — il reste dans l’espace Documents.', 'ok');
     },
 
     'supprimer-document'(el) {
@@ -1748,7 +1749,7 @@ const App = {
      * Dépose le justificatif d'une prestation dans le sous-dossier Drive de sa
      * catégorie, et le rattache à la prestation par le champ « piece » de
      * l'entité documents. La pièce apparaît alors sous la prestation et dans
-     * le coffre-fort, sans double saisie.
+     * l’espace Documents, sans double saisie.
      */
     'deposer-justificatif'(el) {
       const presta = Store.prestations().find((x) => x.id === el.dataset.id);
@@ -1756,7 +1757,7 @@ const App = {
 
       if (!Store.ecritureActive()) {
         toast('Le dépôt direct demande la connexion Google Sheets. '
-          + 'Sans elle, référencez le lien depuis le coffre-fort.', 'warn');
+          + 'Sans elle, référencez le lien depuis l’espace Documents.', 'warn');
         return;
       }
 
@@ -1792,7 +1793,7 @@ const App = {
 
       if (!Store.ecritureActive()) {
         toast('Le dépôt direct demande la connexion Google Sheets. '
-          + 'Sans elle, référencez le lien depuis le coffre-fort.', 'warn');
+          + 'Sans elle, référencez le lien depuis l’espace Documents.', 'warn');
         return;
       }
 
@@ -1828,7 +1829,7 @@ const App = {
 
       if (!Store.ecritureActive()) {
         toast('Le dépôt direct demande la connexion Google Sheets. '
-          + 'Sans elle, référencez le lien depuis le coffre-fort.', 'warn');
+          + 'Sans elle, référencez le lien depuis l’espace Documents.', 'warn');
         return;
       }
 
@@ -1973,7 +1974,7 @@ const App = {
         corps: `<div class="empty" style="border-style:solid">
             <i class="fa-solid fa-file-pdf" style="color:var(--danger-500)"></i>
             <div class="empty__title">Aucun aperçu disponible</div>
-            <div class="empty__text">Aucun lien de fichier n'est associé à ce document. Renseignez-le depuis le coffre-fort pour permettre sa consultation.</div>
+            <div class="empty__text">Aucun lien de fichier n'est associé à ce document. Renseignez-le depuis l’espace Documents pour permettre sa consultation.</div>
           </div>`,
         actions: `<button class="btn" data-action="fermer-modal">Fermer</button>`,
       });
@@ -2008,7 +2009,7 @@ const App = {
 
     /* « telecharger-livrable » et « deposer-livrable » ont été retirés avec la
        vue Livrables et le champ « Lien du livrable » : plus aucun bouton ne les
-       appelait. Le dépôt passe désormais par la prestation ou le coffre-fort,
+       appelait. Le dépôt passe désormais par la prestation ou l’espace Documents,
        qui rangent le fichier dans le bon sous-dossier Drive. */
 
     /* --- Planning --- */
@@ -2770,7 +2771,7 @@ const Modal = {
       titre: titre || 'Déposer des fichiers',
       soustitre: soustitre
         || `Les fichiers partent dans le dossier Drive du projet, puis sont référencés `
-         + `dans le coffre-fort. ${formaterOctets(TAILLE_MAX_DEPOT)} au maximum par fichier.`,
+         + `dans l’espace Documents. ${formaterOctets(TAILLE_MAX_DEPOT)} au maximum par fichier.`,
       corps: `
         <div class="stack-sm">
           <div class="field">
@@ -2905,7 +2906,7 @@ const Modal = {
 
       this.close(true);
       toast(`${reussis} fichier${reussis > 1 ? 's' : ''} déposé${reussis > 1 ? 's' : ''} dans le Drive `
-        + `et référencé${reussis > 1 ? 's' : ''} dans le coffre-fort.`, 'ok');
+        + `et référencé${reussis > 1 ? 's' : ''} dans l’espace Documents.`, 'ok');
     });
   },
 

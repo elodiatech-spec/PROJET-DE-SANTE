@@ -212,7 +212,7 @@ const PRESTATIONS = [
     desc: "Signature électronique du devis et du mandat d'accompagnement ElodiaTech.",
     livrable: 'Mandat signé (eIDAS)' },
   { id: 'P05', lot: 'L0', titre: 'Ouverture de l\'espace client & du Drive', acteur: 'expert', jours: 1,
-    desc: "Création de l'espace de suivi, du coffre-fort documentaire et des accès de l'équipe.",
+    desc: "Création de l'espace de suivi, de l’espace Documents et des accès de l'équipe.",
     livrable: 'Accès plateforme & Drive' },
 
   /* --- LOT A : Projet de santé (toutes formules) --- */
@@ -453,6 +453,9 @@ const POLES = [
   { id: 'console',   titre: 'Console expert',          icone: 'fa-solid fa-user-gear' },
 ];
 
+/** Anciennes adresses de modules, redirigées vers celles qui les remplacent. */
+const ALIAS_MODULES = { planning: 'reunions', 'comptes-rendus': 'reunions' };
+
 const MODULES = [
   { id: 'dashboard',    pole: 'pilotage',  label: "Vue d'ensemble",          icone: 'fa-solid fa-chart-pie',            formules: null },
   { id: 'feuille-route',pole: 'pilotage',  label: 'Feuille de route',        icone: 'fa-solid fa-list-check',           formules: null },
@@ -475,15 +478,16 @@ const MODULES = [
   { id: 'identite',     pole: 'identite',  label: 'Identité visuelle & web', icone: 'fa-solid fa-palette',              formules: ['F3'],             lot: 'LF' },
   { id: 'deploiement',  pole: 'identite',  label: 'Déploiement',             icone: 'fa-solid fa-rocket',               formules: ['F3'],             lot: 'LG' },
 
-  { id: 'documents',    pole: 'documents', label: 'Coffre-fort documentaire',icone: 'fa-solid fa-folder-open',          formules: null },
+  { id: 'documents',    pole: 'documents', label: 'Documents',               icone: 'fa-solid fa-folder-open',          formules: null },
   { id: 'signatures',   pole: 'documents', label: 'Validation & signatures', icone: 'fa-solid fa-file-signature',       formules: null },
   // « Livrables » retiré : la feuille de route porte déjà chaque livrable, son
   // statut et son lien. Deux écrans pour la même information entretenaient le
   // doute sur celui qui faisait foi.
 
   { id: 'messagerie',   pole: 'collab',    label: 'Messagerie',              icone: 'fa-solid fa-comments',             formules: null },
-  { id: 'planning',     pole: 'collab',    label: 'Planning & échéances',    icone: 'fa-solid fa-calendar-days',        formules: null },
-  { id: 'comptes-rendus',pole:'collab',    label: 'Comptes rendus',          icone: 'fa-solid fa-clipboard-check',      formules: null },
+  // Réunions : rendez-vous (lien Meet) et comptes rendus avec leurs décisions,
+  // en un seul écran. Les échéances du projet restent dans la Feuille de route.
+  { id: 'reunions',     pole: 'collab',    label: 'Réunions',                icone: 'fa-solid fa-people-group',         formules: null },
 
   { id: 'faq',          pole: 'support',   label: 'FAQ réglementaire',       icone: 'fa-solid fa-circle-question',      formules: null },
 
@@ -900,14 +904,14 @@ const FAQ = [
   { q: "Qu'attend l'ARS dans le projet de santé ?", cat: 'Projet',
     r: "Un diagnostic territorial étayé, des objectifs mesurables, l'organisation de l'exercice coordonné (RCP, protocoles), les modalités d'accès aux soins, le partage d'informations sécurisé et un dispositif d'évaluation." },
   { q: "Comment se déroule la signature électronique ?", cat: 'Signature',
-    r: "Les actes sont déposés sur un parapheur électronique. Chaque signataire s'authentifie, signe, puis reçoit le document horodaté et certifié eIDAS. L'original signé est archivé dans le coffre-fort documentaire du projet." },
+    r: "Les actes sont déposés sur un parapheur électronique. Chaque signataire s'authentifie, signe, puis reçoit le document horodaté et certifié eIDAS. L'original signé est archivé dans l’espace Documents du projet." },
   { q: "Quel logiciel médical choisir ?", cat: 'Outils',
     r: "Le logiciel doit être labellisé Ségur pour ouvrir droit aux financements et permettre le partage d'informations. La sélection s'appuie sur un comparatif fonctionnel et des démonstrations organisées avec l'équipe." },
   { q: "Que se passe-t-il après l'ouverture de la structure ?", cat: 'Déploiement',
     r: "Le projet de santé fait l'objet d'une évaluation annuelle, les indicateurs ACI (MSP) ou de l'accord national (centre de santé) sont déclarés chaque année et le projet doit être actualisé, généralement tous les cinq ans. Ces étapes figurent en fin de feuille de route, quelle que soit la formule." },
 ];
 
-/** Catégories de documents du coffre-fort. */
+/** Catégories de documents de l’espace Documents. */
 const CATEGORIES_DOC = ['Projet', 'Juridique', 'ARS', 'Finances', 'Immobilier', 'Équipe', 'Partenariats', 'Identité'];
 
 /**
