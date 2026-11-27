@@ -73,6 +73,8 @@ const dossier01 = {
   getId: () => 'DOSSIER01', getName: () => '01 — Projet de santé',
   getFolders: () => iterateur([sourcesCh1, sourcesCh2, sourcesCommun]),
   createFolder: (n) => { dossiersCrees.push(n); },
+  getFoldersByName: (n) => iterateur(n === 'Visuels — Chapitre 1'
+    ? [sousDossier('Visuels — Chapitre 1', [fichier('v1', 'schema-parcours.png', 'image/png', 'PNGDATA')])] : []),
   searchFiles: () => iterateur([fichier('logo1', 'logo MSP.png', 'image/png', 'PNG')]),
   getFiles: () => iterateur(fichiersSources), getUrl: () => 'https://drive.google.com/drive/folders/DOSSIER01',
 };
@@ -87,6 +89,7 @@ const appels = [];
 const etatApi = { statutLot: 'in_progress', resultat: null, lots: 0 };
 const REPONSE_CH1 = [
   '<chapitre><h1 class="x">1. Diagnostic territorial et contexte sanitaire</h1>',
+  '<p>Le schéma suivant présente le parcours.</p><figure data-visuel="schema-parcours.png"></figure>',
   '<figure data-schema>{"titre":"Parcours patient diabétique d\'Atlantic","etapes":[{"titre":"Repérage","detail":"En officine","acteur":"Pharmacien"},{"titre":"Consultation","acteur":"Médecin traitant"}]}</figure>',
   '<h2>1.1. Territoire</h2><p onclick="mal()">La commune compte 12 000 habitants (INSEE, RP 2021).</p>',
   '<figure data-graphique=\'{"type":"barres","titre":"APL médecins généralistes","source":"CartoSanté 2024","categories":["Commune","Département","France"],"series":[{"nom":"APL","valeurs":[2.1,2.9,3.3]}]}\'></figure>',
@@ -292,6 +295,8 @@ verifier('la fiche et le questionnaire sont joints', texteDemande.includes('MSP 
 verifier('le plan du chapitre et la méthode sont joints', texteDemande.includes('1.3. Z.I.P / QPV') && texteDemande.includes('comparaison au département'), '');
 verifier('les consignes de l\'expert sont jointes', texteDemande.includes('Insister sur le diabète.'), '');
 verifier('le chapitre modèle est joint, signalé comme autre territoire', texteDemande.includes('MODELE DE CHAPITRE') && texteDemande.includes('AUTRE territoire'), '');
+verifier('visuel déposé : joint en image et listé avec sa consigne d\'insertion',
+  params.messages[0].content.some((b) => b.type === 'image') && texteDemande.includes('data-visuel') && texteDemande.includes('schema-parcours.png'), '');
 verifier('PDF joint en bloc document', params.messages[0].content.some((b) => b.type === 'document' && b.source.media_type === 'application/pdf'), '');
 verifier('Google Docs joint en texte', texteDemande.includes('Population : 12 000 habitants'), '');
 verifier('format non lu signalé, pas envoyé', (demande.redaction.ignores || []).some((n) => n.startsWith('Ancien projet.docx')), JSON.stringify(demande.redaction.ignores));
@@ -324,6 +329,7 @@ verifier('titre en bandeau de couleur, attributs d\'origine retirés', /backgrou
 verifier('script et gestionnaires d\'événements retirés', !corpsDoc.includes('<script') && !corpsDoc.includes('onclick'), '');
 verifier('schéma rendu en étapes numérotées reliées par des flèches', corpsDoc.includes('Parcours patient diabétique')
   && corpsDoc.includes('▼') && corpsDoc.includes('Médecin traitant') && !corpsDoc.includes('data-schema'), '');
+verifier('visuel inséré dans le Google Docs à l\'endroit choisi', corpsDoc.includes('data:image/png;base64,' + Buffer.from('PNGDATA').toString('base64')), '');
 verifier('graphique rendu en image avec sa source', corpsDoc.includes('data:image/png;base64,') && corpsDoc.includes('Source : CartoSanté 2024'), '');
 verifier('encadré converti en cellule colorée', !corpsDoc.includes('<blockquote') && /<td style="[^"]*background-color:#f3f8fb/.test(corpsDoc), '');
 verifier('fil conducteur et éléments à compléter enregistrés',

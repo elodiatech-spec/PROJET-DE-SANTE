@@ -2949,13 +2949,30 @@ const Views = {
           <button class="btn btn--sm btn--primary" data-action="aller" data-route="questionnaire"><i class="fa-solid fa-clipboard-list"></i> Informations du projet (${q.pct} %)</button>
           ${sansCourriel ? `<span class="text-xs text-warn"><i class="fa-solid fa-triangle-exclamation"></i> Courriel manquant pour ${sansCourriel} professionnel(s) : nécessaire pour les lettres d'engagement et les signatures.</span>` : ''}
         </div>
+        <p class="text-xs text-muted" style="margin-bottom:8px"><i class="fa-solid fa-circle-info"></i>
+          <strong>Sources</strong> : exports officiels (PDF, Google Docs, Sheets), lus par Claude pour rédiger.
+          <strong>Visuels</strong> : vos schémas, photos ou plans en PNG / JPG ; Claude les place à l'endroit pertinent du chapitre et les commente.
+          Un document utile à tous les chapitres va dans « Commun ».</p>
+        <div class="row-tight" style="margin-bottom:10px">
+          <button class="btn btn--sm" data-action="atelier-deposer" data-dossier="Sources — Commun" ${actif ? '' : 'disabled'}>
+            <i class="fa-solid fa-cloud-arrow-up"></i> Sources communes à tous les chapitres</button>
+        </div>
         <div class="grid grid-2">
-          ${CHAPITRES_REDACTION.filter((c) => (PLATEFORMES_SOURCES[c.id] || []).length || (c.id === 'ch1' && ars)).map((c) => `
+          ${CHAPITRES_REDACTION.map((c) => {
+            const court = c.id === 'intro' ? 'Introduction' : `Chapitre ${c.id.slice(2)}`;
+            return `
             <div class="card card--flat"><strong class="text-sm">${esc(c.titre)}</strong>
               <ul class="text-sm" style="margin-top:6px">
                 ${(PLATEFORMES_SOURCES[c.id] || []).map(lienPlateforme).join('')}
                 ${c.id === 'ch1' && ars ? lienPlateforme({ nom: 'ARS — zonage des médecins', url: ars, quoi: 'Arrêté de zonage en vigueur (ZIP / ZAC)' }) : ''}
-              </ul></div>`).join('')}
+              </ul>
+              <div class="row-tight" style="margin-top:8px">
+                <button class="btn btn--sm" data-action="atelier-deposer" data-dossier="Sources — ${court}" ${actif ? '' : 'disabled'}>
+                  <i class="fa-solid fa-file-arrow-up"></i> Déposer des sources</button>
+                <button class="btn btn--sm" data-action="atelier-deposer" data-dossier="Visuels — ${court}" data-images="1" ${actif ? '' : 'disabled'}>
+                  <i class="fa-solid fa-image"></i> Déposer des visuels</button>
+              </div></div>`;
+          }).join('')}
         </div>
       </div>
 

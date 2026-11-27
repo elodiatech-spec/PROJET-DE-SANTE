@@ -3356,7 +3356,16 @@ function televerserFichier(requete, acces) {
       + ', déposez le fichier directement dans le Drive puis référencez son lien.');
   }
 
-  var cible = sousDossierCategorie(dossierDuProjet(projetId), String(requete.categorie || ''));
+  var cible;
+  var sousDossier = String(requete.sousDossier || '');
+  if (sousDossier) {
+    // Dépôt direct dans « Sources — … » ou « Visuels — … » du dossier 01 : réservé à l'expert.
+    if (acces.role !== 'expert') throw new Error('Dépôt réservé à l\'expert.');
+    if (!/^(Sources|Visuels) — [\wÀ-ÿ' ]{1,40}$/.test(sousDossier)) throw new Error('Dossier de dépôt non reconnu.');
+    cible = sousDossierNomme_(sousDossierCategorie(dossierDuProjet(projetId), 'Projet'), sousDossier);
+  } else {
+    cible = sousDossierCategorie(dossierDuProjet(projetId), String(requete.categorie || ''));
+  }
   var fichier = cible.createFile(
     Utilities.newBlob(octets, String(requete.mimeType || 'application/octet-stream'), nom));
 
@@ -3634,6 +3643,32 @@ var DOSSIER_SOURCES_COMMUN_PDS = PREFIXE_SOURCES + 'Commun';
 
 function nomDossierSources_(chapitre) { return PREFIXE_SOURCES + chapitre.sources; }
 
+var PREFIXE_VISUELS = 'Visuels — ';
+
+function sousDossierNomme_(parent, nom) {
+  var it = parent.getFoldersByName(nom);
+  return it.hasNext() ? it.next() : parent.createFolder(nom);
+}
+
+function nomDossierVisuels_(chapitre) { return PREFIXE_VISUELS + chapitre.sources; }
+
+/** Images déposées pour un chapitre (schémas, photos, visuels à insérer). */
+function visuelsDuChapitre_(dossier01, chapitre) {
+  var visuels = [];
+  var it = dossier01.getFoldersByName ? dossier01.getFoldersByName(nomDossierVisuels_(chapitre)) : null;
+  if (!it || !it.hasNext()) return visuels;
+  var fi = it.next().getFiles();
+  while (fi.hasNext() && visuels.length < 8) {
+    var f = fi.next();
+    var type = String(f.getMimeType() || '');
+    if (!/^image\/(png|jpeg|gif|webp)$/.test(type)) continue;
+    var octets = f.getBlob().getBytes();
+    if (octets.length > 4 * 1024 * 1024) continue;
+    visuels.push({ nom: f.getName(), type: type, base64: Utilities.base64Encode(octets) });
+  }
+  return visuels;
+}
+
 /** Crée les sous-dossiers de sources manquants ; renvoie leur nombre. */
 function assurerDossiersSources_(dossier01) {
   var existants = {};
@@ -3817,10 +3852,25 @@ function redigerChapitre(requete) {
   var sources = sourcesDuDossier_(dossier, dejaRediges, nomDossierSources_(chapitre));
 
   var modele = modeleDuChapitre_(chapitre);
-  var lot = envoyerLotClaude_(cle, projetId + '-' + chapitre.id, consigneSysteme_(),
-    contenuDemande_(projetId, projet, chapitre, consignes, sources), modele);
+  var contenu = contenuDemande_(projetId, projet, chapitre, consignes, sources);
+  var visuels = [];
+  try { visuels = visuelsDuChapitre_(dossier, chapitre); } catch (e) { visuels = []; }
+  if (visuels.length) {
+    var consigne = contenu.pop();
+    contenu.push(texteBloc_('<visuels_fournis>\nVisuels déposés par l\'expert pour ce chapitre. Insère CHACUN à l\'endroit pertinent avec '
+      + '<figure data-visuel="NOM EXACT"></figure>, précédé d\'une phrase qui l\'introduit et suivi de son analyse. '
+      + 'Ne crée pas de schéma qui ferait double emploi avec un visuel fourni.\n'
+      + visuels.map(function (v) { return '- ' + v.nom; }).join('\n') + '\n</visuels_fournis>'));
+    visuels.forEach(function (v) {
+      contenu.push(texteBloc_('Visuel « ' + v.nom + ' » :'));
+      contenu.push({ type: 'image', source: { type: 'base64', media_type: v.type, data: v.base64 } });
+    });
+    contenu.push(consigne);
+  }
+  var lot = envoyerLotClaude_(cle, projetId + '-' + chapitre.id, consigneSysteme_(), contenu, modele);
 
-  var noms = sources.lus.map(function (s) { return s.nom; });
+  var noms = sources.lus.map(function (s) { return s.nom; })
+    .concat(visuels.map(function (v) { return v.nom + ' (visuel)'; }));
   ecrireRedaction_(projetId, chapitre.id, {
     statut: 'en_cours', lot_id: lot.id, consignes: consignes,
     message: 'Rédaction demandée (' + (modele.indexOf('opus') >= 0 ? 'Opus' : 'Sonnet') + '). Sources jointes : ' + (noms.length ? noms.join(', ') : 'aucune')
@@ -4053,7 +4103,7 @@ function sourcesDuDossier_(dossier, exclus, dossierDuChapitre) {
   while (sous.hasNext()) {
     var d = sous.next(), nom = d.getName();
     if (nom === DOSSIER_SOURCES_COMMUN_PDS || nom === dossierDuChapitre) retenus.push(d);
-    else if (nom.indexOf(PREFIXE_SOURCES) !== 0) autres.push(d);
+    else if (nom.indexOf(PREFIXE_SOURCES) !== 0 && nom.indexOf(PREFIXE_VISUELS) !== 0) autres.push(d);
   }
   retenus.concat(autres).forEach(collecter);
 
@@ -4146,7 +4196,9 @@ function suivreRedaction(requete) {
     var version = (Number(ligne.version) || 0) + 1;
     var titreDoc = 'PDS — ' + (projet.nom || projetId) + ' — ' + chapitre.titre + ' — v' + version;
     var dossier = sousDossierCategorie(dossierDuProjet(projetId), 'Projet');
-    var doc = creerGoogleDoc_(titreDoc, mettreEnForme_(html, chapitre, projet), dossier.getId());
+    var visuelsDoc = {};
+    try { visuelsDuChapitre_(dossier, chapitre).forEach(function (v) { visuelsDoc[v.nom] = v; }); } catch (e) { visuelsDoc = {}; }
+    var doc = creerGoogleDoc_(titreDoc, mettreEnForme_(html, chapitre, projet, visuelsDoc), dossier.getId());
 
     var fil = extraireBloc_(texte, 'fil');
     try { fil = JSON.stringify((JSON.parse(fil).faits || []).slice(0, 40)); } catch (e) { fil = String(fil || '').slice(0, 8000); }
@@ -4185,7 +4237,7 @@ var COULEURS_PDS = { titre: '#0b3c5d', accent: '#1e95cb', entete: '#e6f3fa', bor
 var PALETTE_GRAPHIQUES = ['#1e95cb', '#0b3c5d', '#f2a541', '#5bb381', '#c75c5c', '#8a6fb3'];
 
 /** HTML final : balises nettoyées, styles en ligne, graphiques rendus en images. */
-function mettreEnForme_(html, chapitre, projet) {
+function mettreEnForme_(html, chapitre, projet, visuels) {
   var propre = String(html)
     .replace(/<(script|style|iframe|object|embed|svg|form)[\s\S]*?<\/\1>/gi, '')
     .replace(/<(img|link|meta|input)\b[^>]*>/gi, '')
@@ -4198,6 +4250,13 @@ function mettreEnForme_(html, chapitre, projet) {
     return figureGraphique_(json.replace(/&quot;/g, '"'));
   });
 
+
+  // Visuels déposés par l'expert, insérés à l'endroit choisi par la rédaction.
+  propre = propre.replace(/<figure\s+data-visuel\s*=\s*"([^"]*)"\s*>\s*<\/figure>/gi, function (tout, nom) {
+    var v = (visuels || {})[nom.replace(/&amp;/g, '&')];
+    if (!v) return '<p>[Visuel introuvable : ' + echapperHtml_(nom) + ']</p>';
+    return '<p style="text-align:center;"><img width="600" src="data:' + v.type + ';base64,' + v.base64 + '"></p>';
+  });
 
   // Schémas et logigrammes : mis de côté ici, rendus après le nettoyage des
   // attributs (qui effacerait leurs couleurs).

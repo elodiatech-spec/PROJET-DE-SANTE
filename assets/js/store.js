@@ -1668,14 +1668,14 @@ const Store = {
    * créé par le compte propriétaire du script : un client dépose ses pièces
    * sans qu'aucun dossier ne lui soit partagé.
    */
-  async televerserFichier({ nom, mimeType, categorie, base64 }) {
+  async televerserFichier({ nom, mimeType, categorie, base64, sousDossier }) {
     if (!this.ecritureActive()) {
       throw new Error('la source Google Sheets doit être connectée');
     }
     const rep = await SheetsAdapter.envoyer(this.state.reglages.webAppUrl, {
       action: 'televerser',
       projetId: this.state.projetActifId,
-      nom, mimeType, categorie, contenu: base64,
+      nom, mimeType, categorie, contenu: base64, sousDossier: sousDossier || '',
       ...this.porteCles(),
     });
     if (!rep.fichier || !rep.fichier.url) {
