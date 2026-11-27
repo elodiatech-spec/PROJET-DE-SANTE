@@ -536,7 +536,7 @@ function carteRedaction() {
   return `<div class="card">
       <div class="card__head">
         <div>
-          <h3 class="card__title"><i class="fa-solid fa-wand-magic-sparkles"></i> Rédaction avec Claude
+          <h3 class="card__title"><i class="fa-solid fa-wand-magic-sparkles"></i> 2. Rédaction avec Claude
             <span class="badge badge--neutre" style="margin-left:6px"><i class="fa-solid fa-lock"></i> Visible par vous seul</span></h3>
           <p class="card__subtitle">
             Claude rédige chaque chapitre à partir du dossier : fiche du projet, informations du client,
@@ -560,7 +560,6 @@ function carteRedaction() {
         Une rédaction prend en général de 5 à 30 minutes. Vous pouvez quitter la page : le chapitre sera
         récupéré à votre retour. Le brouillon n'est visible par le client qu'après votre validation.</p>
       <div class="redac-liste">${CHAPITRES_REDACTION.map(ligne).join('')}</div>
-      ${blocDocumentFinal(etats, nbValides, actif)}
     </div>`;
 }
 
@@ -1340,7 +1339,10 @@ const Views = {
         </div>
       </div>
 
-      ${expert ? carteRedaction() : ''}
+      ${expert ? `<div class="card card--flat" style="border-left:3px solid var(--accent-500)">
+          <p class="text-sm"><i class="fa-solid fa-pen-ruler text-brand"></i>
+            La collecte des sources, la rédaction avec Claude et le document final se font dans
+            l'<a href="#" data-action="aller" data-route="atelier"><strong>Atelier projet de santé</strong></a>.</p></div>` : ''}
       ${expert ? carteActes() : ''}
 
       <div class="card">
@@ -2903,6 +2905,67 @@ const Views = {
             </tbody>
           </table>
         </div>
+      </div>
+    </section>`;
+  },
+
+  /* ====================== ATELIER PROJET DE SANTÉ (expert) ====================== */
+  atelier() {
+    const p = Store.projet();
+    const etats = Store.redactionProjet();
+    const actif = Store.ecritureActive();
+    const q = Store.completudeQuestionnaire();
+    const nbValides = CHAPITRES_REDACTION.filter((c) => etats[c.id]?.statut === 'valide').length;
+    const final = etats[DOCUMENT_FINAL.id] || {};
+    const commune = p?.ville || '';
+    const pros = (Store.reponsesRubrique('equipe').pros || []);
+    const sansCourriel = pros.filter((x) => x.nom && !String(x.email || '').includes('@')).length;
+    const ars = ARS_SITES[String(p?.departement || '').trim()];
+
+    const etape = (num, titre, etat, couleur) => `<div class="card card--flat" style="border-top:3px solid var(--${couleur}-500)">
+        <div class="text-xs text-muted">Étape ${num}</div><strong>${esc(titre)}</strong>
+        <div class="text-sm" style="margin-top:4px">${etat}</div></div>`;
+
+    const lienPlateforme = (pl) => `<li><a href="${esc(pl.url.replace('{commune}', encodeURIComponent(commune)))}" target="_blank" rel="noopener noreferrer">
+        <i class="fa-solid fa-arrow-up-right-from-square"></i> ${esc(pl.nom)}</a> <span class="text-xs text-muted">— ${esc(pl.quoi)}</span></li>`;
+
+    return `
+    <section class="view stack">
+      <div class="grid grid-3">
+        ${etape(1, 'Collecte', `Informations : ${q.pct} %${sansCourriel ? ` · ${sansCourriel} professionnel(s) sans courriel` : ''}`, q.pct >= 80 && !sansCourriel ? 'ok' : 'warn')}
+        ${etape(2, 'Rédaction', `${nbValides} / ${CHAPITRES_REDACTION.length} chapitres validés`, nbValides === CHAPITRES_REDACTION.length ? 'ok' : 'warn')}
+        ${etape(3, 'Document final', final.docUrl ? `Version ${esc(final.version || 1)}${final.statut === 'valide' ? ' — validée' : ' — à valider'}` : 'Pas encore assemblé', final.statut === 'valide' ? 'ok' : 'warn')}
+      </div>
+
+      <div class="card">
+        <div class="card__head"><div>
+          <h3 class="card__title"><i class="fa-solid fa-magnifying-glass-chart"></i> 1. Collecte</h3>
+          <p class="card__subtitle">Les informations du projet, puis les données officielles, chapitre par chapitre. Déposez chaque export
+            (PDF, Google Docs ou Sheets) dans le dossier de sources du chapitre : Claude ne reçoit que celui-ci et « Sources — Commun ».</p>
+        </div>
+          <button class="btn btn--sm" data-action="redac-sources" ${actif ? '' : 'disabled'}><i class="fa-solid fa-folder-tree"></i> Ouvrir les dossiers de sources</button>
+        </div>
+        <div class="row-tight" style="margin-bottom:10px">
+          <button class="btn btn--sm btn--primary" data-action="aller" data-route="questionnaire"><i class="fa-solid fa-clipboard-list"></i> Informations du projet (${q.pct} %)</button>
+          ${sansCourriel ? `<span class="text-xs text-warn"><i class="fa-solid fa-triangle-exclamation"></i> Courriel manquant pour ${sansCourriel} professionnel(s) : nécessaire pour les lettres d'engagement et les signatures.</span>` : ''}
+        </div>
+        <div class="grid grid-2">
+          ${CHAPITRES_REDACTION.filter((c) => (PLATEFORMES_SOURCES[c.id] || []).length || (c.id === 'ch1' && ars)).map((c) => `
+            <div class="card card--flat"><strong class="text-sm">${esc(c.titre)}</strong>
+              <ul class="text-sm" style="margin-top:6px">
+                ${(PLATEFORMES_SOURCES[c.id] || []).map(lienPlateforme).join('')}
+                ${c.id === 'ch1' && ars ? lienPlateforme({ nom: 'ARS — zonage des médecins', url: ars, quoi: 'Arrêté de zonage en vigueur (ZIP / ZAC)' }) : ''}
+              </ul></div>`).join('')}
+        </div>
+      </div>
+
+      ${carteRedaction()}
+
+      <div class="card">
+        <div class="card__head"><div>
+          <h3 class="card__title"><i class="fa-solid fa-book"></i> 3. Document final</h3>
+        </div></div>
+        ${blocDocumentFinal(etats, nbValides, actif)}
       </div>
     </section>`;
   },

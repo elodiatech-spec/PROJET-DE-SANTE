@@ -459,6 +459,8 @@ const MODULES = [
   // Les informations que le client fournit pour la rédaction du projet de santé.
   { id: 'questionnaire',pole: 'pilotage',  label: 'Informations du projet',  icone: 'fa-solid fa-clipboard-list',       formules: null },
 
+  // Espace de travail de l'expert : collecte, rédaction, document final.
+  { id: 'atelier',      pole: 'ingenierie',label: 'Atelier projet de santé', icone: 'fa-solid fa-pen-ruler',            formules: null, roles: ['expert'] },
   { id: 'projet-sante', pole: 'ingenierie',label: 'Projet de santé',         icone: 'fa-solid fa-book-medical',         formules: null,               lot: 'LA' },
   { id: 'juridique',    pole: 'ingenierie',label: 'Structuration juridique', icone: 'fa-solid fa-scale-balanced',       formules: ['F2', 'F3'],       lot: 'LB' },
   { id: 'immobilier',   pole: 'ingenierie',label: 'Immobilier, locaux & ERP',icone: 'fa-solid fa-building-circle-check',formules: ['F2', 'F3'],       option: 'immobilier' },
@@ -531,6 +533,54 @@ const CHAPITRES_REDACTION = [
   { id: 'ch6', titre: '6. Signature du projet de santé et conclusion', prestations: [],
     resume: "Tableau des signataires, engagement collectif, conclusion." },
 ];
+
+/**
+ * Plateformes officielles à consulter pour chaque chapitre (étape « Collecte »
+ * de l'Atelier). Les exports se déposent dans « Sources — <chapitre> ».
+ * `{commune}` est remplacé par la commune du projet.
+ */
+const PLATEFORMES_SOURCES = {
+  intro: [
+    { nom: 'Légifrance — Code de la santé publique', url: 'https://www.legifrance.gouv.fr/', quoi: 'Articles cités (L.6323-1, L.6323-3, L.1411-11-1)' },
+  ],
+  ch1: [
+    { nom: 'INSEE — dossier complet de la commune', url: 'https://www.insee.fr/fr/recherche?q={commune}', quoi: 'Population, âge, ménages, emploi, revenus (exporter le dossier complet en PDF)' },
+    { nom: 'CartoSanté', url: 'https://cartosante.atlasante.fr/', quoi: 'Portrait de territoire : offre de soins, APL, recours, ALD' },
+    { nom: 'ODISSÉ — Santé publique France', url: 'https://odisse.santepubliquefrance.fr/', quoi: 'Indicateurs de santé (mortalité, pathologies, prévention)' },
+    { nom: 'Observatoire des territoires', url: 'https://www.observatoire-des-territoires.gouv.fr/', quoi: 'Cartes et comparaisons territoriales' },
+    { nom: 'SIG Ville — quartiers prioritaires', url: 'https://sig.ville.gouv.fr/', quoi: 'Présence ou non d\'un QPV' },
+    { nom: 'Data Ameli — Assurance maladie', url: 'https://data.ameli.fr/', quoi: 'Pathologies, consommation de soins, effectifs de professionnels' },
+    { nom: 'Santé publique France', url: 'https://www.santepubliquefrance.fr/', quoi: 'Baromètres, études régionales' },
+    { nom: 'IEDOM', url: 'https://www.iedom.fr/', quoi: 'Contexte économique des outre-mer' },
+  ],
+  ch2: [
+    { nom: 'Annuaire santé', url: 'https://annuaire.sante.fr/', quoi: 'RPPS et exercice des professionnels de l\'équipe' },
+    { nom: 'FINESS', url: 'https://finess.esante.gouv.fr/', quoi: 'Établissements partenaires (CHU, SSIAD, EHPAD…)' },
+    { nom: 'Ameli — exercice coordonné', url: 'https://www.ameli.fr/', quoi: 'Accord conventionnel interprofessionnel (ACI)' },
+    { nom: 'AVECsanté', url: 'https://www.avecsante.fr/', quoi: 'Repères d\'organisation des MSP' },
+    { nom: 'FNCS', url: 'https://www.fncs.org/', quoi: 'Repères des centres de santé' },
+  ],
+  ch3: [
+    { nom: 'HAS', url: 'https://www.has-sante.fr/', quoi: 'Recommandations et protocoles de prise en charge' },
+    { nom: 'Santé publique France', url: 'https://www.santepubliquefrance.fr/', quoi: 'Programmes de prévention et de dépistage' },
+  ],
+  ch4: [
+    { nom: 'Agence nationale du DPC', url: 'https://www.agencedpc.fr/', quoi: 'Développement professionnel continu' },
+    { nom: 'HAS', url: 'https://www.has-sante.fr/', quoi: 'Démarche qualité, indicateurs' },
+    { nom: 'AVECsanté', url: 'https://www.avecsante.fr/', quoi: 'Protocoles pluriprofessionnels, coordination' },
+  ],
+  ch5: [
+    { nom: 'Agence du numérique en santé', url: 'https://esante.gouv.fr/', quoi: 'Ségur, MSSanté, DMP / Mon espace santé' },
+    { nom: 'CNIL', url: 'https://www.cnil.fr/', quoi: 'RGPD, données de santé' },
+  ],
+  ch6: [],
+};
+
+/** Site de l'ARS selon le département (zonage, permanence des soins). */
+const ARS_SITES = {
+  '971': 'https://www.guadeloupe.ars.sante.fr/', '972': 'https://www.martinique.ars.sante.fr/',
+  '973': 'https://www.guyane.ars.sante.fr/', '974': 'https://www.lareunion.ars.sante.fr/', '976': 'https://www.mayotte.ars.sante.fr/',
+};
 
 /**
  * Document final : les chapitres validés réunis en un seul Google Docs
@@ -1004,6 +1054,7 @@ const QUESTIONNAIRE = [
       { id: 'pros', label: 'Professionnels', type: 'tableau', requis: true, ligne: 'Professionnel',
         colonnes: [
           { id: 'nom', label: 'Nom' }, { id: 'prenom', label: 'Prénom' },
+          { id: 'email', label: 'Courriel' }, { id: 'tel', label: 'Téléphone' },
           { id: 'profession', label: 'Profession', options: ['Médecin généraliste', 'Médecin spécialiste', 'Infirmier(ère)', 'IPA', 'Pharmacien(ne)', 'Masseur-kinésithérapeute', 'Sage-femme', 'Chirurgien-dentiste', 'Orthophoniste', 'Podologue', 'Diététicien(ne)', 'Psychologue', 'Orthoptiste', 'Secrétaire médical(e)', 'Coordinateur(trice)', 'Autre'] },
           { id: 'site', label: 'Site' },
           { id: 'statut', label: 'Statut', options: ['Associé', 'Salarié', 'Collaborateur', 'Partenaire externe', 'En cours de recrutement'] },

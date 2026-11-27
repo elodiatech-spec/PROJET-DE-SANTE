@@ -103,6 +103,17 @@ vérifie qu'ils concordent.
 
 ## Rédaction du projet de santé avec Claude (expert)
 
+Tout se fait dans **Ingénierie du projet › Atelier projet de santé** (expert seul), en trois étapes :
+1. **Collecte** — avancement des informations du projet, professionnels sans courriel signalés,
+   liens vers les plateformes officielles par chapitre (`PLATEFORMES_SOURCES`, site de l'ARS selon le
+   département), ouverture des dossiers de sources ;
+2. **Rédaction** — les chapitres : rédiger avec Claude, importer un Google Docs existant, valider ;
+3. **Document final** — assemblage, page de garde, contrôle des mentions à compléter.
+
+Chaque chapitre suit un gabarit (`GABARITS_CHAPITRES` du script : longueur, structure, part de texte) ;
+les schémas et logigrammes (`<figure data-schema>`) sont rendus en étapes colorées, les titres en
+bandeaux, et l'introduction propose la phrase d'accroche de la page de garde.
+
 Page **Projet de santé**, carte « Rédaction avec Claude », visible par l'expert seul. Un bouton par
 chapitre du plan ARS (introduction et préambule, chapitres 1 à 6 et conclusion).
 
