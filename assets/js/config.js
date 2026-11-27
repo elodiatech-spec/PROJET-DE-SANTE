@@ -29,6 +29,77 @@ const APP = {
 const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbwUO5M22-R5McLGVcUEByfZ3uC1h7GBDozAlotRfWvfUQpPGGSiRN7KVQnKYIUOQp2X6A/exec';
 
 /* --------------------------------------------------------------------------
+   Société émettrice
+   Une seule fiche décrit la société qui émet les devis, factures, mandats
+   et accords : les documents générés la reprennent tous. Le jour où la
+   SASU ElodiaTech est immatriculée, on modifie cette fiche (console expert
+   › Équipe & société) et rien d'autre.
+
+   Ces valeurs par défaut sont publiques (mentions légales). Les
+   coordonnées bancaires n'y figurent volontairement pas : ce dépôt est
+   public. Elles se saisissent dans la fiche et ne vivent que dans la
+   feuille Google « Emetteur », lue par l'expert seul.
+   -------------------------------------------------------------------------- */
+const EMETTEUR_DEFAUT = {
+  denomination: 'SARL 17 OCTOBRE',
+  nomCommercial: 'ElodiaTech',
+  forme: 'Société à responsabilité limitée',
+  capital: '1 000 €',
+  adresse: 'Espace Cartesia, Belle Étoile Nord',
+  codePostal: '97212',
+  ville: 'Saint-Joseph',
+  siret: '921 549 531 00017',
+  ape: '82.11Z',
+  rcs: '',
+  tvaIntracom: '',
+  representant: 'Frédéric ARNOBE',
+  qualite: 'Gérant',
+  telephone: '+596 696 41 22 55',
+  courriel: 'contact@elodiatech.fr',
+  site: 'www.elodiatech.com',
+  tauxTva: '8,5 %',
+  titulaireCompte: '',
+  iban: '',
+  bic: '',
+  banque: '',
+};
+
+/** Formulaire de la fiche, par groupes. `requis` : manquant = signalé. */
+const CHAMPS_EMETTEUR = [
+  { groupe: 'Identité', champs: [
+    { id: 'denomination', label: 'Dénomination sociale', requis: true, placeholder: 'SASU ElodiaTech' },
+    { id: 'nomCommercial', label: 'Nom commercial', placeholder: 'ElodiaTech' },
+    { id: 'forme', label: 'Forme juridique', requis: true, placeholder: 'Société par actions simplifiée unipersonnelle' },
+    { id: 'capital', label: 'Capital social', requis: true, placeholder: '1 000 €' },
+  ] },
+  { groupe: 'Siège', champs: [
+    { id: 'adresse', label: 'Adresse', requis: true },
+    { id: 'codePostal', label: 'Code postal', requis: true },
+    { id: 'ville', label: 'Ville', requis: true },
+  ] },
+  { groupe: 'Immatriculation', champs: [
+    { id: 'siret', label: 'SIRET', requis: true },
+    { id: 'ape', label: 'Code APE', requis: true },
+    { id: 'rcs', label: 'RCS (ville et numéro)', requis: true, placeholder: 'RCS Fort-de-France 000 000 000' },
+    { id: 'tvaIntracom', label: 'N° de TVA intracommunautaire', requis: true, placeholder: 'FR00 000000000' },
+    { id: 'tauxTva', label: 'Taux de TVA appliqué', requis: true, placeholder: '8,5 %' },
+  ] },
+  { groupe: 'Représentant et contact', champs: [
+    { id: 'representant', label: 'Représentant légal', requis: true },
+    { id: 'qualite', label: 'Qualité', requis: true, placeholder: 'Président' },
+    { id: 'telephone', label: 'Téléphone' },
+    { id: 'courriel', label: 'Courriel', type: 'email' },
+    { id: 'site', label: 'Site internet' },
+  ] },
+  { groupe: 'Coordonnées bancaires (factures)', champs: [
+    { id: 'titulaireCompte', label: 'Titulaire du compte', requis: true },
+    { id: 'iban', label: 'IBAN', requis: true },
+    { id: 'bic', label: 'BIC', requis: true },
+    { id: 'banque', label: 'Banque (nom et adresse)' },
+  ] },
+];
+
+/* --------------------------------------------------------------------------
    Statuts d'avancement d'une prestation
    `poids` sert au calcul de l'avancement (0 → 1).
    -------------------------------------------------------------------------- */
@@ -416,7 +487,7 @@ const MODULES = [
 
   { id: 'admin-projets',pole: 'console',   label: 'Portefeuille clients',    icone: 'fa-solid fa-address-card',         formules: null, roles: ['expert'] },
   { id: 'admin-offres', pole: 'console',   label: 'Offres & périmètres',     icone: 'fa-solid fa-tags',                 formules: null, roles: ['expert'] },
-  { id: 'admin-experts',pole: 'console',   label: 'Équipe ElodiaTech',       icone: 'fa-solid fa-user-tie',             formules: null, roles: ['expert'] },
+  { id: 'admin-experts',pole: 'console',   label: 'Équipe & société',        icone: 'fa-solid fa-user-tie',             formules: null, roles: ['expert'] },
   { id: 'admin-params', pole: 'console',   label: 'Paramètres & données',    icone: 'fa-solid fa-sliders',              formules: null, roles: ['expert'] },
 ];
 

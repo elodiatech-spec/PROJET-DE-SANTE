@@ -185,8 +185,40 @@ var ONGLETS = {
     "contact",
     "tel",
     "lot"
+  ],
+  // Société émettrice des devis, factures et contrats : une seule ligne.
+  // Lue par l'expert seul (coordonnées bancaires).
+  "Emetteur": [
+    "id", "denomination", "nom_commercial", "forme", "capital", "adresse", "code_postal",
+    "ville", "siret", "ape", "rcs", "tva_intracom", "representant", "qualite", "telephone",
+    "courriel", "site", "taux_tva", "titulaire_compte", "iban", "bic", "banque"
   ]
 };
+
+/** Correspondance des colonnes de « Emetteur » avec la fiche de l'application. */
+var CHAMPS_EMETTEUR = {
+  denomination: 'denomination', nomCommercial: 'nom_commercial', forme: 'forme', capital: 'capital',
+  adresse: 'adresse', codePostal: 'code_postal', ville: 'ville', siret: 'siret', ape: 'ape',
+  rcs: 'rcs', tvaIntracom: 'tva_intracom', representant: 'representant', qualite: 'qualite',
+  telephone: 'telephone', courriel: 'courriel', site: 'site', tauxTva: 'taux_tva',
+  titulaireCompte: 'titulaire_compte', iban: 'iban', bic: 'bic', banque: 'banque'
+};
+
+/**
+ * Fiche de la société émettrice telle qu'enregistrée, ou null si la feuille
+ * n'a pas encore été renseignée (l'application garde alors ses valeurs par
+ * défaut). Servira aux devis, factures et contrats générés.
+ */
+function emetteur_() {
+  var ligne = lireOnglet('Emetteur').filter(function (r) { return String(r.id) === 'emetteur'; })[0];
+  if (!ligne) return null;
+  var fiche = {};
+  Object.keys(CHAMPS_EMETTEUR).forEach(function (k) {
+    var v = ligne[CHAMPS_EMETTEUR[k]];
+    if (v !== undefined && v !== null && String(v) !== '') fiche[k] = String(v);
+  });
+  return fiche;
+}
 
 var ENTITES_PAR_PROJET = {
   documents:     { onglet: 'Documents',     champs: ['id', 'nom', 'cat', 'type', 'taille', 'date', 'auteur', 'url', 'piece'] },
@@ -2768,6 +2800,7 @@ function construireDonnees(projetIdUnique) {
     // Le client ne lit un chapitre qu'une fois validé, par ses documents.
     donnees.redaction = donneesRedaction_(projets);
     donnees.actes = donneesActes_(projets);
+    donnees.emetteur = emetteur_();
     donnees.experts = lireOnglet('Experts').map(function (r) {
       return {
         id: r.id, nom: r.nom || '', fonction: r.fonction || '',
@@ -2893,6 +2926,10 @@ var ECRITURE = {
   experts: {
     onglet: 'Experts', cles: ['id'],
     champs: { nom: 'nom', fonction: 'fonction', email: 'email', tel: 'tel', principal: 'principal' }
+  },
+  emetteur: {
+    onglet: 'Emetteur', cles: ['id'], creerSiAbsent: true,
+    champs: CHAMPS_EMETTEUR
   },
   prestataires: {
     onglet: 'Prestataires', cles: ['id'],
@@ -3045,6 +3082,12 @@ function executerEcriture(op, acces) {
     if (['pret', 'valide'].indexOf(String(payload.statut)) === -1) throw new Error('Statut non permis.');
     payload = { statut: payload.statut };
   }
+
+  if (op.entite === 'emetteur') {
+    // Une seule fiche, jamais supprimée : on la corrige.
+    if (op.action === 'delete' || cles[0] !== 'emetteur') throw new Error('Opération non permise sur la fiche émetteur.');
+  }
+  if (conf.creerSiAbsent) assurerOnglet_(conf.onglet);
 
   if (op.action === 'delete') return supprimerLigne(conf, cles);
   return ecrireLigne(conf, cles, payload);   // 'upsert' et 'update'

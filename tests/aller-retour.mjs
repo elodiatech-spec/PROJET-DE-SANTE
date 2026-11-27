@@ -180,6 +180,9 @@ const evtAutreProjet = Store.ajouterEvenement({ titre: 'Jalon à supprimer', dat
 Store.setProjet('cds-gros-morne');
 Store.supprimerEvenement(evtAutreProjet.id, 'msp-fort-de-france');
 
+// Société émettrice : la fiche se complète au fil de l'eau (passage en SASU).
+Store.majEmetteur({ rcs: 'RCS Fort-de-France 000 000 000', iban: 'FR76 0000 0000 0000 0000 0000 000', inconnu: 'ignoré' });
+
 Store.supprimerDocument(Store.liste('documents').find((d) => d.nom === 'Test.pdf').id);
 Store.supprimerProjet('cds-cayenne');
 
@@ -216,7 +219,7 @@ const evtMeet = lire('Evenements').find((e) => e.titre === 'Point hebdomadaire')
 
 const controles = [
   ['le script ne renvoie aucune erreur', erreurs.length === 0, erreurs.join(' | ')],
-  ['17 requêtes émises par l\'application', requetes.length === 17, requetes.length],
+  ['18 requêtes émises par l\'application', requetes.length === 18, requetes.length],
   ['la formule est passée en F3', projet.formule === 'F3', projet.formule],
   ['fiche client : nom du porteur corrigé', projet.client_nom === 'Mme Sophie Rivière-Martin', projet.client_nom],
   ['fiche client : téléphone enregistré', projet.client_tel === '0596 11 22 33', projet.client_tel],
@@ -266,6 +269,13 @@ const controles = [
     relu.comptesRendus['cds-gros-morne'].some((c) => c.lienMeet === 'https://meet.google.com/test-copil'), 'absent'],
   ['relecture : Google Doc exposé en lienDoc',
     relu.comptesRendus['cds-gros-morne'].some((c) => c.lienDoc === 'https://docs.google.com/document/d/TEST_CR/edit'), 'absent'],
+  ['émetteur : une seule ligne écrite', lire('Emetteur').length === 1, lire('Emetteur').length],
+  ['émetteur : RCS enregistré', lire('Emetteur')[0]?.rcs === 'RCS Fort-de-France 000 000 000', lire('Emetteur')[0]?.rcs],
+  ['émetteur : valeurs par défaut écrites avec', lire('Emetteur')[0]?.capital === '1 000 €', lire('Emetteur')[0]?.capital],
+  ['émetteur : champ inconnu ignoré', !('inconnu' in (relu.emetteur || {})), 'présent'],
+  ['relecture : fiche émetteur avec IBAN', relu.emetteur?.iban === 'FR76 0000 0000 0000 0000 0000 000', relu.emetteur?.iban],
+  ['émetteur : RCS plus signalé comme manquant', !Store.emetteurManquants().includes('RCS (ville et numéro)'), Store.emetteurManquants().join(', ')],
+  ['émetteur : TVA intracommunautaire encore signalée', Store.emetteurManquants().includes('N° de TVA intracommunautaire'), Store.emetteurManquants().join(', ')],
   ['relecture : lien de l\'événement',
     relu.evenements['cds-gros-morne'].some((e) => e.lien === 'https://meet.google.com/test-hebdo'), 'absent'],
 ];

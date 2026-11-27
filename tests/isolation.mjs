@@ -136,6 +136,19 @@ verifier('jeton absent de sa propre fiche', !client.projets[0].jeton, client.pro
 verifier('expert : notes et jeton présents',
   expert.projets.some((p) => p.jeton === JETON_CLIENT), '');
 
+/* --- Société émettrice : coordonnées bancaires réservées à l'expert --- */
+const ecritEmetteur = s.appel({ action: 'upsert', entite: 'emetteur', cle: CODE_EXPERT, id: 'emetteur',
+  payload: { iban: 'FR76 1111 2222 3333 4444 5555 666' } });
+verifier('expert : peut enregistrer la fiche émetteur', !ecritEmetteur.erreur, ecritEmetteur.erreur);
+const expertRelu = s.appel({ action: 'getAll', cle: CODE_EXPERT });
+verifier('expert : relit la fiche émetteur', expertRelu.emetteur?.iban === 'FR76 1111 2222 3333 4444 5555 666', expertRelu.emetteur?.iban);
+const clientRelu = JSON.stringify(s.appel({ action: 'getAll', jeton: JETON_CLIENT }));
+verifier('client : ne reçoit pas la fiche émetteur', !clientRelu.includes('FR76 1111') && !clientRelu.includes('"emetteur"'), 'IBAN exposé');
+const clientEmetteur = s.appel({ action: 'upsert', entite: 'emetteur', jeton: JETON_CLIENT, id: 'emetteur', payload: { iban: 'FR76 PIRATE' } });
+verifier('client : ne peut pas modifier la fiche émetteur', !!clientEmetteur.erreur, clientEmetteur.erreur);
+const supprEmetteur = s.appel({ action: 'delete', entite: 'emetteur', cle: CODE_EXPERT, id: 'emetteur' });
+verifier('expert : la fiche émetteur ne se supprime pas', !!supprEmetteur.erreur, supprEmetteur.erreur);
+
 /* --- Écritures du client --- */
 const okPresta = s.appel({
   action: 'upsert', entite: 'prestations', jeton: JETON_CLIENT,

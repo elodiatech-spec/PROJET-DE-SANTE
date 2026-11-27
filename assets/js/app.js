@@ -2194,6 +2194,36 @@ const App = {
       });
     },
 
+    /* --- Société émettrice --- */
+
+    'fiche-emetteur'() {
+      // Aucun champ bloquant : la fiche se complète au fil de l'eau
+      // (RCS et TVA connus seulement après immatriculation).
+      const groupes = CHAMPS_EMETTEUR.map((g) => ({
+        groupe: g.groupe,
+        champs: g.champs.map((c) => ({
+          chemin: c.id, label: c.requis ? `${c.label} ·` : c.label, type: c.type, placeholder: c.placeholder,
+        })),
+      }));
+
+      Modal.fiche({
+        titre: 'Société émettrice',
+        soustitre: 'Reprise sur les devis, factures, mandats et accords générés. '
+          + 'Les champs suivis de « · » sont des mentions obligatoires.',
+        groupes,
+        valeurs: Store.emetteur(),
+        libelle: 'Enregistrer la fiche',
+        onSubmit: (v) => {
+          Store.majEmetteur(v);
+          const manquants = Store.emetteurManquants();
+          toast(manquants.length
+            ? `Fiche enregistrée. Reste à compléter : ${manquants.join(', ')}.`
+            : 'Fiche enregistrée : toutes les mentions obligatoires sont renseignées.',
+          manquants.length ? 'warn' : 'ok');
+        },
+      });
+    },
+
     /* --- Annuaire des prestataires --- */
 
     'fiche-prestataire'(el) {
