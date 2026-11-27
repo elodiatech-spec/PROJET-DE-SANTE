@@ -424,6 +424,53 @@ function categorieDePrestation(p) {
   return p.categorieDoc || CATEGORIE_PAR_LOT[p.lot] || 'Projet';
 }
 
+/* ====================== CONSOLE : SOCIÉTÉ ÉMETTRICE ====================== */
+function carteEmetteur() {
+  const e = Store.emetteur();
+  const manquants = Store.emetteurManquants();
+  const ligne = (label, valeur) => `
+    <div class="text-xs"><span class="text-muted">${esc(label)} :</span>
+      ${valeur ? esc(valeur) : '<span class="text-warn">à compléter</span>'}</div>`;
+  const iban = e.iban ? `${e.iban.replace(/\s/g, '').slice(0, 4)} •••• ${e.iban.replace(/\s/g, '').slice(-4)}` : '';
+
+  return `
+    <div class="card" style="border-left:3px solid ${manquants.length ? 'var(--warn-500)' : 'var(--ok-500)'}">
+      <div class="card__head">
+        <div>
+          <h2 class="card__title"><i class="fa-solid fa-building"></i> Société émettrice</h2>
+          <p class="card__subtitle">
+            Reprise sur les devis, factures, mandats et accords générés. Le jour où la société
+            change (SASU), seule cette fiche est à modifier.
+          </p>
+        </div>
+        <button class="btn btn--primary btn--sm" data-action="fiche-emetteur">
+          <i class="fa-solid fa-pen"></i> Modifier
+        </button>
+      </div>
+      <div class="grid grid-2">
+        <div class="stack" style="gap:4px">
+          <strong class="text-sm">${esc(e.denomination)}${e.nomCommercial ? ` — ${esc(e.nomCommercial)}` : ''}</strong>
+          ${ligne('Forme', e.forme)}
+          ${ligne('Capital', e.capital)}
+          ${ligne('Siège', [e.adresse, `${e.codePostal} ${e.ville}`.trim()].filter(Boolean).join(', '))}
+          ${ligne('Représentant', e.representant ? `${e.representant}, ${e.qualite}` : '')}
+        </div>
+        <div class="stack" style="gap:4px">
+          ${ligne('SIRET', e.siret)}
+          ${ligne('RCS', e.rcs)}
+          ${ligne('TVA intracommunautaire', e.tvaIntracom)}
+          ${ligne('TVA appliquée', e.tauxTva)}
+          ${ligne('IBAN', iban)}
+        </div>
+      </div>
+      <p class="text-xs ${manquants.length ? 'text-warn' : 'text-muted'}" style="margin-top:10px">
+        ${manquants.length
+          ? `<i class="fa-solid fa-triangle-exclamation"></i> Mentions obligatoires à compléter : ${esc(manquants.join(', '))}.`
+          : '<i class="fa-solid fa-circle-check text-ok"></i> Toutes les mentions obligatoires sont renseignées.'}
+      </p>
+    </div>`;
+}
+
 /**
  * Pièces rattachées à une prestation.
  * Le champ `piece` de l'entité documents porte l'identifiant de la prestation :
@@ -2816,6 +2863,7 @@ const Views = {
 
     return `
     <section class="view stack">
+      ${carteEmetteur()}
       <div class="card">
         <div class="card__head">
           <div>

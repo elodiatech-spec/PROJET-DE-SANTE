@@ -1231,3 +1231,4 @@ select { cursor: pointer; }
 .apres-liste .badge { margin-right: 6px; }
 .apres-titre { margin: 18px 0 0; font-size: .95rem; }
 .etapes-liste { margin: 8px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: .88rem; }
+.text-warn { color: var(--warn-500); }

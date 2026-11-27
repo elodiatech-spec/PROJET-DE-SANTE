@@ -386,6 +386,8 @@ function demoDonnees() {
       { id: 'exp1', nom: 'ARNOBE Frédéric', fonction: 'Expert projets de santé · fondateur',
         email: 'frederic.arnobe@elodiatech.fr', tel: '', principal: 'OUI' },
     ],
+    // Société émettrice des devis, factures et contrats (voir EMETTEUR_DEFAUT).
+    emetteur: { ...EMETTEUR_DEFAUT },
 
     prestataires: [
       { id: 'v1', nom: 'ComptaSanté Antilles', metier: 'Expert-comptable', specialite: 'SISA, paie et fiscalité des structures de santé', contact: 'contact@comptasante.fr', lot: 'LE' },
@@ -498,7 +500,7 @@ const Store = {
       });
       ['projets', 'documents', 'signatures', 'messages', 'evenements',
        'comptesRendus', 'financements', 'partenaires', 'pieces', 'prestataires',
-       'intervenantsImmo', 'questionnaire', 'redaction', 'actes'].forEach((cle) => {
+       'intervenantsImmo', 'questionnaire', 'redaction', 'actes', 'emetteur'].forEach((cle) => {
         if (sauvegarde[cle]) this.state[cle] = sauvegarde[cle];
       });
     }
@@ -549,7 +551,7 @@ const Store = {
       if (this.state.reglages.source === 'sheets') {
         ['projets', 'documents', 'signatures', 'messages', 'evenements',
          'comptesRendus', 'financements', 'partenaires', 'pieces',
-         'experts', 'prestataires', 'questionnaire', 'redaction', 'actes'].forEach((cle) => {
+         'experts', 'prestataires', 'questionnaire', 'redaction', 'actes', 'emetteur'].forEach((cle) => {
           delete aEnregistrer[cle];
         });
       }
@@ -1792,6 +1794,31 @@ const Store = {
     return { ok: true };
   },
 
+  /* ---- Société émettrice ---- */
+
+  /** Fiche complète : valeurs par défaut complétées par la feuille. */
+  emetteur() {
+    return { ...EMETTEUR_DEFAUT, ...(this.state.emetteur || {}) };
+  },
+
+  /** Libellés des mentions obligatoires encore vides. */
+  emetteurManquants() {
+    const e = this.emetteur();
+    return CHAMPS_EMETTEUR.flatMap((g) => g.champs)
+      .filter((c) => c.requis && !String(e[c.id] || '').trim())
+      .map((c) => c.label);
+  },
+
+  majEmetteur(champs) {
+    const propres = {};
+    CHAMPS_EMETTEUR.flatMap((g) => g.champs).forEach((c) => {
+      if (champs[c.id] !== undefined) propres[c.id] = String(champs[c.id]).trim();
+    });
+    this.commit((s) => { s.emetteur = { ...EMETTEUR_DEFAUT, ...(s.emetteur || {}), ...propres }; });
+    // Une seule ligne dans la feuille : on pousse toujours la fiche entière.
+    this.pousser('emetteur', 'emetteur', this.emetteur());
+  },
+
   /* ---- Annuaire des prestataires ---- */
 
   ajouterPrestataire(donnees) {
@@ -2051,6 +2078,8 @@ const Store = {
     const data = await SheetsAdapter.chargerTout(webAppUrl, this.porteCles());
     this.commit((s) => {
       Object.keys(data).forEach((cle) => { if (cle in s) s[cle] = data[cle]; });
+      // Feuille « Emetteur » encore vide : la fiche par défaut reste en place.
+      s.emetteur = { ...EMETTEUR_DEFAUT, ...(data.emetteur || {}) };
       s.reglages.derniereSync = new Date().toISOString();
       s.reglages.source = 'sheets';
       if (!s.projets.some((p) => p.id === s.projetActifId)) s.projetActifId = s.projets[0].id;

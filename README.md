@@ -374,6 +374,13 @@ l'**engagement de conformité** ne s'affiche que pour un centre de santé. C'est
 - **Équipe ElodiaTech** : ajout et retrait d'experts ; le référent d'un projet se
   choisit dans cette liste. Un expert rattaché à des clients ne peut pas être retiré,
   et il en reste toujours au moins un.
+- **Société émettrice** (même page, « Équipe & société ») : une fiche unique —
+  dénomination, forme, capital, siège, SIRET, RCS, TVA, représentant, coordonnées
+  bancaires — reprise par les devis, factures, mandats et accords. Les mentions
+  obligatoires manquantes sont signalées. Elle vit dans l'onglet « Emetteur »
+  (créé à la première saisie), lu par l'expert seul ; les coordonnées bancaires
+  ne figurent jamais dans le code, ce dépôt étant public. Au passage en SASU,
+  seule cette fiche change.
 - **Annuaire des prestataires** partagé entre tous les dossiers, modifiable par
   l'expert et consultable par le client
 - Attribution des formules et des options
