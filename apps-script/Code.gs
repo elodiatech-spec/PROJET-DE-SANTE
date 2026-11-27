@@ -3102,7 +3102,14 @@ function executerEcriture(op, acces) {
   if (conf.creerSiAbsent) assurerOnglet_(conf.onglet);
 
   if (op.action === 'delete') return supprimerLigne(conf, cles);
-  return ecrireLigne(conf, cles, payload);   // 'upsert' et 'update'
+  var resultat = ecrireLigne(conf, cles, payload);   // 'upsert' et 'update'
+
+  // Nouveau client : son dossier Drive (et ses dossiers de sources) est créé
+  // aussitôt, sans manipulation de l'expert.
+  if (op.entite === 'projets' && /ajoutée/.test(resultat)) {
+    try { creerDossiers(cles[0]); } catch (e) { /* Drive indisponible : créé à la première rédaction */ }
+  }
+  return resultat;
 }
 
 /**
@@ -3473,8 +3480,14 @@ function dossierDuProjet(projetId) {
     break;
   }
 
-  throw new Error("Ce projet n'a pas encore de dossier Drive. Créez-le depuis "
-    + 'Console expert → Portefeuille clients, bouton « Créer les dossiers Drive ».');
+  // Pas encore de dossier : on le crée sur-le-champ plutôt que d'arrêter
+  // l'expert (rédaction, dépôt, assemblage).
+  var crees = creerDossiers(projetId);
+  if (crees.length) {
+    var id = String(crees[0].url).match(/[-\w]{25,}/);
+    if (id) return DriveApp.getFolderById(id[0]);
+  }
+  throw new Error('Projet introuvable : impossible de créer son dossier Drive.');
 }
 
 /** Sous-dossier correspondant à la catégorie ; à défaut, la racine du projet. */
