@@ -551,6 +551,48 @@ function carteRedaction() {
         Une rédaction prend en général de 5 à 30 minutes. Vous pouvez quitter la page : le chapitre sera
         récupéré à votre retour. Le brouillon n'est visible par le client qu'après votre validation.</p>
       <div class="redac-liste">${CHAPITRES_REDACTION.map(ligne).join('')}</div>
+      ${blocDocumentFinal(etats, nbValides, actif)}
+    </div>`;
+}
+
+/** Assemblage des chapitres validés en un seul document prêt pour l'ARS. */
+function blocDocumentFinal(etats, nbValides, actif) {
+  const e = etats[DOCUMENT_FINAL.id] || {};
+  const doc = urlSure(e.docUrl);
+  const st = STATUTS_REDACTION[e.statut || ''] || STATUTS_REDACTION[''];
+  const total = CHAPITRES_REDACTION.length;
+  const manquants = String(e.aCompleter || '').split('\n').map((l) => l.trim()).filter(Boolean);
+  // Un chapitre validé après l'assemblage rend le document final périmé.
+  const perime = doc && CHAPITRES_REDACTION.some((c) => etats[c.id]?.statut === 'valide'
+    && String(etats[c.id]?.majLe || '') > String(e.majLe || ''));
+
+  return `<div class="redac-ligne" style="border-left:3px solid var(--accent-500);margin-top:var(--sp-3)">
+      <div class="row-between">
+        <div class="grow">
+          <h4 class="redac-titre"><i class="fa-solid fa-book"></i> ${esc(DOCUMENT_FINAL.titre)}</h4>
+          <p class="text-xs text-muted">Les chapitres validés réunis en un seul Google Docs : page de garde (avec le logo
+            de la structure s'il est déposé dans son dossier Drive sous un nom contenant « logo »), sommaire,
+            chapitres dans l'ordre du plan ARS, pied de page.</p>
+        </div>
+        ${doc ? `<span class="badge badge--${st.couleur}"><i class="${st.icone}"></i> ${esc(st.label)}${e.version ? ` · v${esc(e.version)}` : ''}</span>`
+              : `<span class="badge badge--${nbValides === total ? 'ok' : 'neutre'}">${nbValides} / ${total} chapitres validés</span>`}
+      </div>
+      ${e.message ? `<p class="text-xs redac-message"><i class="fa-solid fa-circle-info"></i> ${esc(e.message)}</p>` : ''}
+      ${perime ? `<p class="text-xs text-warn"><i class="fa-solid fa-triangle-exclamation"></i>
+          Un chapitre a été validé depuis le dernier assemblage : assemblez à nouveau.</p>` : ''}
+      ${manquants.length ? `<details class="redac-details"><summary class="text-xs fw-800 text-warn">
+          Document incomplet : ${manquants.length} chapitre${manquants.length > 1 ? 's' : ''} manquant${manquants.length > 1 ? 's' : ''}</summary>
+          <ul class="text-xs">${manquants.map((l) => `<li>${esc(l)}</li>`).join('')}</ul></details>` : ''}
+      <div class="row-tight" style="margin-top:8px">
+        <button class="btn btn--sm ${doc ? '' : 'btn--primary'}" data-action="redac-assembler" ${!actif || !nbValides ? 'disabled' : ''}>
+          <i class="fa-solid fa-layer-group"></i> ${doc ? 'Assembler à nouveau' : 'Assembler le document final'}
+        </button>
+        ${doc ? `<a class="btn btn--sm" href="${esc(doc)}" target="_blank" rel="noopener noreferrer">
+            <i class="fa-solid fa-file-word"></i> Ouvrir le Google Docs</a>` : ''}
+        ${doc && e.statut === 'pret' ? `<button class="btn btn--sm btn--primary" data-action="redac-valider" data-chapitre="${DOCUMENT_FINAL.id}">
+            <i class="fa-solid fa-check"></i> Valider et transmettre au client</button>` : ''}
+      </div>
+      ${!nbValides ? '<p class="text-xs text-muted" style="margin-top:6px">Disponible dès qu\'un chapitre est validé.</p>' : ''}
     </div>`;
 }
 

@@ -3002,6 +3002,12 @@ function doPost(e) {
       return json({ ok: true, redaction: requete.action === 'redigerChapitre'
         ? redigerChapitre(requete) : suivreRedaction(requete) });
     }
+    // Assemblage du document final : quelques secondes, pas de lot Claude.
+    if (requete.action === 'assemblerProjet') {
+      if (acces.role !== 'expert') throw new Error('Réservé à l\'expert.');
+      verrou.waitLock(25000);
+      return json({ ok: true, redaction: assemblerProjet(requete) });
+    }
     if (requete.action === 'redigerActe' || requete.action === 'suivreActe') {
       if (acces.role !== 'expert') throw new Error('Réservé à l\'expert.');
       return json({ ok: true, acte: requete.action === 'redigerActe' ? redigerActe(requete) : suivreActe(requete) });
@@ -3658,7 +3664,7 @@ function donneesRedaction_(projets) {
   projets.forEach(function (p) { parProjet[p.id] = {}; });
   lireOnglet('Redaction').forEach(function (r) {
     var groupe = parProjet[r.projet_id];
-    if (!groupe || !chapitreRedaction_(String(r.chapitre))) return;
+    if (!groupe || (!chapitreRedaction_(String(r.chapitre)) && String(r.chapitre) !== CHAPITRE_FINAL)) return;
     groupe[r.chapitre] = {
       statut: String(r.statut || ''),
       docId: String(r.doc_id || ''),
@@ -4151,6 +4157,177 @@ function creerGoogleDoc_(nom, html, dossierId) {
   }
   var f = JSON.parse(rep.getContentText());
   return { id: f.id, url: f.webViewLink || ('https://docs.google.com/document/d/' + f.id + '/edit') };
+}
+
+/* ==========================================================================
+   DOCUMENT FINAL — assemblage des chapitres validés
+
+   Un seul Google Docs, prêt pour le dépôt : page de garde (logo de la
+   structure s'il est dans son dossier Drive), sommaire, chapitres validés
+   dans l'ordre du plan ARS, pied de page. Les chapitres non validés sont
+   listés en page de garde : un document incomplet ne peut pas passer
+   inaperçu. Rangé dans « 01 — Projet de santé », versionné, enregistré
+   dans l'onglet Redaction sous le chapitre « final ».
+   ========================================================================== */
+
+var CHAPITRE_FINAL = 'final';
+
+/** ARS compétente, d'après le département ; vide si inconnu (rien d'inventé). */
+var ARS_PAR_DEPARTEMENT = {
+  '971': 'ARS Guadeloupe, Saint-Martin et Saint-Barthélemy', '972': 'ARS Martinique',
+  '973': 'ARS Guyane', '974': 'ARS La Réunion', '976': 'ARS Mayotte'
+};
+
+/** Repères laissés par la rédaction, comptés dans le document assemblé. */
+var MARQUES_A_COMPLETER = /\[(donnée à compléter|à compléter|à confirmer|Figure à insérer|Schéma à insérer)/gi;
+
+function assemblerProjet(requete) {
+  var projetId = String(requete.projetId || '');
+  if (!projetId) throw new Error('Projet non précisé.');
+  var projet = lireOnglet('Projets').filter(function (r) { return String(r.id) === projetId; })[0];
+  if (!projet) throw new Error('Projet introuvable.');
+
+  var lignes = {};
+  lireOnglet('Redaction').forEach(function (r) {
+    if (String(r.projet_id) === projetId) lignes[String(r.chapitre)] = r;
+  });
+
+  var inclus = [], manquants = [];
+  CHAPITRES_REDACTION.forEach(function (c) {
+    var l = lignes[c.id];
+    if (l && String(l.statut) === 'valide' && l.doc_id) inclus.push({ chapitre: c, docId: String(l.doc_id) });
+    else manquants.push(c.titre + (l && String(l.statut) === 'pret' ? ' — rédigé, non validé' : ' — non rédigé'));
+  });
+  if (!inclus.length) throw new Error('Aucun chapitre validé : validez au moins un chapitre avant d\'assembler.');
+
+  var version = (Number(lignes[CHAPITRE_FINAL] && lignes[CHAPITRE_FINAL].version) || 0) + 1;
+  var dossier = sousDossierCategorie(dossierDuProjet(projetId), 'Projet');
+  var doc = creerGoogleDoc_('PDS — ' + (projet.nom || projetId) + ' — Document final — v' + version,
+    pageDeGarde_(projet, version, manquants), dossier.getId());
+
+  var document = DocumentApp.openById(doc.id);
+  var corps = document.getBody();
+  insererLogoStructure_(projetId, corps);
+
+  // Sommaire : titres de niveau 1 et 2 des chapitres assemblés.
+  var sources = inclus.map(function (x) { return DocumentApp.openById(x.docId).getBody(); });
+  corps.appendPageBreak();
+  corps.appendParagraph('SOMMAIRE').setHeading(DocumentApp.ParagraphHeading.HEADING1);
+  sources.forEach(function (src) {
+    titresDuCorps_(src).forEach(function (t) {
+      var par = corps.appendParagraph(t.texte);
+      par.setHeading(DocumentApp.ParagraphHeading.NORMAL)
+        .setIndentStart(t.niveau === 1 ? 0 : 18).setIndentFirstLine(t.niveau === 1 ? 0 : 18)
+        .setSpacingBefore(t.niveau === 1 ? 6 : 0);
+      par.editAsText().setBold(t.niveau === 1).setFontSize(t.niveau === 1 ? 11 : 10);
+    });
+  });
+  corps.appendParagraph('Pour un sommaire paginé : menu Insertion › Table des matières, à placer ici.')
+    .editAsText().setItalic(true).setFontSize(8).setForegroundColor('#5b6b7b');
+
+  sources.forEach(function (src) {
+    corps.appendPageBreak();
+    copierCorps_(src, corps);
+  });
+
+  var pied = document.getFooter() || document.addFooter();
+  pied.appendParagraph('Projet de santé — ' + (projet.nom || '') + (projet.ville ? ' (' + projet.ville + ')' : '')
+    + ' — version ' + version + ' du ' + Utilities.formatDate(new Date(), 'America/Martinique', 'dd/MM/yyyy'))
+    .setAlignment(DocumentApp.HorizontalAlignment.CENTER).editAsText().setFontSize(8).setForegroundColor('#5b6b7b');
+
+  var reperes = (corps.getText().match(MARQUES_A_COMPLETER) || []).length;
+  document.saveAndClose();
+
+  ecrireRedaction_(projetId, CHAPITRE_FINAL, {
+    statut: 'pret', lot_id: '', doc_id: doc.id, doc_url: doc.url, version: version, fil: '',
+    a_completer: manquants.join('\n'),
+    message: 'Version ' + version + ' assemblée : ' + inclus.length + ' chapitre' + (inclus.length > 1 ? 's' : '')
+      + ' sur ' + CHAPITRES_REDACTION.length
+      + (reperes ? ' — ' + reperes + ' mention' + (reperes > 1 ? 's' : '') + ' [à compléter] encore dans le texte' : ' — aucune mention [à compléter]')
+      + '.'
+  });
+  return etatRedaction_(projetId, CHAPITRE_FINAL);
+}
+
+/** Page de garde en HTML (importée comme les chapitres). */
+function pageDeGarde_(projet, version, manquants) {
+  var police = 'font-family:Arial,sans-serif;';
+  var type = projet.type === 'CDS' ? 'Centre de santé' : 'Maison de santé pluriprofessionnelle';
+  var ars = ARS_PAR_DEPARTEMENT[String(projet.departement || '').trim()] || '';
+  var lieu = [projet.adresse, projet.ville].filter(Boolean).map(echapperHtml_).join(' — ');
+  var avertissement = manquants.length
+    ? '<table style="border-collapse:collapse;width:100%;margin-top:24pt;"><tr><td style="' + police
+      + 'background-color:#fdf1e1;border:1pt solid #f0a93b;padding:8pt;font-size:9.5pt;">'
+      + '<strong>Document incomplet — à ne pas déposer en l\'état.</strong> Chapitres manquants : '
+      + manquants.map(echapperHtml_).join(' ; ') + '.</td></tr></table>'
+    : '';
+  return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Projet de santé</title></head><body>'
+    + '<p style="' + police + 'font-size:11pt;">&nbsp;</p>'
+    + '<p style="' + police + 'font-size:30pt;font-weight:bold;color:' + COULEURS_PDS.titre + ';text-align:center;margin-top:60pt;">PROJET DE SANTÉ</p>'
+    + '<p style="' + police + 'font-size:20pt;color:' + COULEURS_PDS.accent + ';text-align:center;">' + echapperHtml_(projet.nom || '') + '</p>'
+    + '<p style="' + police + 'font-size:13pt;color:' + COULEURS_PDS.titre + ';text-align:center;">' + type + '</p>'
+    + (lieu ? '<p style="' + police + 'font-size:11pt;text-align:center;">' + lieu + '</p>' : '')
+    + '<p style="' + police + 'font-size:6pt;border-bottom:3pt solid ' + COULEURS_PDS.accent + ';margin:24pt 120pt;">&nbsp;</p>'
+    + (ars ? '<p style="' + police + 'font-size:11pt;text-align:center;">Document présenté à l\'' + echapperHtml_(ars) + '</p>' : '')
+    + '<p style="' + police + 'font-size:11pt;text-align:center;">Version ' + version + ' — '
+    + Utilities.formatDate(new Date(), 'America/Martinique', 'dd/MM/yyyy') + '</p>'
+    + avertissement
+    + '<p style="' + police + 'font-size:9pt;color:#5b6b7b;text-align:center;margin-top:80pt;">'
+    + 'Document élaboré par les professionnels de la structure, avec l\'accompagnement d\'ElodiaTech — Ingénierie médicale</p>'
+    + '</body></html>';
+}
+
+/** Premier fichier image dont le nom contient « logo », dans le dossier du projet ou ses sous-dossiers. */
+function insererLogoStructure_(projetId, corps) {
+  try {
+    var racine = dossierDuProjet(projetId);
+    var dossiers = [racine], sous = racine.getFolders();
+    while (sous.hasNext()) dossiers.push(sous.next());
+    for (var i = 0; i < dossiers.length; i++) {
+      var it = dossiers[i].searchFiles("title contains 'logo' and mimeType contains 'image/' and trashed = false");
+      if (!it.hasNext()) continue;
+      var image = corps.insertImage(0, it.next().getBlob());
+      var largeur = image.getWidth(), hauteur = image.getHeight();
+      if (largeur > 200) { image.setHeight(Math.round(hauteur * 200 / largeur)).setWidth(200); }
+      image.getParent().asParagraph().setAlignment(DocumentApp.HorizontalAlignment.CENTER);
+      return true;
+    }
+  } catch (e) { /* pas de logo : page de garde sans image */ }
+  return false;
+}
+
+/** Titres de niveau 1 et 2 d'un chapitre, pour le sommaire. */
+function titresDuCorps_(src) {
+  var titres = [];
+  for (var i = 0; i < src.getNumChildren(); i++) {
+    var el = src.getChild(i);
+    if (el.getType() !== DocumentApp.ElementType.PARAGRAPH) continue;
+    var h = el.asParagraph().getHeading();
+    var texte = el.asParagraph().getText().trim();
+    if (!texte) continue;
+    if (h === DocumentApp.ParagraphHeading.HEADING1) titres.push({ niveau: 1, texte: texte });
+    else if (h === DocumentApp.ParagraphHeading.HEADING2) titres.push({ niveau: 2, texte: texte });
+  }
+  return titres;
+}
+
+/** Recopie le contenu d'un chapitre, sans son bandeau de document de travail. */
+function copierCorps_(src, cible) {
+  var E = DocumentApp.ElementType;
+  for (var i = 0; i < src.getNumChildren(); i++) {
+    var el = src.getChild(i);
+    var type = el.getType();
+    if (type === E.PARAGRAPH) {
+      if (/document de travail rédigé le/.test(el.asParagraph().getText())) continue;
+      cible.appendParagraph(el.copy().asParagraph());
+    } else if (type === E.LIST_ITEM) {
+      cible.appendListItem(el.copy().asListItem());
+    } else if (type === E.TABLE) {
+      cible.appendTable(el.copy().asTable());
+    } else if (type === E.HORIZONTAL_RULE) {
+      cible.appendHorizontalRule();
+    }
+  }
 }
 
 /* ==========================================================================

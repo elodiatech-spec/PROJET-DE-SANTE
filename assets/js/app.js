@@ -1284,11 +1284,13 @@ const App = {
 
     'redac-valider'(el) {
       const id = el.dataset.chapitre;
-      const def = CHAPITRES_REDACTION.find((c) => c.id === id);
+      const def = chapitreOuFinal(id);
       if (!def) return;
       Modal.confirmer({
         titre: `Valider — ${def.titre}`,
-        texte: 'Le chapitre rejoindra les documents du client'
+        texte: (id === DOCUMENT_FINAL.id
+          ? 'Le document final deviendra le projet de santé du client et rejoindra ses documents'
+          : 'Le chapitre rejoindra les documents du client')
           + (def.prestations.length ? ', et les étapes correspondantes de sa feuille de route lui seront soumises pour validation.' : '.')
           + ' Relisez-le et complétez les mentions [à compléter] avant de valider.',
         libelle: 'Valider et transmettre',
@@ -1297,6 +1299,25 @@ const App = {
           toast(`${def.titre} : transmis au client.`, 'ok');
         },
       });
+    },
+
+    async 'redac-assembler'(el) {
+      if (!Store.ecritureActive()) {
+        toast('L\'assemblage passe par la base Google Sheets : connectez-la d\'abord.', 'warn');
+        return;
+      }
+      const libelle = el.innerHTML;
+      el.disabled = true;
+      el.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Assemblage…';
+      try {
+        const etat = await Store.assemblerProjet();
+        toast(etat?.message || 'Document final assemblé.', 'ok');
+      } catch (err) {
+        toast(`Assemblage impossible : ${err.message}`, 'danger');
+      } finally {
+        el.disabled = false;
+        el.innerHTML = libelle;
+      }
     },
 
     'enregistrer-gdoc'() {

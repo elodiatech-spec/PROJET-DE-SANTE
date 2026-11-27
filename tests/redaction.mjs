@@ -66,11 +66,13 @@ const fichiersSources = [
 ];
 const dossier01 = {
   getId: () => 'DOSSIER01', getName: () => '01 — Projet de santé',
+  searchFiles: () => iterateur([fichier('logo1', 'logo MSP.png', 'image/png', 'PNG')]),
   getFiles: () => iterateur(fichiersSources), getFolders: () => iterateur([]),
 };
 const dossierProjet = {
   getId: () => ID_DOSSIER, getName: () => 'Projet',
   getFolders: () => iterateur([dossier01]), getFiles: () => iterateur([]),
+  searchFiles: () => iterateur([]),
 };
 
 /* ------------------------------------------------ API Claude simulée ---- */
@@ -106,9 +108,63 @@ const UrlFetchApp = {
       return reponse(200, 'MODELE DE CHAPITRE — structure type.');
     }
     if (url.startsWith('https://www.googleapis.com/upload/drive/v3/files')) {
+      if (Buffer.from(opts.payload).toString().includes('PROJET DE SANTÉ')) {
+        etatApi.finals = (etatApi.finals || 0) + 1;
+        return reponse(200, { id: `docfinal${etatApi.finals}`, webViewLink: `https://docs.google.com/document/d/docfinal${etatApi.finals}/edit` });
+      }
       return reponse(200, { id: 'docch1', webViewLink: 'https://docs.google.com/document/d/docch1/edit' });
     }
     return reponse(404, 'inconnu');
+  },
+};
+
+/* -------------------------------------------------- DocumentApp simulé -- */
+const T = { PARAGRAPH: 'PARAGRAPH', LIST_ITEM: 'LIST_ITEM', TABLE: 'TABLE', HORIZONTAL_RULE: 'HR', PAGE_BREAK: 'PB' };
+const H = { NORMAL: 'N', HEADING1: 'H1', HEADING2: 'H2' };
+const chaine = (o) => new Proxy(o, { get: (t, k) => (k in t ? t[k] : () => chaine(t)) });
+function element(type, texte = '', titre = H.NORMAL) {
+  const el = {
+    type, texte, titre,
+    getType: () => type, getText: () => texte, getHeading: () => el.titre,
+    setHeading: (h) => { el.titre = h; return chaine(el); },
+    editAsText: () => chaine({}),
+    copy: () => element(type, texte, el.titre),
+  };
+  el.asParagraph = () => chaine(el); el.asListItem = () => el; el.asTable = () => el;
+  return el;
+}
+function corpsSimule(enfants = []) {
+  const c = {
+    enfants, logo: false,
+    getNumChildren: () => enfants.length, getChild: (i) => enfants[i],
+    appendParagraph: (x) => { const e = typeof x === 'string' ? element(T.PARAGRAPH, x) : x; enfants.push(e); return chaine(e); },
+    appendListItem: (x) => { enfants.push(x); return x; },
+    appendTable: (x) => { enfants.push(x); return x; },
+    appendPageBreak: () => { enfants.push(element(T.PAGE_BREAK)); },
+    appendHorizontalRule: () => { enfants.push(element(T.HORIZONTAL_RULE)); },
+    insertImage: (i) => { c.logo = true; return { getWidth: () => 400, getHeight: () => 200,
+      setHeight: () => ({ setWidth: () => {} }), getParent: () => ({ asParagraph: () => ({ setAlignment: () => {} }) }) }; },
+    getText: () => enfants.map((e) => e.texte).join('\n'),
+  };
+  return c;
+}
+const documents = {
+  docch1: { corps: corpsSimule([
+    element(T.PARAGRAPH, 'Projet de santé — MSP · document de travail rédigé le 01/11/2026'),
+    element(T.PARAGRAPH, '1. Diagnostic territorial et contexte sanitaire', H.HEADING1),
+    element(T.PARAGRAPH, '1.1. Territoire', H.HEADING2),
+    element(T.PARAGRAPH, 'Taux de pauvreté : [donnée à compléter : taux — source à mobiliser : INSEE].'),
+    element(T.TABLE, 'Indicateur | Valeur'),
+    element(T.LIST_ITEM, 'Axe 1 : accès aux soins'),
+  ]) },
+};
+const DocumentApp = {
+  ElementType: T, ParagraphHeading: H, HorizontalAlignment: { CENTER: 'c' },
+  openById: (id) => {
+    if (!documents[id]) documents[id] = { corps: corpsSimule([element(T.PARAGRAPH, 'PROJET DE SANTÉ')]) };
+    const d = documents[id];
+    return { getBody: () => d.corps, getFooter: () => null,
+      addFooter: () => ({ appendParagraph: (t) => { d.pied = t; return chaine({}); } }), saveAndClose: () => {} };
   },
 };
 
@@ -145,7 +201,7 @@ const contexte = vm.createContext({
   },
   DriveApp: { getFolderById: (id) => { if (id !== ID_DOSSIER) throw new Error('dossier inconnu'); return dossierProjet; } },
   ScriptApp: { getOAuthToken: () => 'jeton-oauth' },
-  UrlFetchApp, Charts,
+  UrlFetchApp, Charts, DocumentApp,
   HtmlService: { createHtmlOutput: () => ({}), XFrameOptionsMode: {} },
   console,
 });
@@ -264,6 +320,36 @@ const valSans = expert({ action: 'upsert', entite: 'redaction', id: `${P}:ch3`, 
 verifier('chapitre jamais rédigé : validation refusée', !!valSans.erreur, valSans.erreur);
 const val = expert({ action: 'upsert', entite: 'redaction', id: `${P}:ch1`, payload: { statut: 'valide', docUrl: 'https://pirate' } });
 verifier('expert : valide le chapitre, rien d\'autre ne change', !val.erreur && ligne('ch1').statut === 'valide' && ligne('ch1').doc_url.includes('docch1'), val.erreur);
+
+/* --- Document final --- */
+const assClient = appel({ jeton: JETON_CLIENT, action: 'assemblerProjet', projetId: P });
+verifier('client : ne peut pas assembler', /expert/i.test(assClient.erreur || ''), assClient.erreur);
+const ass = expert({ action: 'assemblerProjet', projetId: P });
+const fin = documents.docfinal1?.corps;
+const texteFin = fin ? fin.getText() : '';
+verifier('assemblage : document prêt, version 1', ass.redaction?.statut === 'pret' && ass.redaction?.docUrl.includes('docfinal1')
+  && ass.redaction?.version === 1, ass.erreur || JSON.stringify(ass.redaction));
+verifier('assemblage : 1 chapitre sur 7 et mentions à compléter comptées',
+  /1 chapitre sur 7/.test(ass.redaction?.message) && /1 mention \[à compléter\]/.test(ass.redaction?.message), ass.redaction?.message);
+verifier('assemblage : chapitres manquants listés', ass.redaction?.aCompleter.split('\n').length === 6
+  && ass.redaction.aCompleter.includes('non rédigé'), ass.redaction?.aCompleter);
+const garde = Buffer.from(appels.filter((a) => a.url.includes('/upload/')).pop().opts.payload).toString();
+verifier('page de garde : titre, structure, avertissement « document incomplet »',
+  garde.includes('PROJET DE SANTÉ') && garde.includes('MSP Santé Caraïbes') && garde.includes('Document incomplet'), '');
+verifier('page de garde : rangée dans 01 — Projet de santé', garde.includes('"parents":["DOSSIER01"]')
+  && garde.includes('Document final — v1'), '');
+verifier('logo de la structure inséré', fin?.logo === true, '');
+verifier('sommaire avec titres de niveau 1 et 2', texteFin.includes('SOMMAIRE')
+  && texteFin.split('1.1. Territoire').length === 3, texteFin);
+verifier('chapitre recopié sans son bandeau de travail', texteFin.includes('Indicateur | Valeur')
+  && texteFin.includes('Axe 1 : accès aux soins') && !texteFin.includes('document de travail rédigé le'), texteFin);
+verifier('pied de page avec la version', /version 1 du/.test(documents.docfinal1?.pied || ''), documents.docfinal1?.pied);
+const ass2 = expert({ action: 'assemblerProjet', projetId: P });
+verifier('nouvel assemblage : version 2, nouveau document', ass2.redaction?.version === 2 && ass2.redaction?.docUrl.includes('docfinal2'), JSON.stringify(ass2.redaction));
+const valFin = expert({ action: 'upsert', entite: 'redaction', id: `${P}:final`, payload: { statut: 'valide' } });
+verifier('document final : validable par l\'expert', !valFin.erreur && ligne('final').statut === 'valide', valFin.erreur);
+verifier('document final : relu par l\'expert', expert({ action: 'getAll' }).redaction?.[P]?.final?.version === 2, '');
+verifier('document final : rien côté client', appel({ jeton: JETON_CLIENT, action: 'getAll' }).redaction === undefined, '');
 
 /* --- Chapitre suivant : fil conducteur, sources --- */
 fichiersSources.push(fichier('docch1', 'PDS — chapitre 1', 'application/vnd.google-apps.document', ''));
