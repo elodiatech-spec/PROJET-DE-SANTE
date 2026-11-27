@@ -227,8 +227,11 @@ const sansProjet = deposer({ projetId: '', cle: CODE_EXPERT });
 verifier('projet non précisé : refusé', !!sansProjet.erreur, sansProjet.erreur);
 
 const sansDossier = deposer({ projetId: s.projetSansDossier, cle: CODE_EXPERT });
-verifier('projet sans dossier Drive : refus expliqué',
-  /dossier Drive/i.test(sansDossier.erreur || '') && /Portefeuille clients/.test(sansDossier.erreur || ''),
+// Le dossier manquant est désormais créé à la volée (DOSSIER_PROJETS) : le
+// Drive simulé ne connaît pas ce parent, l'erreur doit donc venir de Drive,
+// et non plus d'une consigne demandant à l'expert de le créer à la main.
+verifier('projet sans dossier Drive : création automatique tentée',
+  !/Portefeuille clients/.test(sansDossier.erreur || '') && (!sansDossier.erreur || /dossier/i.test(sansDossier.erreur)),
   sansDossier.erreur);
 
 const vide = deposer({ projetId: s.projetDuJeton, cle: CODE_EXPERT, contenu: '' });
