@@ -3002,6 +3002,12 @@ function doPost(e) {
       return json({ ok: true, redaction: requete.action === 'redigerChapitre'
         ? redigerChapitre(requete) : suivreRedaction(requete) });
     }
+    // Sous-dossiers de sources par chapitre, pour un projet déjà créé.
+    if (requete.action === 'preparerSources') {
+      if (acces.role !== 'expert') throw new Error('Réservé à l\'expert.');
+      var d01 = sousDossierCategorie(dossierDuProjet(String(requete.projetId || '')), 'Projet');
+      return json({ ok: true, crees: assurerDossiersSources_(d01), url: d01.getUrl() });
+    }
     // Assemblage du document final : quelques secondes, pas de lot Claude.
     if (requete.action === 'assemblerProjet') {
       if (acces.role !== 'expert') throw new Error('Réservé à l\'expert.');
@@ -3268,6 +3274,7 @@ function creerDossiers(projetId) {
     var titre = valeurs[l][iNom] + (valeurs[l][iVille] ? ' — ' + valeurs[l][iVille] : '');
     var dossier = parent.createFolder(titre);
     sousDossiers.forEach(function (n) { dossier.createFolder(n); });
+    try { assurerDossiersSources_(sousDossierCategorie(dossier, 'Projet')); } catch (e) { /* gabarit sans dossier 01 */ }
 
     feuille.getRange(l + 1, iUrl + 1).setValue(dossier.getUrl());
     crees.push({ id: id, nom: titre, url: dossier.getUrl() });
@@ -3510,7 +3517,11 @@ function formaterOctets(octets) {
 
 var PROPRIETE_CLE_CLAUDE = 'CLAUDE_API_KEY';
 var PROPRIETE_MODELE_CLAUDE = 'CLAUDE_MODELE';
-var MODELE_CLAUDE_DEFAUT = 'claude-opus-5-5';
+// Sonnet rédige la plupart des chapitres et des actes ; Opus, plus coûteux,
+// est réservé aux chapitres d'analyse (diagnostic, exercice coordonné).
+// La propriété CLAUDE_MODELE, si elle est définie, remplace le modèle par défaut.
+var MODELE_CLAUDE_DEFAUT = 'claude-sonnet-5-5';
+var MODELE_CLAUDE_ANALYSE = 'claude-opus-5-5';
 var URL_LOTS_CLAUDE = 'https://api.anthropic.com/v1/messages/batches';
 var VERSION_API_CLAUDE = '2026-10-21';
 var JETONS_SORTIE_MAX = 64000;
@@ -3540,30 +3551,58 @@ var PLAN_GENERAL_PDS = [
  * soumises au client quand le chapitre est validé.
  */
 var CHAPITRES_REDACTION = [
-  { id: 'intro', titre: 'Introduction et préambule', methode: 'cadre', modele: '', prestations: [],
+  { id: 'intro', titre: 'Introduction et préambule', methode: 'cadre', sources: 'Introduction', modele: '', prestations: [],
     plan: "INTRODUCTION : objet du document, porteur, territoire, nature de la structure (MSP ou centre de santé) et cadre réglementaire.\n"
         + "PRÉAMBULE : genèse du projet, démarche suivie, professionnels à l'initiative, engagements et calendrier." },
-  { id: 'ch1', titre: '1. Diagnostic territorial et contexte sanitaire', methode: 'diagnostic',
+  { id: 'ch1', titre: '1. Diagnostic territorial et contexte sanitaire', methode: 'diagnostic', sources: 'Chapitre 1', analyse: true,
     modele: '13BuJJLZJ4HG37An03KpQahucpkNMJC88L1UvNgLuwAs', prestations: ['P06', 'P07'],
     plan: "1.1. Territoire\n1.2. Population\n1.3. Z.I.P / QPV (uniquement si le territoire compte une zone d'intervention prioritaire ou un quartier prioritaire de la politique de la ville)\n1.4. Offre de soins\n1.5. Besoins du territoire" },
-  { id: 'ch2', titre: "2. Organisation de l'exercice coordonné", methode: 'diagnostic',
+  { id: 'ch2', titre: "2. Organisation de l'exercice coordonné", methode: 'diagnostic', sources: 'Chapitre 2', analyse: true,
     modele: '1HEtv2V5NTL3sVqlDpLto5wkH2uSSmuOKhaiAZQ_dnbo', prestations: ['P08', 'P09', 'P10'],
     plan: "2.1. Professionnels impliqués dans la démarche (en interne ; en externe : partenaires médicaux, partenaires sociaux — hub, CCAS —, partenaires de prévention)\n2.2. Pilotage et fonctionnement\n2.3. Projet de santé\n2.3.1. Objectifs et valeurs\n2.3.2. Axes du projet de santé\n2.3.3. Actions du projet de santé\n2.3.4. Moyens matériels et financiers\n2.4. Projet immobilier" },
-  { id: 'ch3', titre: "3. Organisation de l'accès aux soins", methode: 'organisation',
+  { id: 'ch3', titre: "3. Organisation de l'accès aux soins", methode: 'organisation', sources: 'Chapitre 3',
     modele: '1tzEgbmxwHPNyo1UTPeM8ILqVqWooNrY3-DHqcb5W61A', prestations: ['P11', 'P12'],
     plan: "3.1. Organisation de la prise en charge des patients\n3.1.1. Accès aux soins et continuité des soins\n3.1.2. Plan de gestion des crises et des événements majeurs\n3.1.3. Permanence des soins\n3.2. Organisation d'une diversité de services de soins médicaux spécialisés et paramédicaux hors les murs\n3.3. Missions de santé publique\n3.4. La qualité de la prise en charge" },
-  { id: 'ch4', titre: '4. Organisation du travail en équipe', methode: 'organisation',
+  { id: 'ch4', titre: '4. Organisation du travail en équipe', methode: 'organisation', sources: 'Chapitre 4',
     modele: '1sLh8rVofOsz9k6xFhisRwiNcLHl-W6_kBcSjPY1k1sc', prestations: ['P13', 'P15'],
     plan: "4.1. Coordination de l'exercice pluriprofessionnel\n4.2. Formalisation de coopérations pluriprofessionnelles (conventions, protocoles, partenariats)\n4.3. Développement professionnel continu\n4.4. Suivi, évaluation et amélioration continue\n4.5. Accueil d'étudiants — Recherche" },
-  { id: 'ch5', titre: "5. Partage d'informations", methode: 'cadre',
+  { id: 'ch5', titre: "5. Partage d'informations", methode: 'cadre', sources: 'Chapitre 5',
     modele: '1fkLrAIIbdAlKt5dHYYU2P2kz2VifdZnnS8d_bhYBA94', prestations: ['P14'],
     plan: "5.1. Entre les professionnels impliqués dans la démarche\n5.2. En direction des professionnels extérieurs (en interne ; en externe : partenaires médicaux, partenaires sociaux — hub, CCAS —, partenaires de prévention)\n5.3. Accès du patient aux informations médicales le concernant\n5.4. Communication externe et visibilité" },
-  { id: 'ch6', titre: '6. Signature du projet de santé et conclusion', methode: 'cadre',
+  { id: 'ch6', titre: '6. Signature du projet de santé et conclusion', methode: 'cadre', sources: 'Chapitre 6',
     modele: '1I2NxLzcLKdmxDmf4i-yMHW7qY0k_7G1cbsjKaIyBOfA', prestations: [],
     plan: "6. SIGNATURE DU PROJET DE SANTÉ : tableau des signataires (nom, profession, qualité, date, signature) reprenant les professionnels impliqués, engagement collectif.\nCONCLUSION : synthèse des axes, des engagements et de la trajectoire du projet." }
 ];
 
 var REDACTION_COLONNES = ONGLETS['Redaction'];
+
+/**
+ * Sources par chapitre, dans « 01 — Projet de santé » : chaque chapitre ne
+ * reçoit que « Sources — Commun » et son propre sous-dossier (plus les
+ * fichiers posés à la racine et les autres sous-dossiers, pour les dossiers
+ * organisés avant cette règle). Moins de pages envoyées, moins de coût.
+ */
+var PREFIXE_SOURCES = 'Sources — ';
+var DOSSIER_SOURCES_COMMUN_PDS = PREFIXE_SOURCES + 'Commun';
+
+function nomDossierSources_(chapitre) { return PREFIXE_SOURCES + chapitre.sources; }
+
+/** Crée les sous-dossiers de sources manquants ; renvoie leur nombre. */
+function assurerDossiersSources_(dossier01) {
+  var existants = {};
+  var it = dossier01.getFolders();
+  while (it.hasNext()) existants[it.next().getName()] = true;
+  var noms = [DOSSIER_SOURCES_COMMUN_PDS].concat(CHAPITRES_REDACTION.map(nomDossierSources_));
+  var crees = 0;
+  noms.forEach(function (n) { if (!existants[n]) { dossier01.createFolder(n); crees++; } });
+  return crees;
+}
+
+/** Opus pour les chapitres d'analyse, sinon le modèle par défaut (Sonnet). */
+function modeleDuChapitre_(chapitre) {
+  if (chapitre && chapitre.analyse) return MODELE_CLAUDE_ANALYSE;
+  return PropertiesService.getScriptProperties().getProperty(PROPRIETE_MODELE_CLAUDE) || MODELE_CLAUDE_DEFAUT;
+}
 
 /* ---------------------------------------------------- Menu de la clé ---- */
 
@@ -3714,19 +3753,21 @@ function redigerChapitre(requete) {
   var dejaRediges = lireOnglet('Redaction')
     .filter(function (r) { return String(r.projet_id) === projetId && r.doc_id; })
     .map(function (r) { return String(r.doc_id); });
-  var sources = sourcesDuDossier_(dossier, dejaRediges);
+  try { assurerDossiersSources_(dossier); } catch (e) { /* dossier en lecture seule : on lit ce qui existe */ }
+  var sources = sourcesDuDossier_(dossier, dejaRediges, nomDossierSources_(chapitre));
 
+  var modele = modeleDuChapitre_(chapitre);
   var lot = envoyerLotClaude_(cle, projetId + '-' + chapitre.id, consigneSysteme_(),
-    contenuDemande_(projetId, projet, chapitre, consignes, sources));
+    contenuDemande_(projetId, projet, chapitre, consignes, sources), modele);
 
   var noms = sources.lus.map(function (s) { return s.nom; });
   ecrireRedaction_(projetId, chapitre.id, {
     statut: 'en_cours', lot_id: lot.id, consignes: consignes,
-    message: 'Rédaction demandée. Sources jointes : ' + (noms.length ? noms.join(', ') : 'aucune')
+    message: 'Rédaction demandée (' + (modele.indexOf('opus') >= 0 ? 'Opus' : 'Sonnet') + '). Sources jointes : ' + (noms.length ? noms.join(', ') : 'aucune')
       + (sources.ignores.length ? '. Non lues : ' + sources.ignores.join(', ') : '') + '.'
   });
 
-  return { statut: 'en_cours', lotId: lot.id, sources: noms, ignores: sources.ignores };
+  return { statut: 'en_cours', lotId: lot.id, sources: noms, ignores: sources.ignores, modele: modele };
 }
 
 /** Règles de rédaction, communes à tous les chapitres. */
@@ -3812,12 +3853,12 @@ function contenuDemande_(projetId, donnees, chapitre, consignes, sources) {
 function texteBloc_(t) { return { type: 'text', text: t }; }
 
 /** Soumet une demande unique en lot ; renvoie le lot créé ({id, …}). */
-function envoyerLotClaude_(cle, identifiant, systeme, contenu) {
+function envoyerLotClaude_(cle, identifiant, systeme, contenu, modele) {
   var corps = {
     requests: [{
       custom_id: String(identifiant).replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 64),
       params: {
-        model: PropertiesService.getScriptProperties().getProperty(PROPRIETE_MODELE_CLAUDE) || MODELE_CLAUDE_DEFAUT,
+        model: modele || modeleDuChapitre_(null),
         max_tokens: JETONS_SORTIE_MAX,
         output_config: { effort: 'high' },
         system: systeme,
@@ -3907,15 +3948,23 @@ function blocsDossier_(projetId, donnees, chapitreExclu) {
  * directs, convertis en blocs lisibles par Claude.
  * @param {Array<string>} exclus chapitres déjà rédigés, qui passent par le fil conducteur.
  */
-function sourcesDuDossier_(dossier, exclus) {
+function sourcesDuDossier_(dossier, exclus, dossierDuChapitre) {
   var fichiers = [];
   var collecter = function (d) {
     var it = d.getFiles();
     while (it.hasNext()) fichiers.push(it.next());
   };
   collecter(dossier);
+  // Les sous-dossiers « Sources — … » des autres chapitres sont écartés ; le
+  // commun et celui du chapitre passent en premier (bornes de nombre et de poids).
+  var retenus = [], autres = [];
   var sous = dossier.getFolders();
-  while (sous.hasNext()) collecter(sous.next());
+  while (sous.hasNext()) {
+    var d = sous.next(), nom = d.getName();
+    if (nom === DOSSIER_SOURCES_COMMUN_PDS || nom === dossierDuChapitre) retenus.push(d);
+    else if (nom.indexOf(PREFIXE_SOURCES) !== 0) autres.push(d);
+  }
+  retenus.concat(autres).forEach(collecter);
 
   var lus = [], ignores = [], total = 0;
   fichiers.forEach(function (f) {
