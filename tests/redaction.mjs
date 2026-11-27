@@ -87,6 +87,7 @@ const appels = [];
 const etatApi = { statutLot: 'in_progress', resultat: null, lots: 0 };
 const REPONSE_CH1 = [
   '<chapitre><h1 class="x">1. Diagnostic territorial et contexte sanitaire</h1>',
+  '<figure data-schema>{"titre":"Parcours patient diabétique d\'Atlantic","etapes":[{"titre":"Repérage","detail":"En officine","acteur":"Pharmacien"},{"titre":"Consultation","acteur":"Médecin traitant"}]}</figure>',
   '<h2>1.1. Territoire</h2><p onclick="mal()">La commune compte 12 000 habitants (INSEE, RP 2021).</p>',
   '<figure data-graphique=\'{"type":"barres","titre":"APL médecins généralistes","source":"CartoSanté 2024","categories":["Commune","Département","France"],"series":[{"nom":"APL","valeurs":[2.1,2.9,3.3]}]}\'></figure>',
   '<table><tr><th>Indicateur</th><th>Valeur</th></tr><tr><td>APL</td><td>2,1</td></tr></table>',
@@ -132,7 +133,7 @@ const chaine = (o) => new Proxy(o, { get: (t, k) => (k in t ? t[k] : () => chain
 function element(type, texte = '', titre = H.NORMAL) {
   const el = {
     type, texte, titre,
-    getType: () => type, getText: () => texte, getHeading: () => el.titre,
+    getType: () => type, getText: () => texte, getHeading: () => el.titre, getNumChildren: () => 0,
     setHeading: (h) => { el.titre = h; return chaine(el); },
     editAsText: () => chaine({}),
     copy: () => element(type, texte, el.titre),
@@ -319,8 +320,10 @@ const corpsDoc = envoiDoc ? Buffer.from(envoiDoc.opts.payload).toString() : '';
 verifier('Google Docs créé dans le dossier 01, converti depuis HTML',
   corpsDoc.includes('"parents":["DOSSIER01"]') && corpsDoc.includes('application/vnd.google-apps.document') && corpsDoc.includes('text/html'), '');
 verifier('titre du document : projet, chapitre, version', corpsDoc.includes('PDS — MSP Santé Caraïbes — 1. Diagnostic territorial et contexte sanitaire — v1'), '');
-verifier('styles appliqués et attributs d\'origine retirés', /<h1 style="[^"]*color:#0b3c5d/.test(corpsDoc) && !corpsDoc.includes('class="x"'), '');
+verifier('titre en bandeau de couleur, attributs d\'origine retirés', /background-color:#0b3c5d[^>]*><h1 style="[^"]*color:#ffffff/.test(corpsDoc) && !corpsDoc.includes('class="x"'), '');
 verifier('script et gestionnaires d\'événements retirés', !corpsDoc.includes('<script') && !corpsDoc.includes('onclick'), '');
+verifier('schéma rendu en étapes numérotées reliées par des flèches', corpsDoc.includes('Parcours patient diabétique')
+  && corpsDoc.includes('▼') && corpsDoc.includes('Médecin traitant') && !corpsDoc.includes('data-schema'), '');
 verifier('graphique rendu en image avec sa source', corpsDoc.includes('data:image/png;base64,') && corpsDoc.includes('Source : CartoSanté 2024'), '');
 verifier('encadré converti en cellule colorée', !corpsDoc.includes('<blockquote') && /<td style="[^"]*background-color:#f3f8fb/.test(corpsDoc), '');
 verifier('fil conducteur et éléments à compléter enregistrés',
