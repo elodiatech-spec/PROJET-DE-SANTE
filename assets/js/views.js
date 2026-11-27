@@ -57,7 +57,7 @@ function tint(hex, alpha) {
 
 /* --------------------------------------------------------------------------
    Fichiers — format, icône et taille
-   Partagés par le coffre-fort, les livrables et la modale de dépôt.
+   Partagés par l’espace Documents, les livrables et la modale de dépôt.
    -------------------------------------------------------------------------- */
 
 /** Extension → famille de format retenue par l'application. */
@@ -2100,7 +2100,7 @@ const Views = {
       <div class="card">
         <div class="card__head">
           <div>
-            <h2 class="card__title"><i class="fa-solid fa-folder-open"></i> Coffre-fort documentaire</h2>
+            <h2 class="card__title"><i class="fa-solid fa-folder-open"></i> Documents</h2>
             <p class="card__subtitle">Ensemble des pièces du dossier, synchronisées avec le dossier Drive du projet.</p>
           </div>
           <div class="row-tight">
@@ -2222,7 +2222,7 @@ const Views = {
             <p class="card__subtitle">
               ${expert
                 ? "Déposez ici les liens des parapheurs créés pour chaque acte : le client y accède directement depuis son espace."
-                : "Les actes de votre dossier sont signés électroniquement. Chaque document signé est horodaté puis archivé dans votre coffre-fort."}
+                : "Les actes de votre dossier sont signés électroniquement. Chaque document signé est horodaté puis archivé dans vos Documents."}
             </p>
           </div>
           <div class="row-tight">
@@ -2265,7 +2265,7 @@ const Views = {
             <p class="text-sm text-soft grow">
               La signature s'effectue sur un parapheur électronique après authentification du signataire.
               Chaque acte signé fait l'objet d'un certificat d'horodatage conforme au règlement eIDAS,
-              puis l'original est archivé dans le coffre-fort documentaire du projet.
+              puis l'original est archivé dans l’espace Documents du projet.
             </p>
           </div>
         </div>
@@ -2358,7 +2358,7 @@ const Views = {
       <div class="card">
         <div class="card__head">
           <div>
-            <h2 class="card__title"><i class="fa-solid fa-calendar-days"></i> Planning & échéances</h2>
+            <h2 class="card__title"><i class="fa-solid fa-calendar-days"></i> Rendez-vous et réunions</h2>
             <p class="card__subtitle">Rendez-vous, jalons réglementaires et dates de livraison.</p>
           </div>
           <div class="row-tight">
@@ -2410,25 +2410,8 @@ const Views = {
           </div>`).join('') : empty('Aucun événement', 'Le planning est vide.', 'fa-solid fa-calendar')}
       </div>
 
-      <div class="card">
-        <div class="card__head">
-          <h3 class="card__title"><i class="fa-solid fa-hourglass-half"></i> Prochaines échéances de prestations</h3>
-        </div>
-        ${prestas.length ? `
-          <div class="stack-xs">
-            ${prestas.map((p) => {
-              const j = Dates.daysUntil(p.etat.echeance);
-              return `<div class="file-row">
-                  <div class="file-icon" style="color:${esc(LOTS[p.lot].couleur)}"><i class="${esc(LOTS[p.lot].icone)}"></i></div>
-                  <div class="grow">
-                    <div class="text-sm fw-800">${esc(p.titre)}</div>
-                    <div class="text-xs text-muted">${esc(LOTS[p.lot].nom)} · échéance ${esc(Dates.format(p.etat.echeance))}</div>
-                  </div>
-                  ${j < 0 ? badge(`Retard ${Math.abs(j)} j`, 'danger') : badge(`J-${j}`, j <= 7 ? 'warn' : 'neutre')}
-                </div>`;
-            }).join('')}
-          </div>` : empty('Aucune échéance', 'Toutes les prestations sont validées.', 'fa-solid fa-circle-check')}
-      </div>
+      <p class="text-xs text-muted"><i class="fa-solid fa-circle-info"></i> Les échéances des étapes du projet sont dans la
+        <a href="#" data-action="aller" data-route="feuille-route">Feuille de route</a>.</p>
     </section>`;
   },
 
@@ -2552,6 +2535,11 @@ const Views = {
   },
 
   /* ====================== COMPTES RENDUS ====================== */
+  /** Réunions : planning et comptes rendus réunis. */
+  reunions(filtres = {}) {
+    return Views.planning(filtres) + Views['comptes-rendus'](filtres);
+  },
+
   'comptes-rendus'() {
     const expert = Store.estExpert();
     const liste = Store.liste('comptesRendus');

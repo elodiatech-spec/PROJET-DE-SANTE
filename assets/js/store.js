@@ -285,7 +285,7 @@ function demoDonnees() {
         { id: 'm3', auteur: 'ARNOBE Frédéric', role: 'expert', texte: "Le contrat ACI est prêt et déposé sur le parapheur électronique. Il attend votre signature.", date: j(-10) },
       ],
       'msp-pointe-a-pitre': [
-        { id: 'm4', auteur: 'ARNOBE Frédéric', role: 'expert', texte: "Le diagnostic territorial est finalisé, vous pouvez le consulter dans le coffre-fort documentaire.", date: j(-8) },
+        { id: 'm4', auteur: 'ARNOBE Frédéric', role: 'expert', texte: "Le diagnostic territorial est finalisé, vous pouvez le consulter dans vos Documents.", date: j(-8) },
       ],
       'cds-gros-morne': [
         { id: 'm5', auteur: 'ARNOBE Frédéric', role: 'expert', texte: "Bonjour, l'analyse des besoins de santé est terminée. Je vous propose une visio la semaine prochaine.", date: j(-5) },
@@ -730,6 +730,7 @@ const Store = {
   },
 
   moduleAccessible(idModule, projetId) {
+    idModule = ALIAS_MODULES[idModule] || idModule;
     return this.modulesVisibles(projetId).some((m) => m.id === idModule);
   },
 
@@ -741,7 +742,7 @@ const Store = {
 
   /**
    * État des pièces justificatives d'un projet.
-   * Une pièce est fournie dès qu'un document du coffre-fort lui est rattaché
+   * Une pièce est fournie dès qu'un document de l’espace Documents lui est rattaché
    * (champ `piece`). Les pièces ne concernant aucun dossier ouvert restent
    * listées : elles seront demandées le moment venu.
    */
@@ -801,7 +802,7 @@ const Store = {
 
   /**
    * Retire une demande de pièce.
-   * Le document déjà rattaché n'est pas supprimé — il reste au coffre-fort,
+   * Le document déjà rattaché n'est pas supprimé — il reste dans l’espace Documents,
    * simplement détaché : retirer une demande ne doit pas détruire une pièce
    * que le client a réellement fournie.
    */
@@ -1137,6 +1138,7 @@ const Store = {
   },
 
   setRoute(route) {
+    route = ALIAS_MODULES[route] || route;
     if (!this.moduleAccessible(route)) return;
     this.commit((s) => { s.route = route; });
   },
