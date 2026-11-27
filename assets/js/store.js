@@ -1948,6 +1948,14 @@ const Store = {
     return r;
   },
 
+  /** Crée les sous-dossiers « Sources — … » du dossier 01 ; renvoie { crees, url }. */
+  async preparerSources() {
+    if (!this.ecritureActive()) throw new Error('la source Google Sheets doit être connectée');
+    return SheetsAdapter.envoyer(this.state.reglages.webAppUrl, {
+      action: 'preparerSources', projetId: this.state.projetActifId, ...this.porteCles(),
+    });
+  },
+
   /**
    * Réunit les chapitres validés en un seul Google Docs (page de garde,
    * sommaire, pied de page). Synchrone : quelques secondes.

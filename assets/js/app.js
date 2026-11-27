@@ -1301,6 +1301,22 @@ const App = {
       });
     },
 
+    async 'redac-sources'(el) {
+      const libelle = el.innerHTML;
+      el.disabled = true;
+      try {
+        const r = await Store.preparerSources();
+        toast(r.crees ? `${r.crees} dossier(s) de sources créé(s) dans « 01 — Projet de santé ».`
+          : 'Les dossiers de sources existent déjà.', 'ok');
+        if (r.url) window.open(r.url, '_blank', 'noopener');
+      } catch (err) {
+        toast(`Création impossible : ${err.message}`, 'danger');
+      } finally {
+        el.disabled = false;
+        el.innerHTML = libelle;
+      }
+    },
+
     async 'redac-assembler'(el) {
       if (!Store.ecritureActive()) {
         toast('L\'assemblage passe par la base Google Sheets : connectez-la d\'abord.', 'warn');

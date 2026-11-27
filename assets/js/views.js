@@ -537,11 +537,17 @@ function carteRedaction() {
             <span class="badge badge--neutre" style="margin-left:6px"><i class="fa-solid fa-lock"></i> Visible par vous seul</span></h3>
           <p class="card__subtitle">
             Claude rédige chaque chapitre à partir du dossier : fiche du projet, informations du client,
-            partenaires, financements et fichiers déposés dans « 01 — Projet de santé » (exports CartoSanté,
-            INSEE, ODISSÉ… en PDF, Google Docs ou Google Sheets). Les chapitres déjà rédigés lui sont rappelés
-            pour garder un document cohérent. Toute donnée absente des sources est signalée
-            <em>[donnée à compléter]</em>, jamais inventée.
+            partenaires, financements et sources déposées dans « 01 — Projet de santé » (exports CartoSanté,
+            INSEE, ODISSÉ… en PDF, Google Docs ou Google Sheets). Chaque chapitre ne reçoit que
+            « Sources — Commun » et son propre dossier (« Sources — Chapitre 1 »…) : moins de pages
+            envoyées, moins de coût. Les chapitres déjà rédigés lui sont rappelés pour garder un document
+            cohérent. Toute donnée absente des sources est signalée <em>[donnée à compléter]</em>, jamais inventée.
           </p>
+          <p class="text-xs text-muted"><i class="fa-solid fa-microchip"></i>
+            Chapitres 1 et 2 rédigés par Claude Opus (analyse des données) ; les autres par Claude Sonnet,
+            deux fois moins coûteux.</p>
+          <button class="btn btn--sm" data-action="redac-sources" ${actif ? '' : 'disabled'} style="margin-top:6px">
+            <i class="fa-solid fa-folder-tree"></i> Créer les dossiers de sources</button>
         </div>
         <span class="badge badge--${nbValides === CHAPITRES_REDACTION.length ? 'ok' : 'neutre'}">${nbValides} / ${CHAPITRES_REDACTION.length} validés</span>
       </div>

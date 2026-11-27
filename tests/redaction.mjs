@@ -64,10 +64,17 @@ const fichiersSources = [
   fichier('gdoc1', 'Notes INSEE', 'application/vnd.google-apps.document', ''),
   fichier('docx1', 'Ancien projet.docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'x'),
 ];
+const sousDossier = (nom, fichiers) => ({ getName: () => nom, getFiles: () => iterateur(fichiers), getFolders: () => iterateur([]) });
+const sourcesCh1 = sousDossier('Sources — Chapitre 1', [fichier('s1', 'Filosofi commune.pdf', 'application/pdf', '%PDF pauvreté')]);
+const sourcesCh2 = sousDossier('Sources — Chapitre 2', [fichier('s2', 'Organigramme équipe.pdf', 'application/pdf', '%PDF équipe')]);
+const sourcesCommun = sousDossier('Sources — Commun', [fichier('s0', 'Fiche commune.pdf', 'application/pdf', '%PDF commune')]);
+const dossiersCrees = [];
 const dossier01 = {
   getId: () => 'DOSSIER01', getName: () => '01 — Projet de santé',
+  getFolders: () => iterateur([sourcesCh1, sourcesCh2, sourcesCommun]),
+  createFolder: (n) => { dossiersCrees.push(n); },
   searchFiles: () => iterateur([fichier('logo1', 'logo MSP.png', 'image/png', 'PNG')]),
-  getFiles: () => iterateur(fichiersSources), getFolders: () => iterateur([]),
+  getFiles: () => iterateur(fichiersSources), getUrl: () => 'https://drive.google.com/drive/folders/DOSSIER01',
 };
 const dossierProjet = {
   getId: () => ID_DOSSIER, getName: () => 'Projet',
@@ -263,7 +270,12 @@ const params = corps.requests[0].params;
 const texteDemande = (params.messages?.[0]?.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('\n');
 verifier('en-têtes : clé et version de l\'API', envoi?.opts.headers['x-api-key'] === 'sk-ant-test'
   && envoi?.opts.headers['anthropic-version'] === '2026-10-21', JSON.stringify(envoi?.opts.headers));
-verifier('modèle par défaut claude-opus-5-5', params.model === 'claude-opus-5-5', params.model);
+verifier('chapitre 1 (analyse) : Claude Opus', params.model === 'claude-opus-5-5', params.model);
+verifier('sources : commun et chapitre 1 joints', (demande.redaction.sources || []).includes('Filosofi commune.pdf')
+  && (demande.redaction.sources || []).includes('Fiche commune.pdf'), JSON.stringify(demande.redaction.sources));
+verifier('sources : celles du chapitre 2 écartées', !(demande.redaction.sources || []).includes('Organigramme équipe.pdf'), JSON.stringify(demande.redaction.sources));
+verifier('dossiers de sources manquants créés', dossiersCrees.includes('Sources — Introduction') && dossiersCrees.includes('Sources — Chapitre 6')
+  && !dossiersCrees.includes('Sources — Chapitre 1'), JSON.stringify(dossiersCrees));
 verifier('paramètres permis seulement (pas de temperature)', params.max_tokens > 0 && params.output_config?.effort === 'high'
   && !('temperature' in params) && !('top_p' in params), JSON.stringify(Object.keys(params)));
 verifier('consigne système : interdiction d\'inventer des données', /N'invente jamais une donnée/.test(params.system || ''), '');
@@ -369,6 +381,18 @@ const echec = expert({ action: 'suivreRedaction', projetId: P, chapitre: 'ch2' }
 verifier('lot en erreur : statut erreur et motif lisible', echec.redaction?.statut === 'erreur' && /prompt is too long/.test(echec.redaction?.message), JSON.stringify(echec.redaction));
 const relance = expert({ action: 'redigerChapitre', projetId: P, chapitre: 'ch2' });
 verifier('après une erreur, nouvelle demande possible', !relance.erreur, relance.erreur);
+
+/* --- Modèle économique pour les chapitres d'organisation --- */
+const avant3 = appels.length;
+const d3 = expert({ action: 'redigerChapitre', projetId: P, chapitre: 'ch3' });
+const envoi3 = appels.slice(avant3).find((a) => a.opts.method === 'post' && a.url.endsWith('/batches'));
+verifier('chapitre 3 : Claude Sonnet', !d3.erreur && JSON.parse(envoi3.opts.payload).requests[0].params.model === 'claude-sonnet-5-5', d3.erreur);
+verifier('chapitre 3 : ni les sources du chapitre 1 ni celles du 2',
+  !(d3.redaction.sources || []).some((n) => /Filosofi|Organigramme/.test(n)), JSON.stringify(d3.redaction.sources));
+const prep = expert({ action: 'preparerSources', projetId: P });
+verifier('préparation des dossiers de sources : réservée, sans erreur', !prep.erreur && typeof prep.crees === 'number', prep.erreur);
+const prepClient = appel({ jeton: JETON_CLIENT, action: 'preparerSources', projetId: P });
+verifier('client : ne peut pas créer les dossiers de sources', !!prepClient.erreur, prepClient.erreur);
 
 /* --- Concordance avec l'application --- */
 const ctx = vm.createContext({});

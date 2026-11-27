@@ -106,13 +106,18 @@ vérifie qu'ils concordent.
 Page **Projet de santé**, carte « Rédaction avec Claude », visible par l'expert seul. Un bouton par
 chapitre du plan ARS (introduction et préambule, chapitres 1 à 6 et conclusion).
 
-1. Déposer les sources dans le dossier Drive **« 01 — Projet de santé »** du projet (ou un
-   sous-dossier) : exports CartoSanté, INSEE, ODISSÉ, POSS… en PDF, Google Docs ou Google Sheets.
-   Les fichiers Word ou Excel ne sont pas lus : les convertir en Google Docs / Sheets.
+1. Déposer les sources dans **« 01 — Projet de santé »**, dans les sous-dossiers créés par le
+   bouton « Créer les dossiers de sources » (ou à la première rédaction) : **« Sources — Commun »**
+   (joint à tous les chapitres) et **« Sources — Introduction »**, **« Sources — Chapitre 1 »** à
+   **« Sources — Chapitre 6 »** (joint au seul chapitre concerné). Exports CartoSanté, INSEE,
+   ODISSÉ, POSS… en PDF, Google Docs ou Google Sheets ; les fichiers Word ou Excel ne sont pas lus.
+   Les fichiers posés à la racine ou dans d'autres sous-dossiers restent joints à tous les chapitres.
 2. « Rédiger avec Claude » : le script joint la fiche du projet, les informations du client,
    les partenaires, les financements, les sources, un chapitre modèle (structure et ton seulement)
    et les faits retenus par les chapitres déjà rédigés. La demande part par l'API Message Batches
-   (modèle `claude-opus-5-5`, propriété `CLAUDE_MODELE` pour en changer).
+   Modèles : `claude-opus-5-5` pour les chapitres 1 et 2 (analyse), `claude-sonnet-5-5` pour les
+   autres chapitres et les actes (deux fois moins coûteux) ; la propriété `CLAUDE_MODELE` remplace
+   le modèle par défaut. Facturation à l'usage, tarif « Batch » (−50 %).
 3. L'application vérifie toutes les 40 secondes ; à la fin, le chapitre devient un Google Docs
    mis en forme (titres, tableaux, encadrés, graphiques rendus en image) dans « 01 — Projet de santé ».
 4. « Valider et transmettre au client » : le chapitre rejoint les documents du client et les
