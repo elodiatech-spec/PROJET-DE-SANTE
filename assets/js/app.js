@@ -1301,6 +1301,28 @@ const App = {
       });
     },
 
+    'redac-importer'(el) {
+      const id = el.dataset.chapitre;
+      const def = CHAPITRES_REDACTION.find((c) => c.id === id);
+      if (!def) return;
+      Modal.formulaire({
+        titre: `Importer — ${def.titre}`,
+        soustitre: 'Pour un chapitre déjà rédigé hors de l\'application. Le Google Docs reste à sa place ; '
+          + 'il entre dans l\'assemblage et sert de référence aux chapitres rédigés ensuite par Claude.',
+        champs: [{ id: 'url', label: 'Lien du Google Docs', type: 'text', requis: true,
+          placeholder: 'https://docs.google.com/document/d/…/edit' }],
+        libelle: 'Importer',
+        onSubmit: async (v) => {
+          try {
+            await Store.importerChapitre(id, v.url);
+            toast(`${def.titre} : importé. Relisez-le puis validez-le.`, 'ok');
+          } catch (err) {
+            toast(`Import impossible : ${err.message}`, 'danger');
+          }
+        },
+      });
+    },
+
     async 'redac-sources'(el) {
       const libelle = el.innerHTML;
       el.disabled = true;
