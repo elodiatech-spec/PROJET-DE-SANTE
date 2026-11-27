@@ -1323,6 +1323,38 @@ const App = {
       });
     },
 
+    /** Dépôt direct dans « Sources — … » ou « Visuels — … » du dossier 01. */
+    'atelier-deposer'(el) {
+      const dossier = el.dataset.dossier;
+      const images = !!el.dataset.images;
+      const champ = document.createElement('input');
+      champ.type = 'file';
+      champ.multiple = true;
+      champ.accept = images ? 'image/png,image/jpeg,image/webp' : '.pdf,.txt,.csv,application/pdf,image/png,image/jpeg';
+      champ.addEventListener('change', async () => {
+        const fichiers = [...champ.files];
+        if (!fichiers.length) return;
+        const libelle = el.innerHTML;
+        el.disabled = true;
+        let ok = 0;
+        for (const f of fichiers) {
+          el.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> ${ok + 1} / ${fichiers.length}`;
+          try {
+            await Store.televerserFichier({ nom: f.name, mimeType: f.type || 'application/octet-stream',
+              base64: await lireEnBase64(f), sousDossier: dossier });
+            ok += 1;
+          } catch (err) {
+            toast(`« ${f.name} » non déposé : ${err.message}`, 'danger');
+          }
+        }
+        el.disabled = false;
+        el.innerHTML = libelle;
+        if (ok) toast(`${ok} fichier${ok > 1 ? 's' : ''} déposé${ok > 1 ? 's' : ''} dans « ${dossier} ».`
+          + (images ? '' : ' Les Google Docs et Sheets se déposent directement dans le Drive.'), 'ok');
+      });
+      champ.click();
+    },
+
     async 'redac-sources'(el) {
       const libelle = el.innerHTML;
       el.disabled = true;
