@@ -357,6 +357,8 @@ function demoDonnees() {
     // Rédaction avec Claude : { [projetId]: { [chapitre]: { statut, docUrl, … } } }.
     // Réservée à l'expert ; vide en démonstration, la rédaction exigeant le script.
     redaction: {},
+    // Signature interne : signataires et liens personnels, par projet (expert).
+    signataires: {},
     // Actes générés avec Claude : même forme, réservés à l'expert.
     actes: {},
     // Informations fournies par le client (module « Informations du projet »).
@@ -500,7 +502,7 @@ const Store = {
       });
       ['projets', 'documents', 'signatures', 'messages', 'evenements',
        'comptesRendus', 'financements', 'partenaires', 'pieces', 'prestataires',
-       'intervenantsImmo', 'questionnaire', 'redaction', 'actes', 'emetteur'].forEach((cle) => {
+       'intervenantsImmo', 'questionnaire', 'redaction', 'actes', 'emetteur', 'signataires'].forEach((cle) => {
         if (sauvegarde[cle]) this.state[cle] = sauvegarde[cle];
       });
     }
@@ -551,7 +553,7 @@ const Store = {
       if (this.state.reglages.source === 'sheets') {
         ['projets', 'documents', 'signatures', 'messages', 'evenements',
          'comptesRendus', 'financements', 'partenaires', 'pieces',
-         'experts', 'prestataires', 'questionnaire', 'redaction', 'actes', 'emetteur'].forEach((cle) => {
+         'experts', 'prestataires', 'questionnaire', 'redaction', 'actes', 'emetteur', 'signataires'].forEach((cle) => {
           delete aEnregistrer[cle];
         });
       }
@@ -1948,6 +1950,57 @@ const Store = {
         + `${(r.ignores || []).length ? `. Non lues : ${r.ignores.join(', ')}` : ''}.`,
     }, projetId);
     return r;
+  },
+
+  /* ---- Documents du dossier et signature interne (expert) ---- */
+
+  async _appelExpert(action, champs = {}) {
+    if (!this.ecritureActive()) throw new Error('la source Google Sheets doit être connectée');
+    return SheetsAdapter.envoyer(this.state.reglages.webAppUrl, {
+      action, projetId: this.state.projetActifId, ...champs, ...this.porteCles(),
+    });
+  },
+
+  /** Une lettre préremplie par professionnel nommé ; chacune est rangée dans Documents. */
+  async genererLettresEngagement() {
+    const rep = await this._appelExpert('genererLettresEngagement');
+    (rep.lettres || []).forEach((l) => this.ajouterDocument({
+      nom: `Lettre d'engagement — ${l.nom}`, cat: 'Équipe', url: l.url, type: 'gdoc', piece: 'D12',
+      signataire: l.nom, email: l.email,
+    }));
+    return rep.lettres || [];
+  },
+
+  /** Copie un modèle type ElodiaTech dans le dossier du client (prérempli). */
+  async copierModele(modele) {
+    const p = this.projet();
+    const id = modele === 'devis' ? `devis_${p?.formule || 'F1'}` : modele;
+    const rep = await this._appelExpert('copierModele', { modele: id });
+    if (rep.document) this.ajouterDocument({ nom: rep.document.nom, cat: rep.document.categorie, url: rep.document.url, type: 'gdoc' });
+    return rep.document;
+  },
+
+  signataires(projetId) {
+    return this.state.signataires?.[projetId || this.state.projetActifId] || [];
+  },
+
+  /** Liens de signature personnels pour un document ; suivi dans Validation & signatures. */
+  async preparerSignature({ titre, docUrl, signataires }) {
+    const signatureId = idUnique('s');
+    const rep = await this._appelExpert('preparerSignature', { titre, docUrl, signataires, signatureId });
+    this.commit((s) => {
+      const id = s.projetActifId;
+      if (!s.signatures[id]) s.signatures[id] = [];
+      s.signatures[id].unshift({ id: signatureId, titre, desc: `Signature interne — ${signataires.length} signataire(s)`, statut: 'a_signer', date: Dates.today(), url: docUrl });
+      s.signataires[id] = rep.signataires || [];
+    });
+    this._pousserItem('signatures', this.liste('signatures').find((x) => x.id === signatureId));
+    return rep.signataires || [];
+  },
+
+  async annulerSignataire(id) {
+    const rep = await this._appelExpert('annulerSignature', { id });
+    this.commit((s) => { s.signataires[s.projetActifId] = rep.signataires || []; });
   },
 
   /** Rattache un Google Docs existant au chapitre (rédigé hors application). */

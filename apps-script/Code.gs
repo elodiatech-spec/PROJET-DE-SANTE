@@ -186,6 +186,11 @@ var ONGLETS = {
     "tel",
     "lot"
   ],
+  // Signature électronique simple (interne) : un jeton par signataire et par document.
+  "Signataires": [
+    "projet_id", "id", "signature_id", "doc_id", "doc_titre", "nom", "email", "qualite",
+    "jeton", "statut", "signe_le", "nom_saisi", "empreinte", "cree_le"
+  ],
   // Société émettrice des devis, factures et contrats : une seule ligne.
   // Lue par l'expert seul (coordonnées bancaires).
   "Emetteur": [
@@ -2680,6 +2685,7 @@ function nouveauJeton() {
  * tomber sur du JSON. Aucune donnée n'est livrée ici, dans les deux cas.
  */
 function doGet(e) {
+  if (e && e.parameter && e.parameter.signer) return pageSignature_(String(e.parameter.signer));
   if (e && e.parameter && e.parameter.diag === '1') {
     return json({
       ok: true,
@@ -2801,6 +2807,7 @@ function construireDonnees(projetIdUnique) {
     donnees.redaction = donneesRedaction_(projets);
     donnees.actes = donneesActes_(projets);
     donnees.emetteur = emetteur_();
+    donnees.signataires = donneesSignataires_(projets);
     donnees.experts = lireOnglet('Experts').map(function (r) {
       return {
         id: r.id, nom: r.nom || '', fonction: r.fonction || '',
@@ -3002,6 +3009,16 @@ function doPost(e) {
       return json({ ok: true, redaction: requete.action === 'redigerChapitre'
         ? redigerChapitre(requete) : suivreRedaction(requete) });
     }
+    // Documents du dossier et signatures internes : réservés à l'expert.
+    if (['genererLettresEngagement', 'copierModele', 'preparerSignature', 'annulerSignature'].indexOf(requete.action) !== -1) {
+      if (acces.role !== 'expert') throw new Error('Réservé à l\'expert.');
+      verrou.waitLock(25000);
+      if (requete.action === 'genererLettresEngagement') return json({ ok: true, lettres: genererLettresEngagement(requete) });
+      if (requete.action === 'copierModele') return json({ ok: true, document: copierModele(requete) });
+      if (requete.action === 'preparerSignature') return json({ ok: true, signataires: preparerSignature(requete) });
+      return json({ ok: true, signataires: annulerSignature(requete) });
+    }
+
     // Sous-dossiers de sources par chapitre, pour un projet déjà créé.
     if (requete.action === 'preparerSources') {
       if (acces.role !== 'expert') throw new Error('Réservé à l\'expert.');
@@ -4409,6 +4426,280 @@ function creerGoogleDoc_(nom, html, dossierId) {
   }
   var f = JSON.parse(rep.getContentText());
   return { id: f.id, url: f.webViewLink || ('https://docs.google.com/document/d/' + f.id + '/edit') };
+}
+
+/* ==========================================================================
+   DOCUMENTS DU DOSSIER ET SIGNATURE INTERNE
+
+   Lettres d'engagement générées pour chaque professionnel ; modèles types
+   ElodiaTech copiés dans le dossier du client ; signature électronique
+   simple : chaque signataire reçoit un lien personnel, lit le document en
+   PDF, tape son nom et approuve. L'heure, le nom saisi et l'empreinte
+   SHA-256 du PDF signé sont consignés ; quand tous ont signé, un
+   certificat de signature est créé à côté du document. Réservée aux
+   documents qui n'exigent pas de signature qualifiée (lettres, chartes,
+   projet de santé) : les statuts et actes juridiques passent par DocuSeal
+   ou WM Goodflag.
+   ========================================================================== */
+
+/** Modèles types (Drive) que l'expert peut copier dans le dossier d'un client. */
+var MODELES_TYPES = {
+  mandat_accompagnement: { titre: "Mandat d'accompagnement", id: '1yVXC3KscXV3DT2IRMI_qdM7qB3xvpzz80A37Fh09ilo', categorie: 'Juridique' },
+  mandat_administratif: { titre: 'Mandat administratif', id: '1Z7QjJ-tHBsRykJjw0Ah9dQFRvl-Nwt-b6D9USew-8YQ', categorie: 'Juridique' },
+  accord_confidentialite: { titre: 'Accord de confidentialité', id: '19kU7-IMMhjc28NvmKtETTL8HVG0axT189DGcHAzJqyU', categorie: 'Juridique' },
+  devis_F1: { titre: 'Devis — Formule F1', id: '1fpYIeMmmoi6Dw0UCOcaN9xhzCGLzAAGJjU_HX62Xcx4', categorie: 'Finances' },
+  devis_F2: { titre: 'Devis — Formule F2', id: '1d6JzxzISJIbk5rLT841Hvu1m4Q02eEAbuaP1gFJQHO0', categorie: 'Finances' },
+  devis_F3: { titre: 'Devis — Formule F3', id: '15Lz6P_OIKDnXKp33TrZEVuz5H-5u16bnjqQ_7iCLCPE', categorie: 'Finances' }
+};
+
+function projetLigne_(projetId) {
+  var p = lireOnglet('Projets').filter(function (r) { return String(r.id) === projetId; })[0];
+  if (!p) throw new Error('Projet introuvable.');
+  return p;
+}
+
+/** Copie un modèle type dans le dossier du client et préremplit ce qui est connu. */
+function copierModele(requete) {
+  var projetId = String(requete.projetId || '');
+  var m = MODELES_TYPES[String(requete.modele || '')];
+  if (!m) throw new Error('Modèle inconnu.');
+  var p = projetLigne_(projetId);
+  var dossier = sousDossierCategorie(dossierDuProjet(projetId), m.categorie);
+  var copie = DriveApp.getFileById(m.id).makeCopy(m.titre + ' — ' + (p.nom || projetId), dossier);
+  var corps = DocumentApp.openById(copie.getId()).getBody();
+  var nomClient = String(p.nom || '');
+  var representant = [p.client_nom, p.client_fonction].filter(Boolean).join(', ');
+  var remplacements = [
+    ['\\[Nom de la structure ou du client\\]', nomClient],
+    ['\\[nom du projet\\]', nomClient],
+    ['\\[commune\\]', String(p.ville || '')],
+    ['\\[dénomination ou nom, prénom\\]', nomClient],
+    ['\\[nom, prénom ou dénomination\\]', nomClient],
+    ['\\[cabinet, société d\'exercice libéral, entreprise individuelle ou société\\]', nomClient],
+    ['\\[courriel du client\\]', String(p.client_email || '')],
+    ['Représentée par : \\[nom, prénom, qualité\\]', 'Représentée par : ' + representant]
+  ];
+  remplacements.forEach(function (r) { if (r[1]) corps.replaceText(r[0], r[1]); });
+  DocumentApp.openById(copie.getId()).saveAndClose();
+  return { id: copie.getId(), url: copie.getUrl(), nom: copie.getName(), categorie: m.categorie };
+}
+
+/** Lettre d'engagement préremplie pour chaque professionnel du questionnaire. */
+function genererLettresEngagement(requete) {
+  var projetId = String(requete.projetId || '');
+  var p = projetLigne_(projetId);
+  var ligne = lireOnglet('Questionnaire').filter(function (r) { return String(r.projet_id) === projetId && r.rubrique === 'equipe'; })[0];
+  var pros = [];
+  try { pros = (JSON.parse(String(ligne && ligne.donnees || '{}')).pros || []); } catch (e) { pros = []; }
+  pros = pros.filter(function (x) { return x.nom && !/^\[/.test(String(x.nom)); });
+  if (!pros.length) throw new Error('Aucun professionnel nommé dans « Informations du projet ».');
+  var dossier = sousDossierCategorie(dossierDuProjet(projetId), 'Équipe');
+  return pros.map(function (x) {
+    var nom = [x.prenom && !/^\[/.test(x.prenom) ? x.prenom : '', x.nom].filter(Boolean).join(' ');
+    var doc = creerGoogleDoc_("Lettre d'engagement — " + nom + ' — ' + (p.nom || ''), htmlLettreEngagement_(p, x, nom), dossier.getId());
+    return { nom: nom, email: String(x.email || ''), qualite: String(x.profession || ''), docId: doc.id, url: doc.url };
+  });
+}
+
+function htmlLettreEngagement_(p, x, nom) {
+  var police = 'font-family:Arial,sans-serif;';
+  var e = echapperHtml_;
+  var cel = function (l, v) {
+    return '<tr><td style="' + police + 'font-size:9.5pt;width:35%;background-color:' + COULEURS_PDS.entete + ';border:1pt solid ' + COULEURS_PDS.bordure
+      + ';padding:5pt;"><strong>' + l + '</strong></td><td style="' + police + 'font-size:9.5pt;width:65%;border:1pt solid ' + COULEURS_PDS.bordure + ';padding:5pt;">' + v + '</td></tr>';
+  };
+  var titre = function (t) {
+    return '<table style="border-collapse:collapse;width:100%;margin:10pt 0 4pt 0;"><tr><td style="background-color:' + COULEURS_PDS.accent
+      + ';padding:4pt 8pt;"><span style="' + police + 'font-size:11.5pt;font-weight:bold;color:#ffffff;">' + t + '</span></td></tr></table>';
+  };
+  var par = function (t) { return '<p style="' + police + 'font-size:10pt;line-height:1.35;text-align:justify;">' + t + '</p>'; };
+  var type = p.type === 'CDS' ? 'Centre de santé' : 'Maison de santé pluriprofessionnelle';
+  var article = p.type === 'CDS' ? "l'article L6323-1-10 du Code de la santé publique" : "l'article L6323-3 du Code de la santé publique";
+  return '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>'
+    + '<p style="' + police + 'font-size:20pt;font-weight:bold;color:' + COULEURS_PDS.titre + ';">LETTRE D\'ENGAGEMENT</p>'
+    + '<p style="' + police + 'font-size:10pt;color:' + COULEURS_PDS.accent + ';">Engagement dans le projet de santé — ' + e(p.nom || '') + '</p>'
+    + titre('Structure concernée') + '<table style="border-collapse:collapse;width:100%;">'
+    + cel('Structure', e(p.nom || '')) + cel('Type', type) + cel('Commune', e(p.ville || '')) + cel('Porteur du projet', e(p.client_nom || '')) + '</table>'
+    + titre('Le professionnel signataire') + '<table style="border-collapse:collapse;width:100%;">'
+    + cel('Nom, prénom', e(nom)) + cel('Profession', e(x.profession || '')) + cel('N° RPPS / ADELI', '[à compléter]')
+    + cel('Site d\'exercice', e(x.site || '')) + cel('Statut dans la structure', e(x.statut || '')) + cel('Rôle dans le projet', e(x.role || ''))
+    + cel('Courriel', e(x.email || '[à compléter]')) + '</table>'
+    + titre('Engagement')
+    + par('Je soussigné(e), ' + e(nom) + ', déclare avoir pris connaissance du projet de santé de la structure ' + e(p.nom || '')
+      + ' et m\'engager à y participer, dans le respect de mon indépendance professionnelle et de la déontologie propre à ma profession, '
+      + 'conformément à ' + article + '.')
+    + par('Je m\'engage notamment à participer à l\'élaboration et à la mise en œuvre du projet de santé ; à contribuer à l\'exercice coordonné '
+      + '(réunions de concertation pluriprofessionnelle, protocoles, partage d\'informations dans le respect du secret professionnel) ; '
+      + 'à participer, selon ma profession, aux actions de prévention et de santé publique prévues ; à contribuer à l\'accès et à la continuité des soins ; '
+      + 'à respecter les règles de fonctionnement de la structure ; et à informer la structure de toute modification de ma situation d\'exercice.')
+    + titre('Portée de l\'engagement')
+    + par('La présente lettre exprime une intention ferme de participer au projet. Elle ne vaut ni contrat d\'exercice, ni contrat de travail, '
+      + 'ni cession de parts. Elle peut être jointe au dossier déposé auprès de l\'Agence régionale de santé.')
+    + titre('Signature')
+    + par('Fait à ……………………, le …/…/……') + par('Signature :<br><br><br>')
+    + '<p style="' + police + 'font-size:8.5pt;color:#5b6b7b;text-align:center;">Document préparé par ElodiaTech pour le compte de la structure.</p>'
+    + '</body></html>';
+}
+
+/* ------------------------------------------------- Signature interne -- */
+
+function urlService_() {
+  try { return ScriptApp.getService().getUrl(); } catch (e) { return ''; }
+}
+
+function donneesSignataires_(projets) {
+  var base = urlService_();
+  var parProjet = {};
+  projets.forEach(function (p) { parProjet[p.id] = []; });
+  lireOnglet('Signataires').forEach(function (r) {
+    if (!parProjet[r.projet_id]) return;
+    parProjet[r.projet_id].push({
+      id: String(r.id), signatureId: String(r.signature_id || ''), docId: String(r.doc_id || ''), docTitre: String(r.doc_titre || ''),
+      nom: String(r.nom || ''), email: String(r.email || ''), qualite: String(r.qualite || ''), statut: String(r.statut || ''),
+      signeLe: String(r.signe_le || ''), lien: base + '?signer=' + r.jeton
+    });
+  });
+  return parProjet;
+}
+
+/** Crée un lien de signature par signataire pour un Google Docs du dossier. */
+function preparerSignature(requete) {
+  var projetId = String(requete.projetId || '');
+  projetLigne_(projetId);
+  var docId = String(requete.docUrl || '').match(/[-\w]{25,}/);
+  if (!docId) throw new Error('Lien du document non reconnu.');
+  try { DriveApp.getFileById(docId[0]).getName(); } catch (e) { throw new Error('Document introuvable.'); }
+  var signataires = (requete.signataires || []).filter(function (x) { return x && String(x.nom || '').trim(); });
+  if (!signataires.length) throw new Error('Aucun signataire.');
+  var feuille = assurerOnglet_('Signataires');
+  var entetes = ONGLETS['Signataires'];
+  var maintenant = new Date().toISOString();
+  signataires.forEach(function (x) {
+    var ligne = {
+      projet_id: projetId, id: 'sg' + nouveauJeton().slice(0, 8), signature_id: String(requete.signatureId || ''),
+      doc_id: docId[0], doc_titre: String(requete.titre || '').slice(0, 200), nom: String(x.nom).slice(0, 120),
+      email: String(x.email || '').slice(0, 120), qualite: String(x.qualite || '').slice(0, 120),
+      jeton: nouveauJeton(), statut: 'en_attente', signe_le: '', nom_saisi: '', empreinte: '', cree_le: maintenant
+    };
+    feuille.appendRow(entetes.map(function (h) { return ligne[h]; }));
+  });
+  return donneesSignataires_([{ id: projetId }])[projetId];
+}
+
+function annulerSignature(requete) {
+  var projetId = String(requete.projetId || '');
+  var feuille = assurerOnglet_('Signataires');
+  var v = feuille.getDataRange().getValues();
+  var iP = v[0].indexOf('projet_id'), iId = v[0].indexOf('id'), iS = v[0].indexOf('statut');
+  for (var l = v.length - 1; l >= 1; l--) {
+    if (String(v[l][iP]) === projetId && String(v[l][iId]) === String(requete.id) && String(v[l][iS]) === 'en_attente') feuille.deleteRow(l + 1);
+  }
+  return donneesSignataires_([{ id: projetId }])[projetId];
+}
+
+function ligneSignataire_(jeton) {
+  if (!/^[a-z0-9]{12,}$/i.test(jeton)) return null;
+  return lireOnglet('Signataires').filter(function (r) { return String(r.jeton) === jeton; })[0] || null;
+}
+
+/** Page publique de signature, atteinte par le lien personnel du signataire. */
+function pageSignature_(jeton) {
+  var r = ligneSignataire_(jeton);
+  var e = echapperHtml_;
+  var css = '<style>body{margin:0;background:#f4f7fa;font-family:Arial,sans-serif;color:#0b3c5d}.c{max-width:680px;margin:30px auto;background:#fff;'
+    + 'border-radius:12px;padding:28px;box-shadow:0 2px 12px rgba(0,0,0,.08)}h1{font-size:20px;margin:0 0 6px}p{line-height:1.55;color:#33475b}'
+    + '.b{display:inline-block;background:#1e95cb;color:#fff;border:0;border-radius:8px;padding:12px 22px;font-weight:700;text-decoration:none;cursor:pointer;font-size:15px}'
+    + '.s{background:#0b3c5d}input[type=text]{width:100%;padding:10px;border:1px solid #c9dfeb;border-radius:8px;font-size:15px;box-sizing:border-box}'
+    + 'label{display:block;margin:14px 0 6px;font-weight:700}.ok{background:#f2f8e3;border-left:4px solid #a5c836;padding:12px}.m{font-size:12px;color:#5b6b7b}</style>';
+  var corps;
+  if (!r) {
+    corps = '<h1>Lien de signature invalide</h1><p>Ce lien n\'existe pas ou a été annulé. Contactez ElodiaTech.</p>';
+  } else if (String(r.statut) === 'signe') {
+    corps = '<h1>' + e(r.doc_titre) + '</h1><div class="ok">Document signé par ' + e(r.nom_saisi) + ' le ' + e(String(r.signe_le).replace('T', ' à ').slice(0, 19)) + ' (UTC).</div>';
+  } else {
+    var pdf = '';
+    try { pdf = Utilities.base64Encode(DriveApp.getFileById(String(r.doc_id)).getAs('application/pdf').getBytes()); } catch (err) { pdf = ''; }
+    corps = '<h1>' + e(r.doc_titre) + '</h1><p>Document à signer par <strong>' + e(r.nom) + '</strong>' + (r.qualite ? ' (' + e(r.qualite) + ')' : '') + '.</p>'
+      + (pdf ? '<p><a class="b s" download="' + e(r.doc_titre) + '.pdf" href="data:application/pdf;base64,' + pdf + '">Lire le document (PDF)</a></p>' : '<p>Document momentanément indisponible.</p>')
+      + '<label for="n">Votre nom et prénom</label><input id="n" type="text" autocomplete="name">'
+      + '<label><input id="a" type="checkbox"> J\'ai lu le document et je l\'approuve.</label>'
+      + '<p><button class="b" id="go">Signer le document</button></p><p id="r"></p>'
+      + '<p class="m">Signature électronique simple : votre nom, l\'heure de signature et l\'empreinte du document sont enregistrés. '
+      + 'ElodiaTech — Ingénierie médicale.</p>'
+      + '<script>document.getElementById("go").onclick=function(){var n=document.getElementById("n").value.trim(),a=document.getElementById("a").checked,r=document.getElementById("r");'
+      + 'if(!n||!a){r.textContent="Indiquez votre nom et cochez la case.";return;}this.disabled=true;r.textContent="Enregistrement…";'
+      + 'google.script.run.withSuccessHandler(function(m){r.innerHTML="<div class=ok>"+m+"</div>";document.getElementById("go").remove();})'
+      + '.withFailureHandler(function(x){r.textContent=x.message;document.getElementById("go").disabled=false;}).signerDocument("' + e(jeton) + '",n);};</script>';
+  }
+  return HtmlService.createHtmlOutput('<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+    + css + '</head><body><div class="c">' + corps + '</div></body></html>').setTitle('Signature — ElodiaTech');
+}
+
+/** Appelée par la page de signature. */
+function signerDocument(jeton, nomSaisi) {
+  var verrou = LockService.getScriptLock();
+  verrou.waitLock(20000);
+  try {
+    jeton = String(jeton || '');
+    nomSaisi = String(nomSaisi || '').trim().slice(0, 120);
+    if (!nomSaisi) throw new Error('Nom manquant.');
+    var feuille = assurerOnglet_('Signataires');
+    var v = feuille.getDataRange().getValues();
+    var h = v[0].map(String);
+    var col = function (n) { return h.indexOf(n); };
+    for (var l = 1; l < v.length; l++) {
+      if (String(v[l][col('jeton')]) !== jeton) continue;
+      if (String(v[l][col('statut')]) === 'signe') return 'Ce document était déjà signé.';
+      var empreinte = '';
+      try {
+        var octets = DriveApp.getFileById(String(v[l][col('doc_id')])).getAs('application/pdf').getBytes();
+        empreinte = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, octets)
+          .map(function (b) { return ('0' + (b & 255).toString(16)).slice(-2); }).join('');
+      } catch (e) { empreinte = ''; }
+      var quand = new Date().toISOString();
+      feuille.getRange(l + 1, col('statut') + 1).setValue('signe');
+      feuille.getRange(l + 1, col('signe_le') + 1).setValue(quand);
+      feuille.getRange(l + 1, col('nom_saisi') + 1).setValue(nomSaisi);
+      feuille.getRange(l + 1, col('empreinte') + 1).setValue(empreinte);
+      finaliserSiComplet_(String(v[l][col('projet_id')]), String(v[l][col('doc_id')]));
+      return 'Merci, ' + echapperHtml_(nomSaisi) + ' : votre signature est enregistrée.';
+    }
+    throw new Error('Lien de signature invalide.');
+  } finally {
+    verrou.releaseLock();
+  }
+}
+
+/** Tous les signataires d'un document ont signé : certificat et mise à jour de l'acte. */
+function finaliserSiComplet_(projetId, docId) {
+  var lignes = lireOnglet('Signataires').filter(function (r) { return String(r.projet_id) === projetId && String(r.doc_id) === docId; });
+  if (!lignes.length || lignes.some(function (r) { return String(r.statut) !== 'signe'; })) return null;
+  var police = 'font-family:Arial,sans-serif;';
+  var titre = String(lignes[0].doc_titre || 'Document');
+  var html = '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>'
+    + '<p style="' + police + 'font-size:18pt;font-weight:bold;color:' + COULEURS_PDS.titre + ';">CERTIFICAT DE SIGNATURE</p>'
+    + '<p style="' + police + 'font-size:10.5pt;">Document : <strong>' + echapperHtml_(titre) + '</strong> (Google Docs ' + echapperHtml_(docId) + ')</p>'
+    + '<table style="border-collapse:collapse;width:100%;"><tr>'
+    + ['Signataire', 'Qualité', 'Nom saisi', 'Signé le (UTC)', 'Empreinte SHA-256 du PDF signé'].map(function (t) {
+      return '<th style="' + police + 'font-size:9pt;background-color:' + COULEURS_PDS.titre + ';color:#ffffff;padding:4pt;border:1pt solid ' + COULEURS_PDS.titre + ';">' + t + '</th>';
+    }).join('') + '</tr>'
+    + lignes.map(function (r) {
+      return '<tr>' + [r.nom, r.qualite, r.nom_saisi, String(r.signe_le).replace('T', ' ').slice(0, 19), String(r.empreinte).slice(0, 64)].map(function (t) {
+        return '<td style="' + police + 'font-size:8.5pt;padding:4pt;border:1pt solid ' + COULEURS_PDS.bordure + ';">' + echapperHtml_(String(t || '')) + '</td>';
+      }).join('') + '</tr>';
+    }).join('') + '</table>'
+    + '<p style="' + police + 'font-size:8.5pt;color:#5b6b7b;">Signature électronique simple au sens du règlement (UE) n° 910/2014 (eIDAS) : '
+    + 'chaque signataire a reçu un lien personnel, consulté le document en PDF, saisi son nom et approuvé le document. '
+    + 'L\'empreinte permet de vérifier que le document n\'a pas été modifié depuis la signature. Certificat établi par ElodiaTech.</p></body></html>';
+  var parent = DriveApp.getFileById(docId).getParents();
+  var dossier = parent.hasNext() ? parent.next() : sousDossierCategorie(dossierDuProjet(projetId), 'Juridique');
+  var cert = creerGoogleDoc_('Certificat de signature — ' + titre, html, dossier.getId());
+  var sigId = String(lignes[0].signature_id || '');
+  if (sigId) {
+    try { ecrireLigne(ECRITURE.signatures, [projetId, sigId], { statut: 'signe', date: new Date().toISOString().slice(0, 10), url: cert.url }); }
+    catch (e) { /* l'acte a pu être supprimé entre-temps */ }
+  }
+  return cert;
 }
 
 /* ==========================================================================

@@ -424,6 +424,93 @@ function categorieDePrestation(p) {
   return p.categorieDoc || CATEGORIE_PAR_LOT[p.lot] || 'Projet';
 }
 
+/* ====================== ATELIER : ÉTAPES 4 À 6 ====================== */
+
+/** 4. Documents du dossier : modèles ElodiaTech, lettres d'engagement, actes générés. */
+function carteDocumentsDossier(actif, pros) {
+  const docs = Store.liste('documents');
+  const deja = (texte) => docs.find((d) => String(d.nom || '').startsWith(texte));
+  const nommes = pros.filter((x) => x.nom && !/^\[/.test(String(x.nom)));
+  const lettres = docs.filter((d) => String(d.nom || '').startsWith("Lettre d'engagement"));
+  return `<div class="card">
+      <div class="card__head"><div>
+        <h3 class="card__title"><i class="fa-solid fa-file-signature"></i> 4. Documents du dossier</h3>
+        <p class="card__subtitle">Copiés dans le dossier Drive du client, préremplis avec sa fiche, puis rangés dans Documents. À relire avant signature.</p>
+      </div></div>
+      <div class="grid grid-2">
+        <div class="card card--flat"><strong class="text-sm">Contrat ElodiaTech</strong>
+          <div class="stack-xs" style="margin-top:8px">
+            ${MODELES_TYPES.map((m) => {
+              const existant = deja(m.id === 'devis' ? 'Devis' : m.titre);
+              return `<div class="row-between"><span class="text-sm">${esc(m.titre)}</span>
+                ${existant ? `<a class="btn btn--sm btn--ghost" href="${esc(urlSure(existant.url))}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-file-word"></i> Ouvrir</a>`
+                  : `<button class="btn btn--sm" data-action="atelier-modele" data-modele="${esc(m.id)}" ${actif ? '' : 'disabled'}><i class="fa-solid fa-copy"></i> Préparer</button>`}</div>`;
+            }).join('')}
+          </div></div>
+        <div class="card card--flat"><strong class="text-sm">Lettres d'engagement de l'équipe</strong>
+          <p class="text-xs text-muted" style="margin:6px 0">Une lettre par professionnel nommé dans les informations du projet (${nommes.length}), à faire signer à l'étape 5.</p>
+          ${lettres.length ? `<ul class="text-sm">${lettres.map((d) => `<li><a href="${esc(urlSure(d.url))}" target="_blank" rel="noopener noreferrer">${esc(d.nom)}</a></li>`).join('')}</ul>` : ''}
+          <button class="btn btn--sm ${lettres.length ? '' : 'btn--primary'}" data-action="atelier-lettres" ${actif && nommes.length ? '' : 'disabled'}>
+            <i class="fa-solid fa-envelope-open-text"></i> ${lettres.length ? 'Générer à nouveau' : 'Générer les lettres'}</button>
+        </div>
+      </div>
+      <div style="margin-top:var(--sp-3)">${carteActes()}</div>
+    </div>`;
+}
+
+/** 5. Signature interne : liens personnels, suivi, relance par courriel. */
+function carteSignaturesInternes(actif) {
+  const sig = Store.signataires();
+  const parDoc = {};
+  sig.forEach((x) => { (parDoc[x.docId] = parDoc[x.docId] || { titre: x.docTitre, liste: [] }).liste.push(x); });
+  const courriel = (x) => `mailto:${encodeURIComponent(x.email || '')}?subject=${encodeURIComponent(`Signature — ${x.docTitre}`)}&body=${encodeURIComponent(
+    `Bonjour ${x.nom},\n\nMerci de lire et signer le document « ${x.docTitre} » à l'adresse suivante (lien personnel, à ne pas transférer) :\n${x.lien}\n\nBien cordialement,\nElodiaTech`)}`;
+  return `<div class="card">
+      <div class="card__head"><div>
+        <h3 class="card__title"><i class="fa-solid fa-pen-nib"></i> 5. Signatures</h3>
+        <p class="card__subtitle">Signature interne (gratuite) pour les lettres d'engagement, chartes et le projet de santé : chaque signataire reçoit un lien
+          personnel, lit le PDF, tape son nom et approuve ; un certificat est créé quand tous ont signé. Les statuts et actes juridiques passent par
+          DocuSeal ou WM Goodflag (Validation & signatures).</p>
+      </div>
+        <button class="btn btn--sm btn--primary" data-action="atelier-signer" ${actif ? '' : 'disabled'}><i class="fa-solid fa-pen-nib"></i> Faire signer un document</button>
+      </div>
+      ${Object.keys(parDoc).length ? Object.values(parDoc).map((d) => {
+        const faits = d.liste.filter((x) => x.statut === 'signe').length;
+        return `<div class="card card--flat" style="margin-bottom:8px">
+          <div class="row-between"><strong class="text-sm">${esc(d.titre)}</strong>
+            ${badge(`${faits} / ${d.liste.length} signé${faits > 1 ? 's' : ''}`, faits === d.liste.length ? 'ok' : 'warn')}</div>
+          <div class="stack-xs" style="margin-top:6px">${d.liste.map((x) => `<div class="row-between text-sm">
+            <span>${esc(x.nom)}${x.qualite ? ` <span class="text-muted">· ${esc(x.qualite)}</span>` : ''}</span>
+            ${x.statut === 'signe' ? `<span class="text-xs text-ok"><i class="fa-solid fa-check"></i> signé le ${esc(String(x.signeLe).slice(0, 10))}</span>`
+              : `<span class="row-tight">
+                  ${x.email ? `<a class="btn btn--sm" href="${esc(courriel(x))}"><i class="fa-solid fa-envelope"></i> Courriel</a>` : '<span class="text-xs text-warn">sans courriel</span>'}
+                  <button class="btn btn--sm btn--ghost" data-action="copier-texte" data-texte="${esc(x.lien)}"><i class="fa-solid fa-link"></i> Lien</button>
+                  <button class="btn btn--sm btn--ghost" data-action="atelier-annuler-signataire" data-id="${esc(x.id)}" aria-label="Retirer"><i class="fa-solid fa-xmark"></i></button>
+                </span>`}</div>`).join('')}</div></div>`;
+      }).join('') : empty('Aucune signature en cours', 'Choisissez un document de l\'espace Documents et ses signataires.', 'fa-solid fa-pen-nib')}
+    </div>`;
+}
+
+/** 6. Dépôt : pièces des dossiers ARS et ACI, fournies ou non. */
+function carteDepot(ars) {
+  const pieces = Store.pieces().filter((p) => (p.pour || []).some((x) => DOSSIERS_DEPOT.includes(x)));
+  const fournies = pieces.filter((p) => p.document).length;
+  return `<div class="card">
+      <div class="card__head"><div>
+        <h3 class="card__title"><i class="fa-solid fa-box-archive"></i> 6. Dépôt ARS / ACI</h3>
+        <p class="card__subtitle">${fournies} pièce${fournies > 1 ? 's' : ''} fournie${fournies > 1 ? 's' : ''} sur ${pieces.length}. Une pièce est fournie quand un document lui est rattaché dans Documents.</p>
+      </div>
+        ${ars ? `<a class="btn btn--sm" href="${esc(ars)}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-arrow-up-right-from-square"></i> Site de l'ARS</a>` : ''}
+      </div>
+      <div class="stack-xs">${pieces.map((p) => `<div class="row-between text-sm">
+          <span>${p.document ? '<i class="fa-solid fa-circle-check text-ok"></i>' : '<i class="fa-regular fa-circle text-muted"></i>'} ${esc(p.nom)}
+            <span class="text-xs text-muted">· ${esc((p.pour || []).filter((x) => DOSSIERS_DEPOT.includes(x)).join(', '))} · ${p.par === 'client' ? 'client' : 'ElodiaTech'}</span></span>
+          ${p.document ? `<a class="text-xs" href="${esc(urlSure(p.document.url))}" target="_blank" rel="noopener noreferrer">${esc(p.document.nom)}</a>` : ''}
+        </div>`).join('')}</div>
+      <p class="text-xs text-muted" style="margin-top:8px"><a href="#" data-action="aller" data-route="documents">Rattacher une pièce dans Documents</a></p>
+    </div>`;
+}
+
 /* ====================== CONSOLE : SOCIÉTÉ ÉMETTRICE ====================== */
 function carteEmetteur() {
   const e = Store.emetteur();
@@ -2972,6 +3059,10 @@ const Views = {
         </div></div>
         ${blocDocumentFinal(etats, nbValides, actif)}
       </div>
+
+      ${carteDocumentsDossier(actif, pros)}
+      ${carteSignaturesInternes(actif)}
+      ${carteDepot(ars)}
     </section>`;
   },
 
