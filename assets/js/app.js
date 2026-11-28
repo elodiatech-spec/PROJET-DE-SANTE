@@ -1334,6 +1334,8 @@ const App = {
     },
 
     async 'atelier-lettres'(el) {
+      const nommes = (Store.reponsesRubrique('equipe').pros || []).filter((x) => x.nom && !/^\[/.test(String(x.nom)));
+      if (!nommes.length) { toast('Aucun professionnel nommé dans « Informations du projet » (rubrique Équipe).', 'warn'); return; }
       const libelle = el.innerHTML;
       el.disabled = true;
       el.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Génération…';
