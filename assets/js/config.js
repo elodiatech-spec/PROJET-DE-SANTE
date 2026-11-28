@@ -445,58 +445,80 @@ const PRESTATIONS = [
    option   : le module dépend d'une option activable par l'expert
    -------------------------------------------------------------------------- */
 const POLES = [
-  { id: 'pilotage',  titre: 'Pilotage',                icone: 'fa-solid fa-gauge-high' },
-  { id: 'ingenierie',titre: 'Ingénierie du projet',    icone: 'fa-solid fa-compass-drafting' },
-  { id: 'guichets',  titre: 'Financements & partenaires', icone: 'fa-solid fa-sack-dollar' },
-  { id: 'identite',  titre: 'Identité & déploiement',  icone: 'fa-solid fa-rocket' },
-  { id: 'documents', titre: 'Documents & validation',  icone: 'fa-solid fa-folder-open' },
-  { id: 'collab',    titre: 'Collaboration',           icone: 'fa-solid fa-users' },
-  { id: 'support',   titre: 'Support',                 icone: 'fa-solid fa-circle-question' },
-  { id: 'console',   titre: 'Console expert',          icone: 'fa-solid fa-user-gear' },
+  { id: 'pilotage', titre: 'Pilotage', icone: 'fa-solid fa-gauge-high' },
+  { id: 'production', titre: 'Production', icone: 'fa-solid fa-compass-drafting' },
+  { id: 'dossier', titre: 'Dossier & échanges', icone: 'fa-solid fa-folder-open' },
+  { id: 'aide', titre: 'Aide', icone: 'fa-solid fa-circle-question' },
+  { id: 'console', titre: 'Console', icone: 'fa-solid fa-user-gear' },
 ];
 
 /** Anciennes adresses de modules, redirigées vers celles qui les remplacent. */
-const ALIAS_MODULES = { planning: 'reunions', 'comptes-rendus': 'reunions' };
+const ALIAS_MODULES = { planning: 'reunions', 'comptes-rendus': 'reunions', atelier: 'atelier-redaction' };
 
+/*
+ * Pages de l'application. Chaque page appartient à une rubrique du menu
+ * (RUBRIQUES) ; quand une rubrique compte plusieurs pages visibles, elles
+ * s'affichent en onglets. `onglet` est le libellé de l'onglet.
+ */
 const MODULES = [
-  { id: 'dashboard',    pole: 'pilotage',  label: "Vue d'ensemble",          icone: 'fa-solid fa-chart-pie',            formules: null },
+  { id: 'dashboard',    pole: 'pilotage',  label: 'Tableau de bord',         icone: 'fa-solid fa-chart-pie',            formules: null },
   { id: 'feuille-route',pole: 'pilotage',  label: 'Feuille de route',        icone: 'fa-solid fa-list-check',           formules: null },
-  // Les informations que le client fournit pour la rédaction du projet de santé.
   { id: 'questionnaire',pole: 'pilotage',  label: 'Informations du projet',  icone: 'fa-solid fa-clipboard-list',       formules: null },
 
-  // Espace de travail de l'expert : collecte, rédaction, document final.
-  { id: 'atelier',      pole: 'ingenierie',label: 'Atelier projet de santé', icone: 'fa-solid fa-pen-ruler',            formules: null, roles: ['expert'] },
-  { id: 'projet-sante', pole: 'ingenierie',label: 'Projet de santé',         icone: 'fa-solid fa-book-medical',         formules: null,               lot: 'LA' },
-  { id: 'juridique',    pole: 'ingenierie',label: 'Structuration juridique', icone: 'fa-solid fa-scale-balanced',       formules: ['F2', 'F3'],       lot: 'LB' },
-  { id: 'immobilier',   pole: 'ingenierie',label: 'Immobilier, locaux & ERP',icone: 'fa-solid fa-building-circle-check',formules: ['F2', 'F3'],       option: 'immobilier' },
+  // Projet de santé : l'atelier de l'expert en trois onglets ; le client lit le document.
+  { id: 'atelier-collecte',  pole: 'production', label: 'Collecte',       onglet: '1. Collecte',       icone: 'fa-solid fa-magnifying-glass-chart', formules: null, roles: ['expert'] },
+  { id: 'atelier-redaction', pole: 'production', label: 'Rédaction',      onglet: '2. Rédaction',      icone: 'fa-solid fa-pen-ruler',    formules: null, roles: ['expert'] },
+  { id: 'atelier-final',     pole: 'production', label: 'Document final', onglet: '3. Document final', icone: 'fa-solid fa-book',         formules: null, roles: ['expert'] },
+  { id: 'projet-sante', pole: 'production', label: 'Projet de santé',        icone: 'fa-solid fa-book-medical',         formules: null, roles: ['client'], lot: 'LA' },
 
-  // Guichets de dépôt, demandes et pièces justificatives : un seul espace.
-  // Les séparer entretenait la confusion — Stars FIR et e-Synergie ne sont
-  // rien d'autre que les portails par lesquels on demande une subvention.
-  { id: 'financements', pole: 'guichets',  label: 'Financements & aides',    icone: 'fa-solid fa-sack-dollar',          formules: ['F2', 'F3'],       lot: 'LC' },
-  { id: 'partenariats', pole: 'guichets',  label: 'Conventions & partenaires',icone: 'fa-solid fa-handshake',           formules: ['F2', 'F3'],       lot: 'LD' },
-  { id: 'prestataires', pole: 'guichets',  label: 'Prestataires & outils',   icone: 'fa-solid fa-screwdriver-wrench',   formules: ['F2', 'F3'],       lot: 'LE' },
+  { id: 'juridique',    pole: 'production', label: 'Structuration juridique', onglet: 'Juridique',         icone: 'fa-solid fa-scale-balanced',       formules: ['F2', 'F3'],       lot: 'LB' },
+  { id: 'immobilier',   pole: 'production', label: 'Immobilier, locaux & ERP', onglet: 'Locaux & ERP',    icone: 'fa-solid fa-building-circle-check',formules: ['F2', 'F3'],       option: 'immobilier' },
 
-  { id: 'identite',     pole: 'identite',  label: 'Identité visuelle & web', icone: 'fa-solid fa-palette',              formules: ['F3'],             lot: 'LF' },
-  { id: 'deploiement',  pole: 'identite',  label: 'Déploiement',             icone: 'fa-solid fa-rocket',               formules: ['F3'],             lot: 'LG' },
+  { id: 'financements', pole: 'production', label: 'Financements & aides',    onglet: 'Financements',      icone: 'fa-solid fa-sack-dollar',          formules: ['F2', 'F3'],       lot: 'LC' },
+  { id: 'partenariats', pole: 'production', label: 'Conventions & partenaires', onglet: 'Conventions',     icone: 'fa-solid fa-handshake',            formules: ['F2', 'F3'],       lot: 'LD' },
+  { id: 'prestataires', pole: 'production', label: 'Prestataires & outils',   onglet: 'Prestataires',      icone: 'fa-solid fa-screwdriver-wrench',   formules: ['F2', 'F3'],       lot: 'LE' },
 
-  { id: 'documents',    pole: 'documents', label: 'Documents',               icone: 'fa-solid fa-folder-open',          formules: null },
-  { id: 'signatures',   pole: 'documents', label: 'Validation & signatures', icone: 'fa-solid fa-file-signature',       formules: null },
-  // « Livrables » retiré : la feuille de route porte déjà chaque livrable, son
-  // statut et son lien. Deux écrans pour la même information entretenaient le
-  // doute sur celui qui faisait foi.
+  { id: 'identite',     pole: 'production', label: 'Identité visuelle & web', onglet: 'Identité & site',   icone: 'fa-solid fa-palette',              formules: ['F3'],             lot: 'LF' },
+  { id: 'deploiement',  pole: 'production', label: 'Déploiement',             onglet: 'Déploiement',       icone: 'fa-solid fa-rocket',               formules: ['F3'],             lot: 'LG' },
 
-  { id: 'messagerie',   pole: 'collab',    label: 'Messagerie',              icone: 'fa-solid fa-comments',             formules: null },
-  // Réunions : rendez-vous (lien Meet) et comptes rendus avec leurs décisions,
-  // en un seul écran. Les échéances du projet restent dans la Feuille de route.
-  { id: 'reunions',     pole: 'collab',    label: 'Réunions',                icone: 'fa-solid fa-people-group',         formules: null },
+  // Documents & signatures : un seul endroit pour fichiers, actes, signatures et dépôt.
+  { id: 'documents',    pole: 'dossier',   label: 'Documents',               onglet: 'Documents',          icone: 'fa-solid fa-folder-open',          formules: null },
+  { id: 'a-produire',   pole: 'dossier',   label: 'Documents à produire',    onglet: 'À produire',         icone: 'fa-solid fa-file-pen',             formules: null, roles: ['expert'] },
+  { id: 'signatures',   pole: 'dossier',   label: 'Signatures',              onglet: 'Signatures',         icone: 'fa-solid fa-file-signature',       formules: null },
+  { id: 'depot',        pole: 'dossier',   label: 'Dépôt ARS / ACI',         onglet: 'Dépôt ARS / ACI',    icone: 'fa-solid fa-box-archive',          formules: null },
 
-  { id: 'faq',          pole: 'support',   label: 'FAQ réglementaire',       icone: 'fa-solid fa-circle-question',      formules: null },
+  { id: 'messagerie',   pole: 'dossier',   label: 'Messagerie',              onglet: 'Messagerie',         icone: 'fa-solid fa-comments',             formules: null },
+  { id: 'reunions',     pole: 'dossier',   label: 'Réunions',                onglet: 'Réunions et comptes rendus', icone: 'fa-solid fa-people-group', formules: null },
 
-  { id: 'admin-projets',pole: 'console',   label: 'Portefeuille clients',    icone: 'fa-solid fa-address-card',         formules: null, roles: ['expert'] },
-  { id: 'admin-offres', pole: 'console',   label: 'Offres & périmètres',     icone: 'fa-solid fa-tags',                 formules: null, roles: ['expert'] },
-  { id: 'admin-experts',pole: 'console',   label: 'Équipe & société',        icone: 'fa-solid fa-user-tie',             formules: null, roles: ['expert'] },
-  { id: 'admin-params', pole: 'console',   label: 'Paramètres & données',    icone: 'fa-solid fa-sliders',              formules: null, roles: ['expert'] },
+  // Hors menu : ouverte par l'icône d'aide de la barre du haut.
+  { id: 'faq',          pole: 'aide',      label: 'FAQ réglementaire',       icone: 'fa-solid fa-circle-question',      formules: null },
+
+  { id: 'admin-projets',pole: 'console',   label: 'Clients',                 icone: 'fa-solid fa-address-card',         formules: null, roles: ['expert'] },
+  { id: 'admin-offres', pole: 'console',   label: 'Offres & périmètres',     onglet: 'Offres',             icone: 'fa-solid fa-tags',                 formules: null, roles: ['expert'] },
+  { id: 'admin-experts',pole: 'console',   label: 'Société & équipe',        onglet: 'Société & équipe',   icone: 'fa-solid fa-user-tie',             formules: null, roles: ['expert'] },
+  { id: 'admin-params', pole: 'console',   label: 'Paramètres & données',    onglet: 'Données',            icone: 'fa-solid fa-sliders',              formules: null, roles: ['expert'] },
+];
+
+/** Groupes du menu latéral. La console (Clients, Réglages) est dans le menu du profil. */
+const GROUPES_MENU = [
+  { id: 'pilotage',   titre: 'Pilotage',           icone: 'fa-solid fa-gauge-high' },
+  { id: 'production', titre: 'Production',         icone: 'fa-solid fa-compass-drafting' },
+  { id: 'dossier',    titre: 'Dossier & échanges', icone: 'fa-solid fa-folder-open' },
+];
+
+/** Rubriques du menu : une entrée = une ou plusieurs pages en onglets. */
+const RUBRIQUES = [
+  { id: 'tableau',   groupe: 'pilotage',   label: 'Tableau de bord',          icone: 'fa-solid fa-chart-pie',        pages: ['dashboard'] },
+  { id: 'feuille',   groupe: 'pilotage',   label: 'Feuille de route',         icone: 'fa-solid fa-list-check',       pages: ['feuille-route'] },
+  { id: 'infos',     groupe: 'pilotage',   label: 'Informations du projet',   icone: 'fa-solid fa-clipboard-list',   pages: ['questionnaire'] },
+  { id: 'projet',    groupe: 'production', label: 'Projet de santé',          icone: 'fa-solid fa-book-medical',     pages: ['atelier-collecte', 'atelier-redaction', 'atelier-final', 'projet-sante'] },
+  { id: 'juridique', groupe: 'production', label: 'Juridique & locaux',       icone: 'fa-solid fa-scale-balanced',   pages: ['juridique', 'immobilier'] },
+  { id: 'finpart',   groupe: 'production', label: 'Financements & partenaires', icone: 'fa-solid fa-sack-dollar',    pages: ['financements', 'partenariats', 'prestataires'] },
+  { id: 'identite',  groupe: 'production', label: 'Identité & déploiement',   icone: 'fa-solid fa-palette',          pages: ['identite', 'deploiement'] },
+  { id: 'dossier',   groupe: 'dossier',    label: 'Documents & signatures',   icone: 'fa-solid fa-folder-open',      pages: ['documents', 'a-produire', 'signatures', 'depot'] },
+  { id: 'echanges',  groupe: 'dossier',    label: 'Échanges',                 icone: 'fa-solid fa-comments',         pages: ['messagerie', 'reunions'] },
+  { id: 'clients',   groupe: 'console',    label: 'Clients',                  icone: 'fa-solid fa-address-card',     pages: ['admin-projets'] },
+  { id: 'reglages',  groupe: 'console',    label: 'Réglages',                 icone: 'fa-solid fa-sliders',          pages: ['admin-offres', 'admin-experts', 'admin-params'] },
 ];
 
 /* --------------------------------------------------------------------------

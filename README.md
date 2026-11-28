@@ -78,6 +78,28 @@ cahier des charges, rapport annuel, avenant au projet de santé) suivent le circ
 
 Onglet **Actes** créé automatiquement. Test : `node tests/actes.mjs`.
 
+## Organisation du menu (audit UX du 28 novembre 2026)
+
+Le menu compte 11 rubriques en 3 groupes ; une rubrique qui regroupe plusieurs pages les affiche en onglets
+(`RUBRIQUES` et `GROUPES_MENU` dans `config.js`, onglets rendus par `App.ongletsRubrique`).
+
+| Groupe | Rubrique | Onglets |
+|---|---|---|
+| Pilotage | Tableau de bord | — (bouton « Prochaine étape » : `Store.prochaineEtape()`) |
+| | Feuille de route | — (seul endroit où l'on modifie une prestation ; lots terminés repliés) |
+| | Informations du projet | — (une rubrique du questionnaire à la fois) |
+| Production | Projet de santé | Expert : Collecte · Rédaction · Document final ; client : lecture |
+| | Juridique & locaux | Juridique · Locaux & ERP |
+| | Financements & partenaires | Financements · Conventions · Prestataires |
+| | Identité & déploiement | Identité & site · Déploiement |
+| Dossier & échanges | Documents & signatures | Documents · À produire (expert) · Signatures · Dépôt ARS / ACI |
+| | Échanges | Messagerie · Réunions et comptes rendus |
+
+Clients et Réglages (Offres · Société & équipe · Données) sont dans le menu du profil, en haut à droite ;
+la FAQ réglementaire s'ouvre par l'icône d'aide. Les pages de lot n'affichent plus leurs prestations :
+un lien ouvre la Feuille de route filtrée sur le lot. Les anciennes adresses (`atelier`, `planning`,
+`comptes-rendus`, `projet-sante` côté expert…) sont redirigées par `Store.resoudreRoute`.
+
 ## Parcours administratif (audit du 26 novembre 2026)
 
 La feuille de route suit le parcours réel de chaque structure :
