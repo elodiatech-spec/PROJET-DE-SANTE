@@ -580,6 +580,17 @@ const PLATEFORMES_SOURCES = {
   ch6: [],
 };
 
+/** Modèles types ElodiaTech copiables dans le dossier d'un client (identifiants côté script). */
+const MODELES_TYPES = [
+  { id: 'mandat_accompagnement', titre: "Mandat d'accompagnement", cat: 'Juridique' },
+  { id: 'mandat_administratif', titre: 'Mandat administratif', cat: 'Juridique' },
+  { id: 'accord_confidentialite', titre: 'Accord de confidentialité', cat: 'Juridique' },
+  { id: 'devis', titre: 'Devis de la formule', cat: 'Finances' },
+];
+
+/** Pièces du dépôt ARS / ACI suivies à l'étape 6 de l'Atelier. */
+const DOSSIERS_DEPOT = ['ARS', 'ACI'];
+
 /** Site de l'ARS selon le département (zonage, permanence des soins). */
 const ARS_SITES = {
   '971': 'https://www.guadeloupe.ars.sante.fr/', '972': 'https://www.martinique.ars.sante.fr/',

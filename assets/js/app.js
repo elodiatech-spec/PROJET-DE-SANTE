@@ -1324,6 +1324,63 @@ const App = {
       });
     },
 
+    async 'atelier-modele'(el) {
+      el.disabled = true;
+      try {
+        const d = await Store.copierModele(el.dataset.modele);
+        toast(`« ${d.nom} » préparé dans le dossier du client : relisez-le.`, 'ok');
+        window.open(d.url, '_blank', 'noopener');
+      } catch (err) { toast(`Préparation impossible : ${err.message}`, 'danger'); el.disabled = false; }
+    },
+
+    async 'atelier-lettres'(el) {
+      const libelle = el.innerHTML;
+      el.disabled = true;
+      el.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Génération…';
+      try {
+        const l = await Store.genererLettresEngagement();
+        const sans = l.filter((x) => !x.email).length;
+        toast(`${l.length} lettre(s) générée(s) dans « 06 — Équipe ».` + (sans ? ` ${sans} professionnel(s) sans courriel.` : ''), sans ? 'warn' : 'ok');
+      } catch (err) { toast(`Génération impossible : ${err.message}`, 'danger'); }
+      el.disabled = false;
+      el.innerHTML = libelle;
+    },
+
+    'atelier-signer'() {
+      const docs = Store.liste('documents').filter((d) => /docs\.google\.com\/document\//.test(String(d.url || '')));
+      if (!docs.length) { toast('Aucun Google Docs dans Documents : préparez d\'abord le document (étape 4).', 'warn'); return; }
+      const p = Store.projet();
+      const pros = (Store.reponsesRubrique('equipe').pros || []).filter((x) => x.nom && !/^\[/.test(String(x.nom)));
+      const candidats = [
+        ...pros.map((x) => ({ nom: [x.prenom, x.nom].filter((v) => v && !/^\[/.test(v)).join(' '), email: x.email || '', qualite: x.profession || '' })),
+        ...(p?.client?.nom ? [{ nom: p.client.nom, email: p.client.email || '', qualite: p.client.fonction || 'Porteur du projet' }] : []),
+        { nom: Store.emetteur().representant, email: '', qualite: `${Store.emetteur().qualite} — ${Store.emetteur().nomCommercial}` },
+      ].filter((c, i, t) => c.nom && t.findIndex((y) => y.nom.toLowerCase() === c.nom.toLowerCase()) === i);
+      Modal.formulaire({
+        titre: 'Faire signer un document',
+        soustitre: 'Signature interne : un lien personnel par signataire. Envoyez-le ensuite par courriel depuis l\'Atelier.',
+        champs: [
+          { id: 'doc', label: 'Document', type: 'select', requis: true, options: docs.map((d) => ({ v: d.id, l: d.nom })) },
+          ...candidats.map((c, i) => ({ id: `s${i}`, label: `${c.nom}${c.qualite ? ` — ${c.qualite}` : ''}${c.email ? '' : ' (sans courriel)'}`, type: 'checkbox' })),
+        ],
+        libelle: 'Créer les liens de signature',
+        onSubmit: async (v) => {
+          const d = docs.find((x) => x.id === v.doc);
+          const signataires = candidats.filter((c, i) => v[`s${i}`] === true || v[`s${i}`] === 'on');
+          if (!signataires.length) { toast('Cochez au moins un signataire.', 'warn'); return; }
+          try {
+            await Store.preparerSignature({ titre: d.nom, docUrl: d.url, signataires });
+            toast(`${signataires.length} lien(s) de signature créé(s). Envoyez-les depuis l\'étape 5.`, 'ok');
+          } catch (err) { toast(`Impossible : ${err.message}`, 'danger'); }
+        },
+      });
+    },
+
+    async 'atelier-annuler-signataire'(el) {
+      try { await Store.annulerSignataire(el.dataset.id); toast('Signataire retiré.', 'ok'); }
+      catch (err) { toast(`Impossible : ${err.message}`, 'danger'); }
+    },
+
     /** Dépôt direct dans « Sources — … » ou « Visuels — … » du dossier 01. */
     'atelier-deposer'(el) {
       const dossier = el.dataset.dossier;
@@ -2181,6 +2238,12 @@ const App = {
       App.afficherLienClient(Store.projet(el.dataset.id));
     },
 
+    'copier-texte'(el) {
+      navigator.clipboard?.writeText(el.dataset.texte || '')
+        .then(() => toast('Lien copié.', 'ok'))
+        .catch(() => toast('Copie impossible.', 'warn'));
+    },
+
     'copier-lien'() {
       const champ = document.getElementById('lien-client-champ');
       champ.select();
@@ -2583,6 +2646,9 @@ const Modal = {
           let controle;
           if (c.type === 'select') {
             controle = `<select id="${id}" name="${esc(c.id)}">${c.options.map((o) => `<option value="${esc(o.v)}" ${String(o.v) === String(c.valeur) ? 'selected' : ''}>${esc(o.l)}</option>`).join('')}</select>`;
+          } else if (c.type === 'checkbox') {
+            return `<label class="field field--check text-sm" style="display:flex;gap:8px;align-items:center">
+                <input type="checkbox" id="${id}" name="${esc(c.id)}" ${c.valeur ? 'checked' : ''}> ${esc(c.label)}</label>`;
           } else if (c.type === 'textarea') {
             controle = `<textarea id="${id}" name="${esc(c.id)}" ${c.requis ? 'required' : ''} placeholder="${esc(c.placeholder || '')}">${esc(c.valeur || '')}</textarea>`;
           } else {
