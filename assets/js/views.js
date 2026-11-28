@@ -507,6 +507,14 @@ function carteDepot(ars) {
             <span class="text-xs text-muted">· ${esc((p.pour || []).filter((x) => DOSSIERS_DEPOT.includes(x)).join(', '))} · ${p.par === 'client' ? 'client' : 'ElodiaTech'}</span></span>
           ${p.document ? `<a class="text-xs" href="${esc(urlSure(p.document.url))}" target="_blank" rel="noopener noreferrer">${esc(p.document.nom)}</a>` : ''}
         </div>`).join('')}</div>
+      ${(() => {
+        const decl = DECLARATIONS_CONVENTIONNELLES[Store.projet()?.type];
+        return decl ? `<div class="card card--flat" style="margin-top:var(--sp-3)">
+          <strong class="text-sm"><i class="fa-solid fa-file-invoice"></i> Après l'adhésion : déclaration annuelle des indicateurs</strong>
+          <p class="text-xs" style="margin:6px 0"><a href="${esc(decl.url)}" target="_blank" rel="noopener noreferrer">${esc(decl.libelle)} <i class="fa-solid fa-arrow-up-right-from-square"></i></a></p>
+          ${decl.aCompleter ? `<p class="text-xs text-warn">${esc(decl.aCompleter)}</p>` : ''}
+        </div>` : '';
+      })()}
       <p class="text-xs text-muted" style="margin-top:8px"><a href="#" data-action="aller" data-route="documents">Rattacher une pièce dans Documents</a></p>
     </div>`;
 }
