@@ -1356,7 +1356,7 @@ const App = {
       const candidats = [
         ...pros.map((x) => ({ nom: [x.prenom, x.nom].filter((v) => v && !/^\[/.test(v)).join(' '), email: x.email || '', qualite: x.profession || '' })),
         ...(p?.client?.nom ? [{ nom: p.client.nom, email: p.client.email || '', qualite: p.client.fonction || 'Porteur du projet' }] : []),
-        { nom: Store.emetteur().representant, email: Store.emetteur().courriel || '', qualite: `${Store.emetteur().qualite} — ${Store.emetteur().nomCommercial}` },
+        { nom: Store.emetteur().representant, email: Store.emetteur().courrielRepresentant || Store.emetteur().courriel || '', qualite: `${Store.emetteur().qualite} — ${Store.emetteur().nomCommercial}` },
       ].filter((c, i, t) => c.nom && t.findIndex((y) => y.nom.toLowerCase() === c.nom.toLowerCase()) === i);
       Modal.formulaire({
         titre: 'Faire signer un document',
