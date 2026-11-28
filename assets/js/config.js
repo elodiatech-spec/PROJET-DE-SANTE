@@ -592,6 +592,16 @@ const MODELES_TYPES = [
 const DOSSIERS_DEPOT = ['ARS', 'ACI'];
 
 /** Site de l'ARS selon le département (zonage, permanence des soins). */
+/**
+ * Téléservices de déclaration des indicateurs conventionnels, par type de structure.
+ * Centre de santé : aucun lien public connu à ce jour ; le guide méthodologique de la CNAM sert de repère.
+ */
+const DECLARATIONS_CONVENTIONNELLES = {
+  MSP: { libelle: 'Déclarer les indicateurs ACI 2026 (Démarche numérique)', url: 'https://demarche.numerique.gouv.fr/commencer/msp-indicateurs-2026' },
+  CDS: { libelle: 'Guide méthodologique CNAM — rémunération forfaitaire des centres de santé', url: 'https://www.ameli.fr/sites/default/files/Documents/Guide%20methodo%20remu-forfaitaire%20specifique_CDSpolyvalents%20et%20medicaux.pdf',
+         aCompleter: 'Lien de déclaration des indicateurs des centres de santé à renseigner (transmis par la CPAM ou la CGSS).' },
+};
+
 const ARS_SITES = {
   '971': 'https://www.guadeloupe.ars.sante.fr/', '972': 'https://www.martinique.ars.sante.fr/',
   '973': 'https://www.guyane.ars.sante.fr/', '974': 'https://www.lareunion.ars.sante.fr/', '976': 'https://www.mayotte.ars.sante.fr/',

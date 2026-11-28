@@ -3646,7 +3646,14 @@ var GABARITS_CHAPITRES = {
     + "développement professionnel continu, tableau de bord de suivi et d'évaluation (indicateurs par axe), accueil d'étudiants et recherche. Un schéma du circuit de la concertation.",
   ch5: "6 à 10 pages. Système d'information partagé (logiciel, labellisation, messagerie sécurisée de santé, DMP), partage avec les professionnels extérieurs, "
     + "accès du patient à ses données et RGPD, communication externe (site internet, prise de rendez-vous en ligne, réseaux sociaux, signalétique). Un schéma des flux d'information.",
-  ch6: "2 à 3 pages. Tableau des signataires (nom, profession, qualité, date, signature) reprenant les professionnels de l'équipe ; texte d'engagement collectif ; conclusion d'une page qui rappelle les axes et la trajectoire du projet."
+  ch6: "5 à 8 pages, lexique compris. Ouverture courte (portée du chapitre, plan). "
+    + "6.1 Portée de la signature : article L.6323-3 du CSP (ou L.6323-1-10 pour un centre de santé), trois effets de la signature (adhésion, contractualisation ACI ou accord national, engagement envers les habitants), signature des futurs arrivants. "
+    + "6.2 Engagements des signataires : huit engagements rédigés, chacun renvoyant au chapitre qui l'organise (patients, protocoles, système d'information, instances, qualité, formation, évaluation, territoire). "
+    + "6.3 Tableau des signatures de l'équipe (professionnel, profession et qualité, site d'exercice, date, signature) ; n'inventer aucun prénom. "
+    + "6.4 Tableau des partenaires associés dont la participation est prévue aux protocoles (partenaire, rôle et protocoles, représentant, date, signature). "
+    + "6.5 Validation, transmission et révision : approbation par l'instance de gouvernance, transmission ARS, communication à la caisse (CGSS ou CPAM), révision annuelle ; tableau Étape / Date / Observations. "
+    + "Conclusion en prose, sous-titrée : le territoire et ses fragilités chiffrées ; la réponse d'équipe ; les axes et leurs cibles (un seul tableau récapitulatif autorisé) ; ce que le projet change pour les habitants, illustré par 4 ou 5 situations concrètes de patients du territoire ; les conditions de la réussite (humaine, contractuelle, méthodologique) ; l'engagement final. "
+    + "Terminer par un LEXIQUE : tableau à quatre colonnes (Sigle, Signification, Sigle, Signification) recensant par ordre alphabétique tous les sigles employés dans les chapitres déjà rédigés."
 };
 
 /**
