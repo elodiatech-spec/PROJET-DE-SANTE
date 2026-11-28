@@ -54,6 +54,7 @@ const EMETTEUR_DEFAUT = {
   tvaIntracom: '',
   representant: 'Frédéric ARNOBE',
   qualite: 'Gérant',
+  courrielRepresentant: 'frederic.arnobe@elodiatech.fr',
   telephone: '+596 696 41 22 55',
   courriel: 'contact@elodiatech.fr',
   site: 'www.elodiatech.com',
@@ -87,6 +88,7 @@ const CHAMPS_EMETTEUR = [
   { groupe: 'Représentant et contact', champs: [
     { id: 'representant', label: 'Représentant légal', requis: true },
     { id: 'qualite', label: 'Qualité', requis: true, placeholder: 'Président' },
+    { id: 'courrielRepresentant', label: 'Courriel du représentant (signatures)', type: 'email' },
     { id: 'telephone', label: 'Téléphone' },
     { id: 'courriel', label: 'Courriel', type: 'email' },
     { id: 'site', label: 'Site internet' },

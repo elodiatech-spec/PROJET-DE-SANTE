@@ -196,7 +196,7 @@ var ONGLETS = {
   "Emetteur": [
     "id", "denomination", "nom_commercial", "forme", "capital", "adresse", "code_postal",
     "ville", "siret", "ape", "rcs", "tva_intracom", "representant", "qualite", "telephone",
-    "courriel", "site", "taux_tva", "titulaire_compte", "iban", "bic", "banque"
+    "courriel", "site", "taux_tva", "titulaire_compte", "iban", "bic", "banque", "courriel_representant"
   ]
 };
 
@@ -204,7 +204,7 @@ var ONGLETS = {
 var CHAMPS_EMETTEUR = {
   denomination: 'denomination', nomCommercial: 'nom_commercial', forme: 'forme', capital: 'capital',
   adresse: 'adresse', codePostal: 'code_postal', ville: 'ville', siret: 'siret', ape: 'ape',
-  rcs: 'rcs', tvaIntracom: 'tva_intracom', representant: 'representant', qualite: 'qualite',
+  rcs: 'rcs', tvaIntracom: 'tva_intracom', representant: 'representant', qualite: 'qualite', courrielRepresentant: 'courriel_representant',
   telephone: 'telephone', courriel: 'courriel', site: 'site', tauxTva: 'taux_tva',
   titulaireCompte: 'titulaire_compte', iban: 'iban', bic: 'bic', banque: 'banque'
 };
