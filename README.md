@@ -168,6 +168,22 @@ Mise en service : menu **ElodiaTech → Définir ma clé Claude** dans la feuill
 sur console.anthropic.com, conservée dans les propriétés du script). Les rédactions sont suivies
 dans l'onglet **Redaction**, créé automatiquement. Test : `node tests/redaction.mjs`.
 
+### Préambule, pièces du projet, éléments primordiaux (28 novembre 2026)
+
+- **Préambule** : le premier chapitre n'a plus d'introduction ; il suit le préambule d'Atlantic Santé (modèle
+  `1a7lFAhA…`). La page de garde est produite à l'assemblage, sauf si le préambule importé porte déjà la sienne
+  (paragraphe « PROJET DE SANTÉ ») : elle est alors reprise, jusqu'à son titre « SOMMAIRE » exclu.
+- **Mise en page infographiée** (`mettreEnForme_`) : bandeau « CHAPITRE N », encadré « Dans ce chapitre »,
+  encadrés de lecture `<aside data-encadre="consequence|lecture|risque|enjeu|methode">`, chiffres clés
+  `<figure data-chiffres>`, graphiques avec message clé (type `anneau` en plus), première colonne des tableaux
+  mise en valeur, en-tête « PROJET DE SANTÉ · structure » sur chaque page.
+- **Pièces du projet** : `Sources — Pièces du projet` (devis, factures, prévisionnel, plan des locaux,
+  vidéoprotection, extincteurs…), jointes aux chapitres 2 et 3 (`pieces: true`) sous `<piece_du_projet>`.
+- **Éléments primordiaux** (`ESSENTIELS_CHAPITRES`, `Store.manquantsChapitre`) : rubriques du questionnaire,
+  chapitres validés et dossiers de sources requis ; affichés sous chaque chapitre, en notification pour le
+  prochain chapitre à rédiger, et rappelés avant de lancer Claude. L'action `inventaireSources` compte les
+  fichiers de chaque dossier de sources.
+
 ## Informations du projet (questionnaire)
 
 Le module **Pilotage → Informations du projet** recueille, auprès du client, les éléments

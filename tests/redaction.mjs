@@ -68,10 +68,11 @@ const sousDossier = (nom, fichiers) => ({ getName: () => nom, getFiles: () => it
 const sourcesCh1 = sousDossier('Sources — Chapitre 1', [fichier('s1', 'Filosofi commune.pdf', 'application/pdf', '%PDF pauvreté')]);
 const sourcesCh2 = sousDossier('Sources — Chapitre 2', [fichier('s2', 'Organigramme équipe.pdf', 'application/pdf', '%PDF équipe')]);
 const sourcesCommun = sousDossier('Sources — Commun', [fichier('s0', 'Fiche commune.pdf', 'application/pdf', '%PDF commune')]);
+const piecesProjet = sousDossier('Sources — Pièces du projet', [fichier('pp1', 'Devis extincteurs.pdf', 'application/pdf', '%PDF devis')]);
 const dossiersCrees = [];
 const dossier01 = {
   getId: () => 'DOSSIER01', getName: () => '01 — Projet de santé',
-  getFolders: () => iterateur([sourcesCh1, sourcesCh2, sourcesCommun]),
+  getFolders: () => iterateur([sourcesCh1, sourcesCh2, sourcesCommun, piecesProjet]),
   createFolder: (n) => { dossiersCrees.push(n); },
   getFoldersByName: (n) => iterateur(n === 'Visuels — Chapitre 1'
     ? [sousDossier('Visuels — Chapitre 1', [fichier('v1', 'schema-parcours.png', 'image/png', 'PNGDATA')])] : []),
@@ -170,11 +171,12 @@ const documents = {
   ]) },
 };
 const DocumentApp = {
-  ElementType: T, ParagraphHeading: H, HorizontalAlignment: { CENTER: 'c' },
+  ElementType: T, ParagraphHeading: H, HorizontalAlignment: { CENTER: 'c', RIGHT: 'r' },
   openById: (id) => {
     if (!documents[id]) documents[id] = { corps: corpsSimule([element(T.PARAGRAPH, 'PROJET DE SANTÉ')]) };
     const d = documents[id];
-    return { getBody: () => d.corps, getFooter: () => null,
+    return { getBody: () => d.corps, getFooter: () => null, getHeader: () => null,
+      addHeader: () => ({ getText: () => '', getParagraphs: () => [], appendParagraph: (t) => { d.entete = t; return chaine({}); } }),
       addFooter: () => ({ appendParagraph: (t) => { d.pied = t; return chaine({}); } }), saveAndClose: () => {} };
   },
 };
@@ -224,7 +226,7 @@ const contexte = vm.createContext({
   console,
 });
 vm.runInContext(readFileSync(join(RACINE, 'apps-script/Code.gs'), 'utf8')
-  + '\nglobalThis.__EXPORT = { doPost, ONGLETS, AMORCE, CHAPITRES_REDACTION };', contexte);
+  + '\nglobalThis.__EXPORT = { doPost, ONGLETS, AMORCE, CHAPITRES_REDACTION, figureEncadre_, figureChiffres_ };', contexte);
 
 const { ONGLETS, AMORCE, CHAPITRES_REDACTION } = contexte.__EXPORT;
 const feuilles = {};
@@ -284,6 +286,7 @@ verifier('en-têtes : clé et version de l\'API', envoi?.opts.headers['x-api-key
 verifier('chapitre 1 (analyse) : Claude Opus', params.model === 'claude-opus-5-5', params.model);
 verifier('sources : commun et chapitre 1 joints', (demande.redaction.sources || []).includes('Filosofi commune.pdf')
   && (demande.redaction.sources || []).includes('Fiche commune.pdf'), JSON.stringify(demande.redaction.sources));
+verifier('pièces du projet : pas jointes au chapitre 1', !(demande.redaction.sources || []).includes('Devis extincteurs.pdf'), JSON.stringify(demande.redaction.sources));
 verifier('sources : celles du chapitre 2 écartées', !(demande.redaction.sources || []).includes('Organigramme équipe.pdf'), JSON.stringify(demande.redaction.sources));
 verifier('dossiers de sources manquants créés', dossiersCrees.includes('Sources — Introduction') && dossiersCrees.includes('Sources — Chapitre 6')
   && !dossiersCrees.includes('Sources — Chapitre 1'), JSON.stringify(dossiersCrees));
@@ -325,7 +328,7 @@ const corpsDoc = envoiDoc ? Buffer.from(envoiDoc.opts.payload).toString() : '';
 verifier('Google Docs créé dans le dossier 01, converti depuis HTML',
   corpsDoc.includes('"parents":["DOSSIER01"]') && corpsDoc.includes('application/vnd.google-apps.document') && corpsDoc.includes('text/html'), '');
 verifier('titre du document : projet, chapitre, version', corpsDoc.includes('PDS — MSP Santé Caraïbes — 1. Diagnostic territorial et contexte sanitaire — v1'), '');
-verifier('titre en bandeau de couleur, attributs d\'origine retirés', /background-color:#0b3c5d[^>]*><h1 style="[^"]*color:#ffffff/.test(corpsDoc) && !corpsDoc.includes('class="x"'), '');
+verifier('titre en bandeau de couleur, attributs d\'origine retirés', /background-color:#0b3c5d[^>]*>(<p[^>]*>CHAPITRE 1<\/p>)<h1 style="[^"]*color:#ffffff/.test(corpsDoc) && !corpsDoc.includes('class="x"'), '');
 verifier('script et gestionnaires d\'événements retirés', !corpsDoc.includes('<script') && !corpsDoc.includes('onclick'), '');
 verifier('schéma rendu en étapes numérotées reliées par des flèches', corpsDoc.includes('Parcours patient diabétique')
   && corpsDoc.includes('▼') && corpsDoc.includes('Médecin traitant') && !corpsDoc.includes('data-schema'), '');
@@ -386,6 +389,8 @@ const avant = appels.length;
 const d2 = expert({ action: 'redigerChapitre', projetId: P, chapitre: 'ch2' });
 const envoi2 = appels.slice(avant).find((a) => a.opts.method === 'post' && a.url.endsWith('/batches'));
 const texte2 = envoi2 ? JSON.parse(envoi2.opts.payload).requests[0].params.messages[0].content.filter((b) => b.type === 'text').map((b) => b.text).join('\n') : '';
+verifier('chapitre 2 : pièces du projet jointes et signalées', (d2.redaction?.sources || []).includes('Devis extincteurs.pdf')
+  && texte2.includes('<pieces_du_projet>') && texte2.includes('<piece_du_projet nom="Devis extincteurs.pdf">'), JSON.stringify(d2.redaction?.sources));
 verifier('chapitre 2 : le fil du chapitre 1 est transmis', !d2.erreur && texte2.includes('[ch1]') && texte2.includes('APL commune 2,1'), d2.erreur);
 verifier('chapitre 2 : le document du chapitre 1 n\'est pas renvoyé comme source',
   !(d2.redaction?.sources || []).includes('PDS — chapitre 1'), JSON.stringify(d2.redaction?.sources));
@@ -423,6 +428,15 @@ expert({ action: 'redigerChapitre', projetId: P, chapitre: 'ch5' });
 const envoi5 = appels.slice(avant5).find((a) => a.opts.method === 'post' && a.url.endsWith('/batches'));
 const texte5 = envoi5 ? JSON.parse(envoi5.opts.payload).requests[0].params.messages[0].content.filter((b) => b.type === 'text').map((b) => b.text).join('\n') : '';
 verifier('chapitre 5 : le texte du chapitre 4 importé est joint', texte5.includes('<chapitre_deja_redige id="ch4">'), texte5.slice(0, 200));
+
+/* --- Composants infographiques --- */
+const { figureEncadre_, figureChiffres_ } = contexte.__EXPORT;
+const enc = figureEncadre_({ type: 'consequence', titre: '', contenu: '<p>La file active est âgée.</p>' });
+verifier('encadré « conséquence » : fond, filet et titre par défaut', enc.includes('#fdecea') && enc.includes('#c0392b')
+  && enc.includes('Conséquence directe pour le projet de santé') && enc.includes('La file active est âgée.'), enc.slice(0, 200));
+const ch = figureChiffres_(JSON.stringify({ titre: 'Chiffres clés', elements: [{ valeur: '28,3 %', libelle: 'de 65 ans et plus', source: 'INSEE' }, { valeur: '6,7', libelle: 'MG / 10 000 hab.' }] }));
+verifier('chiffres clés : une carte par valeur, source en italique', (ch.match(/<td /g) || []).length === 2 && ch.includes('28,3 %') && ch.includes('<em>INSEE</em>'), ch.slice(0, 200));
+verifier('chiffres clés : description illisible ignorée', figureChiffres_('{pas du json') === '', '');
 
 /* --- Concordance avec l'application --- */
 const ctx = vm.createContext({});

@@ -717,6 +717,16 @@ function carteRedaction() {
         </div>
         ${e.message ? `<p class="text-xs redac-message"><i class="fa-solid fa-circle-info"></i> ${esc(e.message)}
           ${e.majLe ? `<span class="text-muted"> — ${esc(Dates.format(String(e.majLe).slice(0, 10)))}</span>` : ''}</p>` : ''}
+        ${(() => {
+          if (e.statut === 'valide' || enCours) return '';
+          const m = Store.manquantsChapitre(c.id);
+          if (!m.bloquants.length && !m.conseilles.length) return '';
+          return `<div class="redac-manques ${m.bloquants.length ? 'is-bloquant' : ''}">
+            ${m.bloquants.length ? `<p class="text-xs fw-800"><i class="fa-solid fa-triangle-exclamation"></i> Avant de rédiger, il manque :</p>
+              <ul class="text-xs">${m.bloquants.map((x) => `<li><a href="#" data-action="aller-manque" data-route="${esc(x.route)}" data-rub="${esc(x.rub || '')}">${esc(x.texte)}</a></li>`).join('')}</ul>` : ''}
+            ${m.conseilles.length ? `<p class="text-xs text-muted"><i class="fa-solid fa-circle-info"></i> Conseillé : ${m.conseilles.map((x) => esc(x.texte)).join(' · ')}</p>` : ''}
+          </div>`;
+        })()}
         ${aCompleter.length ? `<details class="redac-details"><summary class="text-xs fw-800">
             ${aCompleter.length} élément${aCompleter.length > 1 ? 's' : ''} à compléter</summary>
             <ul class="text-xs">${aCompleter.slice(0, 30).map((l) => `<li>${esc(l.replace(/^[-•]\s*/, ''))}</li>`).join('')}</ul>
@@ -748,7 +758,8 @@ function carteRedaction() {
             Claude rédige chaque chapitre à partir du dossier : fiche du projet, informations du client,
             partenaires, financements et sources déposées dans « 01 — Projet de santé » (exports CartoSanté,
             INSEE, ODISSÉ… en PDF, Google Docs ou Google Sheets). Chaque chapitre ne reçoit que
-            « Sources — Commun » et son propre dossier (« Sources — Chapitre 1 »…) : moins de pages
+            « Sources — Commun », son propre dossier (« Sources — Chapitre 1 »…) et, pour les chapitres 2 et 3,
+            les « Pièces du projet » (devis, prévisionnel, plans, sécurité) : moins de pages
             envoyées, moins de coût. Les chapitres déjà rédigés lui sont rappelés pour garder un document
             cohérent. Toute donnée absente des sources est signalée <em>[donnée à compléter]</em>, jamais inventée.
           </p>
@@ -1169,6 +1180,15 @@ function lienPrestationsLot(lot) {
         ${retard ? ` · <span class="text-danger">${retard} en retard</span>` : ''}</span>
       <button class="btn btn--sm" data-action="voir-lot" data-lot="${esc(lot)}">Suivre dans la feuille de route <i class="fa-solid fa-arrow-right"></i></button>
     </div>`;
+}
+
+/** Nombre de fichiers déjà déposés dans « Sources — <dossier> », si l'inventaire est connu. */
+function nbFichiers(dossier) {
+  const inv = Store.state.inventaires?.[Store.state.projetActifId];
+  if (!inv) return '';
+  const n = inv[dossier] || 0;
+  return `<span class="badge badge--${n ? 'ok' : 'warn'}" title="Fichiers dans « Sources — ${esc(dossier)} »">
+    <i class="fa-solid fa-file"></i> ${n} fichier${n > 1 ? 's' : ''}</span>`;
 }
 
 /* ====================== PROJET DE SANTÉ : état commun aux onglets ====================== */
@@ -2942,7 +2962,20 @@ const Views = {
         <div class="row-tight" style="margin-bottom:10px">
           <button class="btn btn--sm" data-action="atelier-deposer" data-dossier="Sources — Commun" ${actif ? '' : 'disabled'}>
             <i class="fa-solid fa-cloud-arrow-up"></i> Sources communes à tous les chapitres</button>
+          ${nbFichiers('Commun')}
         </div>
+
+        <div class="card card--flat" style="border-left:3px solid var(--accent-500);margin-bottom:12px">
+          <div class="row-between"><strong class="text-sm"><i class="fa-solid fa-briefcase"></i> Pièces du projet</strong>
+            <span class="row-tight">${nbFichiers('Pièces du projet')}
+              <button class="btn btn--sm btn--primary" data-action="atelier-deposer" data-dossier="Sources — Pièces du projet" ${actif ? '' : 'disabled'}>
+                <i class="fa-solid fa-file-arrow-up"></i> Déposer des pièces</button></span></div>
+          <p class="text-xs text-muted" style="margin:6px 0">Les documents opérationnels du projet, en PDF ou image. Claude les exploite pour rédiger
+            le chapitre 2 (moyens matériels et financiers, projet immobilier) et le chapitre 3 (gestion des crises, sécurité, accessibilité),
+            en citant chaque pièce comme source.</p>
+          <div class="row-tight" style="flex-wrap:wrap">${PIECES_PROJET.map((x) => `<span class="badge badge--neutre" title="${esc(x.usage)}">${esc(x.nom)}</span>`).join('')}</div>
+        </div>
+
         <div class="grid grid-2">
           ${CHAPITRES_REDACTION.map((c) => {
             const court = c.id === 'intro' ? 'Introduction' : `Chapitre ${c.id.slice(2)}`;
@@ -2955,6 +2988,7 @@ const Views = {
               <div class="row-tight" style="margin-top:8px">
                 <button class="btn btn--sm" data-action="atelier-deposer" data-dossier="Sources — ${court}" ${actif ? '' : 'disabled'}>
                   <i class="fa-solid fa-file-arrow-up"></i> Déposer des sources</button>
+                ${nbFichiers(court)}
                 <button class="btn btn--sm" data-action="atelier-deposer" data-dossier="Visuels — ${court}" data-images="1" ${actif ? '' : 'disabled'}>
                   <i class="fa-solid fa-image"></i> Déposer des visuels</button>
               </div></div>`;
