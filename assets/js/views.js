@@ -1155,94 +1155,39 @@ const Views = {
         </div>
       </div>` : ''}
 
-      <div class="grid grid-sidebar">
-        <div class="card">
-          <div class="card__head">
-            <div>
-              <h3 class="card__title"><i class="fa-solid fa-chart-simple"></i> Avancement par lot de travail</h3>
-              <p class="card__subtitle">Chaque lot correspond à un bloc de prestations de votre formule.</p>
-            </div>
+      <div class="card">
+        <div class="card__head">
+          <div>
+            <h3 class="card__title"><i class="fa-solid fa-bolt"></i> ${expert ? 'Actions à conduire' : 'Vos actions'}</h3>
+            <p class="card__subtitle">${expert
+              ? 'Livrables déposés en attente de retour du client et points bloquants.'
+              : 'Éléments produits par ElodiaTech qui attendent votre validation.'}</p>
           </div>
+        </div>
+        ${(aValider.length || sigs.length) ? `
           <div class="stack-sm">
-            ${Store.avancementParLot().map((l) => `
-              <div>
-                <div class="row-tight" style="justify-content:space-between;margin-bottom:5px">
-                  <span class="text-sm fw-800"><i class="${esc(l.icone)}" style="color:${esc(l.couleur)}"></i> ${esc(l.nom)}</span>
-                  <span class="text-xs text-muted">${l.valides}/${l.total} · <strong>${l.pct} %</strong></span>
+            ${aValider.map((p) => `
+              <div class="file-row">
+                <div class="file-icon" style="color:var(--warn-500)"><i class="fa-solid fa-hourglass-half"></i></div>
+                <div class="grow">
+                  <div class="text-sm fw-800">${esc(p.titre)}</div>
+                  <div class="text-xs text-muted">${esc(p.livrable)} · ${esc(LOTS[p.lot].nom)}</div>
                 </div>
-                <div class="progress">
-                  <div class="progress__fill" style="width:${l.pct}%;background:linear-gradient(90deg, ${esc(l.couleur)}, ${tint(l.couleur, 65)})"></div>
-                </div>
+                ${Store.estExpert()
+                  ? badge('En attente client', 'warn')
+                  : `<button class="btn btn--ok btn--sm" data-action="valider-prestation" data-id="${esc(p.id)}"><i class="fa-solid fa-check"></i> Valider</button>`}
               </div>`).join('')}
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card__head">
-            <h3 class="card__title"><i class="fa-solid fa-chart-pie"></i> Répartition des prestations</h3>
-          </div>
-          <div class="chart-box chart-box--sm"><canvas id="chart-statuts"></canvas></div>
-        </div>
-      </div>
-
-      <div class="grid grid-sidebar">
-        <div class="card">
-          <div class="card__head">
-            <div>
-              <h3 class="card__title"><i class="fa-solid fa-bolt"></i> ${expert ? 'Actions à conduire' : 'Vos actions'}</h3>
-              <p class="card__subtitle">${expert
-                ? 'Livrables déposés en attente de retour du client et points bloquants.'
-                : 'Éléments produits par ElodiaTech qui attendent votre validation.'}</p>
-            </div>
-          </div>
-          ${(aValider.length || sigs.length) ? `
-            <div class="stack-sm">
-              ${aValider.map((p) => `
-                <div class="file-row">
-                  <div class="file-icon" style="color:var(--warn-500)"><i class="fa-solid fa-hourglass-half"></i></div>
-                  <div class="grow">
-                    <div class="text-sm fw-800">${esc(p.titre)}</div>
-                    <div class="text-xs text-muted">${esc(p.livrable)} · ${esc(LOTS[p.lot].nom)}</div>
-                  </div>
-                  ${Store.estExpert()
-                    ? badge('En attente client', 'warn')
-                    : `<button class="btn btn--ok btn--sm" data-action="valider-prestation" data-id="${esc(p.id)}"><i class="fa-solid fa-check"></i> Valider</button>`}
-                </div>`).join('')}
-              ${sigs.map((s) => `
-                <div class="file-row">
-                  <div class="file-icon" style="color:var(--purple-500)"><i class="fa-solid fa-file-signature"></i></div>
-                  <div class="grow">
-                    <div class="text-sm fw-800">${esc(s.titre)}</div>
-                    <div class="text-xs text-muted">Signature électronique requise</div>
-                  </div>
-                  <button class="btn btn--sm" data-action="aller" data-route="signatures">Ouvrir</button>
-                </div>`).join('')}
-            </div>`
-            : empty('Rien à traiter', 'Aucune action ne vous attend pour le moment.', 'fa-solid fa-mug-hot')}
-        </div>
-
-        <div class="card">
-          <div class="card__head">
-            <h3 class="card__title"><i class="fa-solid fa-calendar-days"></i> Prochaines échéances</h3>
-          </div>
-          ${echeances.length ? `
-            <div class="timeline">
-              ${echeances.map((e) => {
-                const j = Dates.daysUntil(e.date);
-                const ico = { reunion: 'fa-solid fa-video', jalon: 'fa-solid fa-flag', livrable: 'fa-solid fa-box',
-                              formation: 'fa-solid fa-chalkboard-user', prestation: 'fa-solid fa-list-check' }[e.type] || 'fa-solid fa-circle';
-                return `<div class="timeline__item">
-                    <div class="timeline__dot"><i class="${ico}"></i></div>
-                    <div class="grow">
-                      <div class="timeline__date">${esc(Dates.format(e.date))}${j !== null && j >= 0 ? ` · J-${j}` : ''}</div>
-                      <div class="timeline__title">${esc(e.titre)}</div>
-                      <div class="timeline__desc">${esc(e.detail || '')}</div>
-                    </div>
-                  </div>`;
-              }).join('')}
-            </div>`
-            : empty('Aucune échéance', 'Le planning est vide pour le moment.', 'fa-solid fa-calendar')}
-        </div>
+            ${sigs.map((s) => `
+              <div class="file-row">
+                <div class="file-icon" style="color:var(--purple-500)"><i class="fa-solid fa-file-signature"></i></div>
+                <div class="grow">
+                  <div class="text-sm fw-800">${esc(s.titre)}</div>
+                  <div class="text-xs text-muted">Signature électronique requise</div>
+                </div>
+                <button class="btn btn--sm" data-action="aller" data-route="signatures">Ouvrir</button>
+              </div>`).join('')}
+          </div>`
+          : empty('Rien à traiter', 'Aucune action ne vous attend pour le moment.', 'fa-solid fa-mug-hot')}
       </div>
 
       <div class="card">
@@ -1257,16 +1202,8 @@ const Views = {
             ${expert ? `<button class="btn btn--sm" data-action="aller" data-route="admin-offres"><i class="fa-solid fa-pen"></i> Gérer l'offre</button>` : ''}
           </div>
         </div>
-        <div class="grid grid-4">
-          ${Store.avancementParLot().map((l) => `
-            <div class="card card--flat" style="border-left:3px solid ${esc(l.couleur)}">
-              <div class="row-tight" style="margin-bottom:6px">
-                <i class="${esc(l.icone)}" style="color:${esc(l.couleur)}"></i>
-                <strong class="text-sm">${esc(l.nom)}</strong>
-              </div>
-              <div class="text-xs text-muted">${l.total} prestation${l.total > 1 ? 's' : ''} · ${l.pct} % réalisé</div>
-            </div>`).join('')}
-        </div>
+        <p class="text-xs text-muted" style="margin:0">Le détail des prestations, leurs dates et l'avancement par lot sont dans la
+          <a href="#" data-action="aller" data-route="feuille-route">Feuille de route <i class="fa-solid fa-arrow-right"></i></a>.</p>
       </div>
 
     </section>`;
