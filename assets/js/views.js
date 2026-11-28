@@ -630,6 +630,150 @@ function carteDepot(ars) {
     </div>`;
 }
 
+/* ====================== ENVOIS & DÉMARCHES (expert) ====================== */
+
+/** Définition du destinataire d'après le nom enregistré dans l'envoi. */
+function defDestinataire(nom) {
+  const n = String(nom || '').toLowerCase();
+  return DESTINATAIRES_ENVOIS.find((d) => d.label.toLowerCase() === n || d.long.toLowerCase() === n || d.id === n) || null;
+}
+
+/** Lien du site ou du téléservice officiel du destinataire, selon le type de structure. */
+function lienDestinataire(dest, ars) {
+  if (!dest) return null;
+  const type = Store.projet()?.type;
+  if (dest.id === 'ars' && ars) return { libelle: "Site de l'ARS", url: ars };
+  if (dest.id === 'cpam') { const d = DECLARATIONS_CONVENTIONNELLES[type]; return d ? { libelle: d.libelle, url: d.url } : null; }
+  return dest.lien?.[type] || null;
+}
+
+/** Courriel prêt à envoyer dans Gmail : destinataire, objet et corps renseignés. L'expert joint les fichiers du dossier d'envoi et envoie lui-même. */
+function courrielEnvoi(e) {
+  const p = Store.projet();
+  const em = Store.emetteur();
+  const pieces = (e.pieces || []).map((x, i) => `${i + 1}. ${x.nom}`).join('\n');
+  const corps = `Madame, Monsieur,\n\nAu nom de ${p?.nom || 'la structure'}, nous vous transmettons, au titre de : ${e.objet}`
+    + `${e.reference ? ` (référence ${e.reference})` : ''}, les pièces suivantes :\n${pieces || '[pièces à lister]'}\n\n`
+    + `Nous vous remercions de bien vouloir nous en accuser réception.\n\nCordialement,\n${em.representant || ''}\n${em.nomCommercial || em.denomination || ''}`;
+  return 'https://mail.google.com/mail/?view=cm&fs=1&tf=1'
+    + `&to=${encodeURIComponent(e.courrielDest || '')}&su=${encodeURIComponent(`${p?.nom || ''} — ${e.objet}`)}&body=${encodeURIComponent(corps)}`;
+}
+
+function ligneEnvoi(e, ars) {
+  const st = STATUTS_ENVOI[e.statut] || STATUTS_ENVOI.a_preparer;
+  const canal = CANAUX_ENVOI[e.canal] || CANAUX_ENVOI.courriel;
+  const relancer = Store.envoiARelancer(e);
+  const dest = defDestinataire(e.destinataire);
+  const lien = e.canal === 'teleservice' ? lienDestinataire(dest, ars) : null;
+  const avantEnvoi = ['a_preparer', 'pret'].includes(e.statut);
+  const dates = [
+    e.envoyeLe ? `envoyé le ${Dates.format(e.envoyeLe)}` : '',
+    e.arLe ? `accusé le ${Dates.format(e.arLe)}` : '',
+    e.relanceLe && !['reponse', 'clos'].includes(e.statut) ? `relance prévue le ${Dates.format(e.relanceLe)}` : '',
+  ].filter(Boolean).join(' · ');
+  const couleur = relancer ? 'var(--warn-500)' : (e.statut === 'complements' ? 'var(--danger-500)' : (['reponse', 'clos'].includes(e.statut) ? 'var(--ok-500)' : 'var(--border-strong)'));
+  const nbPieces = (e.pieces || []).length;
+
+  return `<div class="file-row envoi" style="border-left:3px solid ${couleur};align-items:flex-start">
+      <div class="file-icon"><i class="${esc(dest?.icone || 'fa-solid fa-paper-plane')}"></i></div>
+      <div class="grow" style="min-width:0">
+        <div class="text-sm fw-800">${esc(e.objet)}</div>
+        <div class="text-xs text-muted">${esc(e.destinataire)} · <i class="${esc(canal.icone)}"></i> ${esc(canal.label)} · ${nbPieces} pièce${nbPieces > 1 ? 's' : ''}${e.reference ? ` · réf. ${esc(e.reference)}` : ''}</div>
+        <div class="row-tight" style="margin-top:6px">
+          ${badge(st.label, st.couleur, st.icone)}
+          ${relancer ? badge('À relancer', 'warn', 'fa-solid fa-bell') : ''}
+          ${dates ? `<span class="text-xs text-muted">${esc(dates)}</span>` : ''}
+        </div>
+        ${e.reponse ? `<p class="text-xs text-soft" style="margin-top:6px"><i class="fa-solid fa-reply"></i> ${esc(e.reponse)}</p>` : ''}
+      </div>
+      <div class="row-tight" style="flex-wrap:wrap;justify-content:flex-end">
+        ${avantEnvoi ? `<button class="btn btn--sm ${e.statut === 'a_preparer' ? 'btn--primary' : ''}" data-action="envoi-preparer" data-id="${esc(e.id)}">
+            <i class="fa-solid fa-box-open"></i> ${e.dossierUrl ? 'Refaire le dossier' : "Préparer l'envoi"}</button>` : ''}
+        ${urlSure(e.dossierUrl) ? `<a class="btn btn--sm btn--ghost" href="${esc(urlSure(e.dossierUrl))}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-folder-open"></i> Dossier</a>` : ''}
+        ${urlSure(e.lettreUrl) ? `<a class="btn btn--sm btn--ghost" href="${esc(urlSure(e.lettreUrl))}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-file-lines"></i> Lettre</a>` : ''}
+        ${e.canal === 'courriel' && (avantEnvoi || e.statut === 'complements' || relancer) ? `<a class="btn btn--sm" href="${esc(courrielEnvoi(e))}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-envelope"></i> Courriel</a>` : ''}
+        ${lien && avantEnvoi ? `<a class="btn btn--sm" href="${esc(lien.url)}" target="_blank" rel="noopener noreferrer" title="${esc(lien.libelle)}"><i class="fa-solid fa-arrow-up-right-from-square"></i> Téléservice</a>` : ''}
+        <button class="btn btn--sm" data-action="envoi-suivi" data-id="${esc(e.id)}"><i class="fa-solid fa-list-check"></i> Suivi</button>
+        <button class="btn btn--sm btn--ghost" data-action="envoi-modifier" data-id="${esc(e.id)}" title="Modifier" aria-label="Modifier"><i class="fa-solid fa-pen"></i></button>
+        <button class="btn btn--sm btn--ghost" data-action="envoi-supprimer" data-id="${esc(e.id)}" title="Supprimer" aria-label="Supprimer"><i class="fa-solid fa-trash"></i></button>
+      </div>
+    </div>`;
+}
+
+function carteEnvois(ars) {
+  const liste = Store.envois();
+  const ordre = Object.keys(STATUTS_ENVOI);
+  const trie = [...liste].sort((a, b) => {
+    const ra = Store.envoiARelancer(a) ? 0 : 1, rb = Store.envoiARelancer(b) ? 0 : 1;
+    if (ra !== rb) return ra - rb;
+    const ca = ['clos'].includes(a.statut) ? 1 : 0, cb = ['clos'].includes(b.statut) ? 1 : 0;
+    return ca - cb || ordre.indexOf(a.statut) - ordre.indexOf(b.statut);
+  });
+  const n = (f) => liste.filter(f).length;
+  const kpi = [
+    { l: 'À préparer ou prêts', v: n((e) => ['a_preparer', 'pret'].includes(e.statut)), c: 'info' },
+    { l: 'En attente de réponse', v: n((e) => ['envoye', 'accuse'].includes(e.statut)), c: 'warn' },
+    { l: 'À relancer', v: Store.envoisARelancer().length, c: 'danger' },
+    { l: 'Compléments demandés', v: n((e) => e.statut === 'complements'), c: 'danger' },
+    { l: 'Réponses reçues', v: n((e) => ['reponse', 'clos'].includes(e.statut)), c: 'ok' },
+  ];
+  return `<div class="card">
+      <div class="card__head"><div>
+        <h3 class="card__title"><i class="fa-solid fa-paper-plane"></i> Envois en cours et passés</h3>
+        <p class="card__subtitle">Ce qui est transmis aux administrations et organismes, avec l'accusé de réception, les compléments demandés et les relances.
+          L'application prépare le dossier et le courriel ; l'envoi reste de votre main.</p>
+      </div>
+        <button class="btn btn--primary btn--sm" data-action="envoi-nouveau"><i class="fa-solid fa-plus"></i> Nouvel envoi</button>
+      </div>
+      <div class="grid grid-5" style="margin-bottom:var(--sp-4)">${kpi.map((k) => `
+        <div class="card card--flat"><div class="text-xs text-muted">${esc(k.l)}</div>
+          <strong class="${k.v && k.c !== 'info' ? `text-${k.c}` : ''}" style="font-size:1.4rem">${k.v}</strong></div>`).join('')}</div>
+      ${trie.length
+        ? `<div class="stack-xs">${trie.map((e) => ligneEnvoi(e, ars)).join('')}</div>`
+        : empty('Aucun envoi pour ce client', 'Choisissez une démarche ci-dessous, ou créez un envoi libre.', 'fa-solid fa-paper-plane')}
+    </div>`;
+}
+
+function carteDestinataires(ars) {
+  const type = Store.projet()?.type;
+  const pieces = Store.pieces();
+  const envois = Store.envois();
+  const dests = DESTINATAIRES_ENVOIS.filter((d) => d.id !== 'autre' && d.types.includes(type || 'MSP'));
+  return `<div class="card">
+      <div class="card__head"><div>
+        <h3 class="card__title"><i class="fa-solid fa-sitemap"></i> Destinataires et démarches</h3>
+        <p class="card__subtitle">Les démarches courantes d'une ${type === 'CDS' ? 'centre de santé' : 'maison de santé'}, avec l'état des pièces du dépôt et le lien officiel.
+          Les points à confirmer auprès du destinataire sont signalés.</p>
+      </div></div>
+      <div class="grid grid-2">${dests.map((d) => {
+        const lien = lienDestinataire(d, ars);
+        const demarches = d.demarches.filter((x) => !x.types || x.types.includes(type || 'MSP'));
+        return `<article class="card card--flat">
+          <strong class="text-sm"><i class="${esc(d.icone)}"></i> ${esc(d.label)}</strong>
+          <div class="text-xs text-muted">${esc(d.long)}</div>
+          ${lien ? `<a class="text-xs" style="display:inline-block;margin:4px 0 8px" href="${esc(lien.url)}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-arrow-up-right-from-square"></i> ${esc(lien.libelle)}</a>` : '<div style="margin-bottom:8px"></div>'}
+          <div class="stack-xs">${demarches.map((x) => {
+            const dossiers = x.dossiers || d.dossiers;
+            const liste = dossiers.length ? pieces.filter((pi) => (pi.pour || []).some((z) => dossiers.includes(z))) : [];
+            const ok = liste.filter((pi) => pi.document).length;
+            const faits = envois.filter((e) => e.objet === x.objet && e.destinataire === d.label).length;
+            const cadre = x.cadre?.[type] || '';
+            return `<div class="envoi-demarche">
+              <div class="text-sm">${esc(x.objet)}</div>
+              ${cadre || x.aide ? `<div class="text-xs text-muted">${esc(cadre || x.aide)}</div>` : ''}
+              ${x.aConfirmer ? `<div class="text-xs text-warn"><i class="fa-solid fa-circle-info"></i> À confirmer : ${esc(x.aConfirmer)}</div>` : ''}
+              <div class="row-tight" style="margin-top:4px">
+                ${liste.length ? badge(`${ok} / ${liste.length} pièces réunies`, ok === liste.length ? 'ok' : 'warn') : ''}
+                ${faits ? badge(`${faits} envoi${faits > 1 ? 's' : ''}`, 'brand') : ''}
+                <button class="btn btn--sm" data-action="envoi-nouveau" data-dest="${esc(d.id)}" data-objet="${esc(x.objet)}"><i class="fa-solid fa-plus"></i> Préparer</button>
+              </div>
+            </div>`;
+          }).join('') || '<p class="text-xs text-muted">Aucune démarche type : créez un envoi libre.</p>'}</div>
+        </article>`;
+      }).join('')}</div>
+    </div>`;
+}
+
 /* ====================== CONSOLE : SOCIÉTÉ ÉMETTRICE ====================== */
 function carteEmetteur() {
   const e = Store.emetteur();
@@ -3026,6 +3170,11 @@ const Views = {
 
   depot() {
     return `<section class="view stack">${carteDepot(etatAtelier().ars)}${cartePieces()}</section>`;
+  },
+
+  envois() {
+    const ars = etatAtelier().ars;
+    return `<section class="view stack">${carteEnvois(ars)}${carteDestinataires(ars)}</section>`;
   },
 
   /* ====================== CONSOLE : ÉQUIPE ====================== */

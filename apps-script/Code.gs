@@ -191,6 +191,11 @@ var ONGLETS = {
     "projet_id", "id", "signature_id", "doc_id", "doc_titre", "nom", "email", "qualite",
     "jeton", "statut", "signe_le", "nom_saisi", "empreinte", "cree_le"
   ],
+  // Envois aux administrations et organismes : suivi, pièces, accusés, relances (expert seul).
+  "Envois": [
+    "projet_id", "id", "destinataire", "objet", "canal", "statut", "courriel_dest", "reference", "pieces",
+    "dossier_url", "lettre_url", "envoye_le", "ar_le", "relance_le", "reponse", "notes", "cree_le", "maj_le"
+  ],
   // Société émettrice des devis, factures et contrats : une seule ligne.
   // Lue par l'expert seul (coordonnées bancaires).
   "Emetteur": [
@@ -2808,6 +2813,7 @@ function construireDonnees(projetIdUnique) {
     donnees.actes = donneesActes_(projets);
     donnees.emetteur = emetteur_();
     donnees.signataires = donneesSignataires_(projets);
+    donnees.envois = donneesEnvois_(projets);
     donnees.experts = lireOnglet('Experts').map(function (r) {
       return {
         id: r.id, nom: r.nom || '', fonction: r.fonction || '',
@@ -3017,6 +3023,15 @@ function doPost(e) {
       if (requete.action === 'copierModele') return json({ ok: true, document: copierModele(requete) });
       if (requete.action === 'preparerSignature') return json({ ok: true, signataires: preparerSignature(requete) });
       return json({ ok: true, signataires: annulerSignature(requete) });
+    }
+
+    // Envois et démarches : réservés à l'expert.
+    if (['enregistrerEnvoi', 'supprimerEnvoi', 'preparerEnvoi'].indexOf(requete.action) !== -1) {
+      if (acces.role !== 'expert') throw new Error('Réservé à l\'expert.');
+      verrou.waitLock(25000);
+      if (requete.action === 'enregistrerEnvoi') return json({ ok: true, envois: enregistrerEnvoi(requete) });
+      if (requete.action === 'supprimerEnvoi') return json({ ok: true, envois: supprimerEnvoi(requete) });
+      return json(Object.assign({ ok: true }, preparerEnvoi(requete)));
     }
 
     // Sous-dossiers de sources par chapitre, pour un projet déjà créé.
@@ -4190,7 +4205,7 @@ function sourcesDuDossier_(dossier, exclus, dossierDuChapitre, avecPieces) {
                  || /^text\//.test(type) || type === 'application/json') {
         var octets = f.getBlob().getBytes();
         poids = octets.length;
-        if (poids > SOURCES_MAX_OCTETS_FICHIER) { ignores.push(nom + ' (' + formaterOctets(poids) + ', trop volumineux)'); return; }
+        if (poids > SOURCES_MAX_OCTETS_FICHIER) { ignores.push(nom + ' (' + formaterOctets(poids) + ', trop volumineux : limite de ' + formaterOctets(SOURCES_MAX_OCTETS_FICHIER) + ' ; compressez le PDF ou convertissez-le en Google Docs)'); return; }
         if (type === 'application/pdf') {
           bloc = { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: Utilities.base64Encode(octets) } };
         } else if (type.indexOf('image/') === 0) {
@@ -4206,7 +4221,7 @@ function sourcesDuDossier_(dossier, exclus, dossierDuChapitre, avecPieces) {
       total += poids;
       lus.push({ nom: nom, bloc: bloc, piece: x.piece });
     } catch (e) {
-      ignores.push(nom + ' (lecture impossible)');
+      ignores.push(nom + ' (lecture impossible : fichier protégé, trop lourd ou corrompu ; déposez une version allégée ou un Google Docs)');
     }
   });
   return { lus: lus, ignores: ignores };
@@ -5405,6 +5420,200 @@ function suivreActe(requete) {
   } finally {
     try { verrou.releaseLock(); } catch (ignore) { /* rien */ }
   }
+}
+
+/* ==========================================================================
+   ENVOIS ET DÉMARCHES — réservés à l'expert
+
+   Suivi de ce qui est transmis aux administrations et organismes (ARS,
+   Assurance Maladie, ordres professionnels, greffe, financeurs) : pièces
+   retenues, canal, état, accusé de réception, compléments, réponse, relance.
+   « Préparer l'envoi » range des copies des pièces dans un dossier daté du
+   Drive du client et y crée la lettre d'accompagnement avec son bordereau.
+   Rien n'est envoyé par le script : l'expert envoie lui-même, puis consigne
+   l'envoi dans l'application.
+   ========================================================================== */
+
+var STATUTS_ENVOI_ = ['a_preparer', 'pret', 'envoye', 'accuse', 'complements', 'reponse', 'clos'];
+var CANAUX_ENVOI_ = ['courriel', 'teleservice', 'recommande', 'depot'];
+var DOSSIER_ENVOIS = '09 — Envois et démarches';
+var CHAMPS_ENVOI = {
+  destinataire: 'destinataire', objet: 'objet', canal: 'canal', statut: 'statut', courrielDest: 'courriel_dest',
+  reference: 'reference', pieces: 'pieces', dossierUrl: 'dossier_url', lettreUrl: 'lettre_url',
+  envoyeLe: 'envoye_le', arLe: 'ar_le', relanceLe: 'relance_le', reponse: 'reponse', notes: 'notes', majLe: 'maj_le'
+};
+
+function envoiDepuisLigne_(r) {
+  var pieces = [];
+  try { pieces = JSON.parse(String(r.pieces || '[]')) || []; } catch (e) { pieces = []; }
+  var date = function (v) { return v ? iso(v) : ''; };
+  return {
+    id: String(r.id), destinataire: String(r.destinataire || ''), objet: String(r.objet || ''),
+    canal: String(r.canal || 'courriel'), statut: String(r.statut || 'a_preparer'),
+    courrielDest: String(r.courriel_dest || ''), reference: String(r.reference || ''), pieces: pieces,
+    dossierUrl: String(r.dossier_url || ''), lettreUrl: String(r.lettre_url || ''),
+    envoyeLe: date(r.envoye_le), arLe: date(r.ar_le), relanceLe: date(r.relance_le),
+    reponse: String(r.reponse || ''), notes: String(r.notes || ''), creeLe: String(r.cree_le || ''), majLe: String(r.maj_le || '')
+  };
+}
+
+function donneesEnvois_(projets) {
+  var parProjet = {};
+  projets.forEach(function (p) { parProjet[p.id] = []; });
+  lireOnglet('Envois').forEach(function (r) {
+    if (parProjet[r.projet_id]) parProjet[r.projet_id].push(envoiDepuisLigne_(r));
+  });
+  return parProjet;
+}
+
+function dateEnvoi_(v) {
+  var s = String(v || '').trim();
+  if (!s) return '';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) throw new Error('Date non reconnue : ' + s + '.');
+  return s;
+}
+
+/** Crée ou met à jour un envoi ; renvoie la liste des envois du projet. */
+function enregistrerEnvoi(requete) {
+  var projetId = String(requete.projetId || '');
+  projetLigne_(projetId);
+  var e = requete.envoi || {};
+  var objet = String(e.objet || '').trim().slice(0, 200);
+  var destinataire = String(e.destinataire || '').trim().slice(0, 80);
+  if (!objet) throw new Error("L'objet de l'envoi est obligatoire.");
+  if (!destinataire) throw new Error('Le destinataire est obligatoire.');
+  var canal = String(e.canal || 'courriel');
+  if (CANAUX_ENVOI_.indexOf(canal) === -1) throw new Error('Canal inconnu.');
+  var statut = String(e.statut || 'a_preparer');
+  if (STATUTS_ENVOI_.indexOf(statut) === -1) throw new Error('Statut inconnu.');
+  var pieces = (Array.isArray(e.pieces) ? e.pieces : []).slice(0, 40).map(function (x) {
+    var url = String(x && x.url || '').trim();
+    return { nom: String(x && x.nom || '').trim().slice(0, 200), url: /^https:\/\//.test(url) ? url.slice(0, 500) : '' };
+  }).filter(function (x) { return x.nom; });
+
+  var id = String(e.id || '');
+  if (id && !/^env[a-z0-9]{6,}$/.test(id)) throw new Error('Identifiant d\'envoi invalide.');
+  var existant = id ? lireOnglet('Envois').filter(function (r) { return String(r.projet_id) === projetId && String(r.id) === id; })[0] : null;
+  // Un identifiant inconnu est celui d'un nouvel envoi, choisi par l'application.
+  if (!id) id = 'env' + nouveauJeton().slice(0, 8);
+
+  var envoyeLe = dateEnvoi_(e.envoyeLe);
+  if (statut !== 'a_preparer' && statut !== 'pret' && !envoyeLe) envoyeLe = Utilities.formatDate(new Date(), 'GMT', 'yyyy-MM-dd');
+  var maintenant = new Date().toISOString();
+  assurerOnglet_('Envois');
+  var conf = { onglet: 'Envois', cles: ['projet_id', 'id'], champs: {} };
+  Object.keys(CHAMPS_ENVOI).forEach(function (k) { conf.champs[k] = CHAMPS_ENVOI[k]; });
+  conf.champs.creeLe = 'cree_le';
+  var champs = {
+    destinataire: destinataire, objet: objet, canal: canal, statut: statut,
+    courrielDest: String(e.courrielDest || '').trim().slice(0, 160), reference: String(e.reference || '').trim().slice(0, 120),
+    pieces: JSON.stringify(pieces), envoyeLe: envoyeLe, arLe: dateEnvoi_(e.arLe), relanceLe: dateEnvoi_(e.relanceLe),
+    reponse: String(e.reponse || '').trim().slice(0, 2000), notes: String(e.notes || '').trim().slice(0, 2000), majLe: maintenant
+  };
+  if (!existant) champs.creeLe = maintenant;
+  ecrireLigne(conf, [projetId, id], champs);
+  return donneesEnvois_([{ id: projetId }])[projetId];
+}
+
+function supprimerEnvoi(requete) {
+  var projetId = String(requete.projetId || '');
+  var feuille = assurerOnglet_('Envois');
+  var v = feuille.getDataRange().getValues();
+  var iP = v[0].indexOf('projet_id'), iId = v[0].indexOf('id');
+  for (var l = v.length - 1; l >= 1; l--) {
+    if (String(v[l][iP]) === projetId && String(v[l][iId]) === String(requete.id)) feuille.deleteRow(l + 1);
+  }
+  return donneesEnvois_([{ id: projetId }])[projetId];
+}
+
+/** Nom de fichier libre dans le dossier : ajoute « (2) », « (3) »… si besoin. */
+function nomLibre_(dossier, nom) {
+  var pris = {};
+  var it = dossier.getFiles();
+  while (it.hasNext()) pris[it.next().getName()] = true;
+  if (!pris[nom]) return nom;
+  var base = nom.replace(/(\.[A-Za-z0-9]{1,5})?$/, ''), ext = (nom.match(/(\.[A-Za-z0-9]{1,5})$/) || [''])[0];
+  for (var n = 2; n < 100; n++) { if (!pris[base + ' (' + n + ')' + ext]) return base + ' (' + n + ')' + ext; }
+  return nom;
+}
+
+/**
+ * Prépare l'envoi : dossier daté, copies des pièces (photographie de ce qui
+ * est transmis), lettre d'accompagnement avec bordereau. L'état passe à
+ * « prêt ». Les pièces dont le lien n'est pas un fichier Drive de
+ * l'expert ne sont pas copiées et sont signalées.
+ */
+function preparerEnvoi(requete) {
+  var projetId = String(requete.projetId || '');
+  var p = projetLigne_(projetId);
+  var ligne = lireOnglet('Envois').filter(function (r) { return String(r.projet_id) === projetId && String(r.id) === String(requete.id); })[0];
+  if (!ligne) throw new Error('Envoi introuvable.');
+  var envoi = envoiDepuisLigne_(ligne);
+  var racine = dossierDuProjet(projetId);
+  var dossier = null;
+  var idDossier = envoi.dossierUrl.match(/[-\w]{25,}/);
+  if (idDossier) { try { dossier = DriveApp.getFolderById(idDossier[0]); } catch (x) { dossier = null; } }
+  if (!dossier) {
+    var parent = null, it = racine.getFolders();
+    while (it.hasNext()) { var d = it.next(); if (d.getName() === DOSSIER_ENVOIS) { parent = d; break; } }
+    if (!parent) parent = racine.createFolder(DOSSIER_ENVOIS);
+    var jour = Utilities.formatDate(new Date(), 'GMT', 'yyyy-MM-dd');
+    dossier = parent.createFolder(jour + ' — ' + envoi.destinataire + ' — ' + envoi.objet.slice(0, 60));
+  }
+
+  var copiees = [], nonCopiees = [];
+  envoi.pieces.forEach(function (x, i) {
+    var id = String(x.url || '').match(/[-\w]{25,}/);
+    if (!id) { nonCopiees.push(x.nom + ' (aucun fichier du Drive : à joindre vous-même)'); return; }
+    try {
+      var f = DriveApp.getFileById(id[0]);
+      f.makeCopy(nomLibre_(dossier, String(i + 1).replace(/^(\d)$/, '0$1') + ' — ' + x.nom.slice(0, 120)), dossier);
+      copiees.push(x.nom);
+    } catch (err) { nonCopiees.push(x.nom + ' (fichier inaccessible)'); }
+  });
+
+  var titre = nomLibre_(dossier, "Lettre d'accompagnement — " + envoi.objet.slice(0, 80));
+  var doc = creerGoogleDoc_(titre, htmlLettreEnvoi_(p, envoi), dossier.getId());
+
+  var champs = { dossierUrl: dossier.getUrl(), lettreUrl: doc.url, majLe: new Date().toISOString() };
+  if (envoi.statut === 'a_preparer') champs.statut = 'pret';
+  var conf = { onglet: 'Envois', cles: ['projet_id', 'id'], champs: {} };
+  Object.keys(CHAMPS_ENVOI).forEach(function (k) { conf.champs[k] = CHAMPS_ENVOI[k]; });
+  ecrireLigne(conf, [projetId, envoi.id], champs);
+  return { envois: donneesEnvois_([{ id: projetId }])[projetId], copiees: copiees.length, nonCopiees: nonCopiees };
+}
+
+function htmlLettreEnvoi_(p, envoi) {
+  var e = echapperHtml_;
+  var police = 'font-family:Arial,sans-serif;';
+  var par = function (t) { return '<p style="' + police + 'font-size:10.5pt;line-height:1.4;text-align:justify;">' + t + '</p>'; };
+  var cel = function (t, largeur, tete) {
+    return '<td style="' + police + 'font-size:9.5pt;width:' + largeur + ';border:1pt solid ' + COULEURS_PDS.bordure + ';padding:5pt;'
+      + (tete ? 'background-color:' + COULEURS_PDS.entete + ';font-weight:bold;' : '') + '">' + t + '</td>';
+  };
+  var representant = [p.client_nom, p.client_fonction].filter(Boolean).join(', ');
+  var lignes = envoi.pieces.map(function (x, i) {
+    return '<tr>' + cel(String(i + 1), '8%') + cel(e(x.nom), '92%') + '</tr>';
+  }).join('');
+  return '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>'
+    + '<p style="' + police + 'font-size:10.5pt;"><strong>' + e(p.nom || '') + '</strong><br>' + e(p.ville || '')
+    + (representant ? '<br>Représentée par ' + e(representant) : '')
+    + (p.client_email ? '<br>' + e(p.client_email) : '') + '</p>'
+    + '<p style="' + police + 'font-size:10.5pt;text-align:right;">' + e(envoi.destinataire) + '<br>'
+    + (envoi.courrielDest ? e(envoi.courrielDest) : '[adresse à compléter]') + '</p>'
+    + '<p style="' + police + 'font-size:10.5pt;text-align:right;">' + e(p.ville || '[lieu]') + ', le [date]</p>'
+    + '<p style="' + police + 'font-size:10.5pt;"><strong>Objet : ' + e(envoi.objet) + '</strong>'
+    + (envoi.reference ? '<br>Référence : ' + e(envoi.reference) : '') + '<br>Pièces jointes : '
+    + envoi.pieces.length + '</p>'
+    + par('Madame, Monsieur,')
+    + par('Nous avons l\'honneur de vous transmettre, au titre de l\'objet ci-dessus, les pièces énumérées dans le bordereau joint à la présente.')
+    + par('Nous restons à votre disposition pour tout complément d\'information et vous remercions de bien vouloir nous accuser réception de ce dossier.')
+    + par('Nous vous prions d\'agréer, Madame, Monsieur, l\'expression de nos salutations distinguées.')
+    + par('[Nom, prénom et qualité du signataire]<br><br><br>Signature')
+    + '<p style="' + police + 'font-size:11.5pt;font-weight:bold;color:' + COULEURS_PDS.titre + ';margin-top:18pt;">BORDEREAU DES PIÈCES TRANSMISES</p>'
+    + '<table style="border-collapse:collapse;width:100%;"><tr>' + cel('N°', '8%', true) + cel('Pièce', '92%', true) + '</tr>'
+    + (lignes || '<tr>' + cel('', '8%') + cel('[aucune pièce renseignée]', '92%') + '</tr>') + '</table>'
+    + '</body></html>';
 }
 
 /* ==========================================================================

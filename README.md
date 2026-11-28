@@ -510,3 +510,13 @@ Chargées par CDN, aucune installation :
 - [Leaflet](https://leafletjs.com/) + OpenStreetMap — cartographie
 - [Font Awesome](https://fontawesome.com/) — icônes
 - Google Fonts (Plus Jakarta Sans) — typographie
+
+## Envois & démarches (29 novembre 2026)
+
+Onglet de « Documents & signatures », réservé à l'expert. Il suit ce qui est transmis aux administrations et organismes pour le compte du client :
+
+- **Destinataires types** (`DESTINATAIRES_ENVOIS`, config.js) : ARS, Assurance Maladie (CPAM ou CGSS), ordres professionnels, greffe ou préfecture, financeurs. Les démarches dépendent du type de structure (ACI pour une MSP, accord national pour un centre de santé). Une référence réglementaire n'est inscrite que lorsqu'elle est sûre ; le reste est marqué « À confirmer ».
+- **Suivi** : état (à préparer, prêt, envoyé, accusé de réception, compléments demandés, réponse reçue, clos), dates, référence, réponse, relance. Un envoi sans réponse au bout de 15 jours (ou à la date de relance fixée) apparaît dans les notifications.
+- **Préparer l'envoi** : crée dans le Drive du client, sous « 09 — Envois et démarches », un dossier daté contenant une copie numérotée des pièces cochées et la lettre d'accompagnement avec son bordereau (Google Docs). Les copies gardent la trace exacte de ce qui a été transmis.
+- **Rien ne part automatiquement** : le bouton « Courriel » ouvre Gmail avec destinataire, objet et corps prêts ; l'expert joint les fichiers du dossier d'envoi et envoie lui-même, puis consigne l'envoi dans « Suivi ». Aucune autorisation Gmail n'est demandée au script.
+- Données : onglet `Envois` du classeur (créé à la première écriture), lu et écrit par l'expert seul. Tests : `tests/envois.mjs` (serveur) et `tests/envois-logique.mjs` (application).

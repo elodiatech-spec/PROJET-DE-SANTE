@@ -486,6 +486,7 @@ const MODULES = [
   { id: 'a-produire',   pole: 'dossier',   label: 'Documents à produire',    onglet: 'À produire',         icone: 'fa-solid fa-file-pen',             formules: null, roles: ['expert'] },
   { id: 'signatures',   pole: 'dossier',   label: 'Signatures',              onglet: 'Signatures',         icone: 'fa-solid fa-file-signature',       formules: null },
   { id: 'depot',        pole: 'dossier',   label: 'Dépôt ARS / ACI',         onglet: 'Dépôt ARS / ACI',    icone: 'fa-solid fa-box-archive',          formules: null },
+  { id: 'envois',       pole: 'dossier',   label: 'Envois & démarches',      onglet: 'Envois & démarches', icone: 'fa-solid fa-paper-plane',          formules: null, roles: ['expert'] },
 
   { id: 'messagerie',   pole: 'dossier',   label: 'Messagerie',              onglet: 'Messagerie',         icone: 'fa-solid fa-comments',             formules: null },
   { id: 'reunions',     pole: 'dossier',   label: 'Réunions',                onglet: 'Réunions et comptes rendus', icone: 'fa-solid fa-people-group', formules: null },
@@ -515,7 +516,7 @@ const RUBRIQUES = [
   { id: 'juridique', groupe: 'production', label: 'Juridique & locaux',       icone: 'fa-solid fa-scale-balanced',   pages: ['juridique', 'immobilier'] },
   { id: 'finpart',   groupe: 'production', label: 'Financements & partenaires', icone: 'fa-solid fa-sack-dollar',    pages: ['financements', 'partenariats', 'prestataires'] },
   { id: 'identite',  groupe: 'production', label: 'Identité & déploiement',   icone: 'fa-solid fa-palette',          pages: ['identite', 'deploiement'] },
-  { id: 'dossier',   groupe: 'dossier',    label: 'Documents & signatures',   icone: 'fa-solid fa-folder-open',      pages: ['documents', 'a-produire', 'signatures', 'depot'] },
+  { id: 'dossier',   groupe: 'dossier',    label: 'Documents & signatures',   icone: 'fa-solid fa-folder-open',      pages: ['documents', 'a-produire', 'signatures', 'depot', 'envois'] },
   { id: 'echanges',  groupe: 'dossier',    label: 'Échanges',                 icone: 'fa-solid fa-comments',         pages: ['messagerie', 'reunions'] },
   { id: 'clients',   groupe: 'console',    label: 'Clients',                  icone: 'fa-solid fa-address-card',     pages: ['admin-projets'] },
   { id: 'reglages',  groupe: 'console',    label: 'Réglages',                 icone: 'fa-solid fa-sliders',          pages: ['admin-offres', 'admin-experts', 'admin-params'] },
@@ -659,6 +660,70 @@ const ARS_SITES = {
   '971': 'https://www.guadeloupe.ars.sante.fr/', '972': 'https://www.martinique.ars.sante.fr/',
   '973': 'https://www.guyane.ars.sante.fr/', '974': 'https://www.lareunion.ars.sante.fr/', '976': 'https://www.mayotte.ars.sante.fr/',
 };
+
+/**
+ * Envois et démarches : à qui l'expert transmet des pièces pour le compte du client.
+ * `dossiers` : dossiers de pièces du dépôt (DOSSIERS_AIDE) dont les pièces sont
+ * proposées ; `motif` : documents proposés d'après leur nom. Les références
+ * réglementaires ne sont données que lorsqu'elles sont sûres ; `aConfirmer`
+ * signale ce que le destinataire doit confirmer avant l'envoi.
+ */
+const DESTINATAIRES_ENVOIS = [
+  { id: 'ars', label: 'ARS', long: 'Agence régionale de santé', icone: 'fa-solid fa-landmark', types: ['MSP', 'CDS'],
+    canal: 'courriel', dossiers: ['ARS'], motif: /projet de sant|engagement|lettre d.engagement|organigramme/i,
+    demarches: [
+      { objet: 'Transmission du projet de santé', cadre: { MSP: 'Code de la santé publique, art. L.6323-3', CDS: 'Code de la santé publique, art. L.6323-1-10' } },
+      { objet: 'Demande de subvention (FIR)', dossiers: ['FIR'], aConfirmer: "Modalités et calendrier de l'appel à candidatures de l'ARS." },
+      { objet: 'Déclaration ou engagement de conformité du centre de santé', types: ['CDS'], aConfirmer: "Pièces et formulaire exigés par l'ARS de la région." },
+    ] },
+  { id: 'cpam', label: 'Assurance Maladie', long: 'CPAM ou CGSS (outre-mer)', icone: 'fa-solid fa-hand-holding-medical', types: ['MSP', 'CDS'],
+    canal: 'teleservice', dossiers: ['ACI', 'ANCS'], motif: /aci|accord|adh[ée]sion|projet de sant/i,
+    demarches: [
+      { objet: "Adhésion à l'accord conventionnel interprofessionnel (ACI)", types: ['MSP'], dossiers: ['ACI'] },
+      { objet: "Adhésion à l'accord national des centres de santé", types: ['CDS'], dossiers: ['ANCS'] },
+      { objet: 'Déclaration annuelle des indicateurs conventionnels', declaration: true },
+    ] },
+  { id: 'ordres', label: 'Ordres professionnels', long: 'Conseils départementaux des ordres', icone: 'fa-solid fa-user-doctor', types: ['MSP', 'CDS'],
+    canal: 'courriel', dossiers: [], motif: /statuts|contrat|r[èe]glement int[ée]rieur|pacte/i,
+    demarches: [
+      { objet: "Communication des statuts et contrats d'exercice (art. L.4113-9 du Code de la santé publique)",
+        aide: 'Concerne les médecins, chirurgiens-dentistes et sages-femmes : communication au conseil départemental de leur ordre.' },
+    ] },
+  { id: 'greffe', label: 'Greffe, préfecture', long: 'Immatriculation et déclarations de la structure', icone: 'fa-solid fa-stamp', types: ['MSP', 'CDS'],
+    canal: 'teleservice', dossiers: [], motif: /statuts|pacte|annonce|k.?bis|d[ée]claration/i,
+    lien: { MSP: { libelle: 'Guichet unique des formalités (INPI)', url: 'https://procedures.inpi.fr/' },
+            CDS: { libelle: 'Service-Public — associations', url: 'https://www.service-public.fr/associations/' } },
+    demarches: [
+      { objet: 'Immatriculation de la SISA (guichet unique des formalités)', types: ['MSP'] },
+      { objet: "Déclaration de l'association gestionnaire", types: ['CDS'] },
+    ] },
+  { id: 'financeurs', label: 'Financeurs et collectivités', long: 'Collectivité, FEDER, autres financeurs', icone: 'fa-solid fa-sack-dollar', types: ['MSP', 'CDS'],
+    canal: 'courriel', dossiers: ['FEDER', 'FIR'], motif: /devis|budget|plan de financement|pr[ée]visionnel|projet de sant/i,
+    demarches: [{ objet: 'Dossier de demande de financement', aConfirmer: "Calendrier, formulaire et pièces exigés par le financeur." }] },
+  { id: 'autre', label: 'Autre destinataire', long: 'Envoi libre', icone: 'fa-solid fa-paper-plane', types: ['MSP', 'CDS'],
+    canal: 'courriel', dossiers: [], motif: null, demarches: [] },
+];
+
+const CANAUX_ENVOI = {
+  courriel:    { label: 'Courriel',               icone: 'fa-solid fa-envelope' },
+  teleservice: { label: 'Téléservice',            icone: 'fa-solid fa-globe' },
+  recommande:  { label: 'Courrier recommandé',    icone: 'fa-solid fa-envelope-circle-check' },
+  depot:       { label: 'Dépôt sur place',        icone: 'fa-solid fa-building-columns' },
+};
+
+/** États d'un envoi, dans l'ordre du circuit. */
+const STATUTS_ENVOI = {
+  a_preparer:  { label: 'À préparer',          couleur: 'neutre', icone: 'fa-solid fa-pen' },
+  pret:        { label: 'Prêt à envoyer',      couleur: 'info',   icone: 'fa-solid fa-box-open' },
+  envoye:      { label: 'Envoyé',              couleur: 'warn',   icone: 'fa-solid fa-paper-plane' },
+  accuse:      { label: 'Accusé de réception', couleur: 'brand',  icone: 'fa-solid fa-circle-check' },
+  complements: { label: 'Compléments demandés', couleur: 'danger', icone: 'fa-solid fa-circle-exclamation' },
+  reponse:     { label: 'Réponse reçue',       couleur: 'ok',     icone: 'fa-solid fa-square-check' },
+  clos:        { label: 'Clos',                couleur: 'neutre', icone: 'fa-solid fa-flag-checkered' },
+};
+
+/** Jours sans réponse après lesquels un envoi est signalé à relancer (sauf date de relance fixée). */
+const DELAI_RELANCE_JOURS = 15;
 
 /**
  * Document final : les chapitres validés réunis en un seul Google Docs
