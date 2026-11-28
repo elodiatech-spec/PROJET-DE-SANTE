@@ -158,6 +158,34 @@ const LOTS = {
    `lots` définit le périmètre couvert, donc les prestations activées
    et les modules accessibles dans l'application.
    -------------------------------------------------------------------------- */
+/**
+ * Échéancier de règlement commun à toutes les formules : 60 % à la commande
+ * (acceptation du devis), 40 % à la validation du projet de santé par l'ARS.
+ * Doit concorder avec ECHEANCIER_ du script (contrôlé par tests/facturation-coherence.mjs).
+ */
+const ECHEANCIER = [
+  { tranche: 'commande',       part: 60, libelle: 'À la commande (acceptation du devis)', court: 'à la commande' },
+  { tranche: 'validation_ars', part: 40, libelle: "À la validation du projet de santé par l'ARS", court: "à la validation par l'ARS" },
+];
+
+/** États d'un devis ou d'une facture. */
+const STATUTS_FACTURATION = {
+  brouillon: { label: 'Brouillon',  couleur: 'neutre', icone: 'fa-solid fa-pen' },
+  envoye:    { label: 'Envoyé',     couleur: 'warn',   icone: 'fa-solid fa-paper-plane' },
+  accepte:   { label: 'Accepté',    couleur: 'ok',     icone: 'fa-solid fa-circle-check' },
+  refuse:    { label: 'Refusé',     couleur: 'danger', icone: 'fa-solid fa-circle-xmark' },
+  emise:     { label: 'Émise',      couleur: 'warn',   icone: 'fa-solid fa-file-invoice' },
+  payee:     { label: 'Payée',      couleur: 'ok',     icone: 'fa-solid fa-circle-check' },
+  annulee:   { label: 'Annulée',    couleur: 'neutre', icone: 'fa-solid fa-ban' },
+};
+
+/** Niveaux de relance d'une facture échue. */
+const NIVEAUX_RELANCE = {
+  1: { label: 'Rappel courtois', apresJours: 0 },
+  2: { label: 'Relance ferme',   apresJours: 15 },
+  3: { label: 'Mise en demeure', apresJours: 30 },
+};
+
 const FORMULES = {
   F1: {
     code: 'F1',
@@ -178,7 +206,7 @@ const FORMULES = {
     pitch: "Pour les équipes qui souhaitent être accompagnées dans la création et la structuration globale de leur MSP ou Centre de santé.",
     lots: ['L0', 'LA', 'LB', 'LC', 'LD', 'LE'],
     dureeMois: 8,
-    recommandee: true,
+    recommandee: false,
     couleur: '#a5c836',
   },
   F3: {
@@ -189,7 +217,7 @@ const FORMULES = {
     pitch: "L'accompagnement de A à Z pour les porteurs de projets souhaitant bénéficier d'un accompagnement élargi, de la conception jusqu'au déploiement.",
     lots: ['L0', 'LA', 'LB', 'LC', 'LD', 'LE', 'LF', 'LG'],
     dureeMois: 12,
-    recommandee: false,
+    recommandee: true,
     couleur: '#7c6bd4',
   },
 };
@@ -486,6 +514,7 @@ const MODULES = [
   { id: 'a-produire',   pole: 'dossier',   label: 'Documents à produire',    onglet: 'À produire',         icone: 'fa-solid fa-file-pen',             formules: null, roles: ['expert'] },
   { id: 'signatures',   pole: 'dossier',   label: 'Signatures',              onglet: 'Signatures',         icone: 'fa-solid fa-file-signature',       formules: null },
   { id: 'depot',        pole: 'dossier',   label: 'Dépôt ARS / ACI',         onglet: 'Dépôt ARS / ACI',    icone: 'fa-solid fa-box-archive',          formules: null },
+  { id: 'facturation',  pole: 'dossier',   label: 'Facturation',             onglet: 'Facturation',        icone: 'fa-solid fa-file-invoice-dollar',  formules: null, roles: ['expert'] },
   { id: 'envois',       pole: 'dossier',   label: 'Envois & démarches',      onglet: 'Envois & démarches', icone: 'fa-solid fa-paper-plane',          formules: null, roles: ['expert'] },
 
   { id: 'messagerie',   pole: 'dossier',   label: 'Messagerie',              onglet: 'Messagerie',         icone: 'fa-solid fa-comments',             formules: null },
@@ -516,7 +545,7 @@ const RUBRIQUES = [
   { id: 'juridique', groupe: 'production', label: 'Juridique & locaux',       icone: 'fa-solid fa-scale-balanced',   pages: ['juridique', 'immobilier'] },
   { id: 'finpart',   groupe: 'production', label: 'Financements & partenaires', icone: 'fa-solid fa-sack-dollar',    pages: ['financements', 'partenariats', 'prestataires'] },
   { id: 'identite',  groupe: 'production', label: 'Identité & déploiement',   icone: 'fa-solid fa-palette',          pages: ['identite', 'deploiement'] },
-  { id: 'dossier',   groupe: 'dossier',    label: 'Documents & signatures',   icone: 'fa-solid fa-folder-open',      pages: ['documents', 'a-produire', 'signatures', 'depot', 'envois'] },
+  { id: 'dossier',   groupe: 'dossier',    label: 'Documents & signatures',   icone: 'fa-solid fa-folder-open',      pages: ['documents', 'a-produire', 'signatures', 'depot', 'envois', 'facturation'] },
   { id: 'echanges',  groupe: 'dossier',    label: 'Échanges',                 icone: 'fa-solid fa-comments',         pages: ['messagerie', 'reunions'] },
   { id: 'clients',   groupe: 'console',    label: 'Clients',                  icone: 'fa-solid fa-address-card',     pages: ['admin-projets'] },
   { id: 'reglages',  groupe: 'console',    label: 'Réglages',                 icone: 'fa-solid fa-sliders',          pages: ['admin-offres', 'admin-experts', 'admin-params'] },
@@ -639,7 +668,6 @@ const MODELES_TYPES = [
   { id: 'mandat_accompagnement', titre: "Mandat d'accompagnement", cat: 'Juridique' },
   { id: 'mandat_administratif', titre: 'Mandat administratif', cat: 'Juridique' },
   { id: 'accord_confidentialite', titre: 'Accord de confidentialité', cat: 'Juridique' },
-  { id: 'devis', titre: 'Devis de la formule', cat: 'Finances' },
 ];
 
 /** Pièces du dépôt ARS / ACI suivies à l'étape 6 de l'Atelier. */

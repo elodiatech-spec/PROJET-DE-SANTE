@@ -196,6 +196,11 @@ var ONGLETS = {
     "projet_id", "id", "destinataire", "objet", "canal", "statut", "courriel_dest", "reference", "pieces",
     "dossier_url", "lettre_url", "envoye_le", "ar_le", "relance_le", "reponse", "notes", "cree_le", "maj_le"
   ],
+  // Devis, factures, paiements et relances (expert seul).
+  "Facturation": [
+    "projet_id", "id", "type", "numero", "statut", "libelle", "tranche", "montant_ht", "taux_tva", "devis_id", "date_doc",
+    "echeance", "accepte_le", "ars_valide_le", "paye_le", "mode_paiement", "relances", "doc_url", "notes", "cree_le", "maj_le"
+  ],
   // Société émettrice des devis, factures et contrats : une seule ligne.
   // Lue par l'expert seul (coordonnées bancaires).
   "Emetteur": [
@@ -2814,6 +2819,7 @@ function construireDonnees(projetIdUnique) {
     donnees.emetteur = emetteur_();
     donnees.signataires = donneesSignataires_(projets);
     donnees.envois = donneesEnvois_(projets);
+    donnees.facturation = donneesFacturation_(projets);
     donnees.experts = lireOnglet('Experts').map(function (r) {
       return {
         id: r.id, nom: r.nom || '', fonction: r.fonction || '',
@@ -3025,6 +3031,13 @@ function doPost(e) {
       return json({ ok: true, signataires: annulerSignature(requete) });
     }
 
+    // Facturation : réservée à l'expert.
+    if (['creerDevis', 'creerFacture', 'enregistrerFacturation', 'supprimerFacturation'].indexOf(requete.action) !== -1) {
+      if (acces.role !== 'expert') throw new Error('Réservé à l\'expert.');
+      verrou.waitLock(25000);
+      var fn = { creerDevis: creerDevis, creerFacture: creerFacture, enregistrerFacturation: enregistrerFacturation, supprimerFacturation: supprimerFacturation }[requete.action];
+      return json({ ok: true, facturation: fn(requete) });
+    }
     // Envois et démarches : réservés à l'expert.
     if (['enregistrerEnvoi', 'supprimerEnvoi', 'preparerEnvoi'].indexOf(requete.action) !== -1) {
       if (acces.role !== 'expert') throw new Error('Réservé à l\'expert.');
@@ -4620,18 +4633,7 @@ function copierModele(requete) {
   var dossier = sousDossierCategorie(dossierDuProjet(projetId), m.categorie);
   var copie = DriveApp.getFileById(m.id).makeCopy(m.titre + ' — ' + (p.nom || projetId), dossier);
   var corps = DocumentApp.openById(copie.getId()).getBody();
-  var nomClient = String(p.nom || '');
-  var representant = [p.client_nom, p.client_fonction].filter(Boolean).join(', ');
-  var remplacements = [
-    ['\\[Nom de la structure ou du client\\]', nomClient],
-    ['\\[nom du projet\\]', nomClient],
-    ['\\[commune\\]', String(p.ville || '')],
-    ['\\[dénomination ou nom, prénom\\]', nomClient],
-    ['\\[nom, prénom ou dénomination\\]', nomClient],
-    ['\\[cabinet, société d\'exercice libéral, entreprise individuelle ou société\\]', nomClient],
-    ['\\[courriel du client\\]', String(p.client_email || '')],
-    ['Représentée par : \\[nom, prénom, qualité\\]', 'Représentée par : ' + representant]
-  ];
+  var remplacements = remplacementsClient_(p);
   remplacements.forEach(function (r) { if (r[1]) corps.replaceText(r[0], r[1]); });
   DocumentApp.openById(copie.getId()).saveAndClose();
   return { id: copie.getId(), url: copie.getUrl(), nom: copie.getName(), categorie: m.categorie };
@@ -5614,6 +5616,322 @@ function htmlLettreEnvoi_(p, envoi) {
     + '<table style="border-collapse:collapse;width:100%;"><tr>' + cel('N°', '8%', true) + cel('Pièce', '92%', true) + '</tr>'
     + (lignes || '<tr>' + cel('', '8%') + cel('[aucune pièce renseignée]', '92%') + '</tr>') + '</table>'
     + '</body></html>';
+}
+
+/* ==========================================================================
+   FACTURATION — réservée à l'expert
+
+   Devis (copie du devis type de la formule, préremplie), factures d'acompte
+   et de solde, paiements, relances. Règlement de toutes les formules :
+   60 % à la commande (acceptation du devis), 40 % à la validation du projet
+   de santé par l'ARS. Une facture ne se supprime jamais : numérotation
+   continue ; elle s'annule. Rien n'est envoyé par le script : l'expert
+   envoie les documents lui-même.
+   ========================================================================== */
+
+var ECHEANCIER_ = [
+  { tranche: 'commande', part: 60, libelle: 'À la commande (acceptation du devis)' },
+  { tranche: 'validation_ars', part: 40, libelle: "À la validation du projet de santé par l'ARS" }
+];
+var PRIX_FORMULES_ = { F1: 5900, F2: 8900, F3: 12500 };
+var VALIDITE_DEVIS_JOURS = 30;
+var STATUTS_DEVIS_ = ['brouillon', 'envoye', 'accepte', 'refuse'];
+var STATUTS_FACTURE_ = ['emise', 'payee', 'annulee'];
+var EMETTEUR_SERVEUR_DEFAUT = {
+  denomination: 'SARL 17 OCTOBRE', nomCommercial: 'ElodiaTech', forme: 'Société à responsabilité limitée', capital: '1 000 €',
+  adresse: 'Espace Cartesia, Belle Étoile Nord', codePostal: '97212', ville: 'Saint-Joseph', siret: '921 549 531 00017', ape: '82.11Z',
+  rcs: '', tvaIntracom: '', representant: 'Frédéric ARNOBE', qualite: 'Gérant', telephone: '+596 696 41 22 55',
+  courriel: 'contact@elodiatech.fr', site: 'www.elodiatech.com', tauxTva: '8,5 %', titulaireCompte: '', iban: '', bic: '', banque: ''
+};
+var CHAMPS_FACT = {
+  type: 'type', numero: 'numero', statut: 'statut', libelle: 'libelle', tranche: 'tranche', montantHt: 'montant_ht', tauxTva: 'taux_tva',
+  devisId: 'devis_id', dateDoc: 'date_doc', echeance: 'echeance', accepteLe: 'accepte_le', arsValideLe: 'ars_valide_le', payeLe: 'paye_le',
+  modePaiement: 'mode_paiement', relances: 'relances', docUrl: 'doc_url', notes: 'notes', creeLe: 'cree_le', majLe: 'maj_le'
+};
+
+function arrondi_(n) { return Math.round((Number(n) || 0) * 100) / 100; }
+
+function emetteurFacture_() {
+  var e = {};
+  Object.keys(EMETTEUR_SERVEUR_DEFAUT).forEach(function (k) { e[k] = EMETTEUR_SERVEUR_DEFAUT[k]; });
+  var s = emetteur_() || {};
+  Object.keys(s).forEach(function (k) { if (s[k]) e[k] = s[k]; });
+  return e;
+}
+
+function tauxTva_() {
+  var m = String(emetteurFacture_().tauxTva || '').replace(',', '.').match(/\d+(\.\d+)?/);
+  return m ? Number(m[0]) : 8.5;
+}
+
+function eurosFr_(n) {
+  var t = (Math.round(Number(n) * 100) / 100).toFixed(2).split('.');
+  return t[0].replace(/\B(?=(\d{3})+(?!\d))/g, '\u00a0') + ',' + t[1] + '\u00a0€';
+}
+
+function dateFr_(isoDate) {
+  var m = String(isoDate || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? m[3] + '/' + m[2] + '/' + m[1] : '';
+}
+
+function aujourdhui_() { return Utilities.formatDate(new Date(), 'GMT', 'yyyy-MM-dd'); }
+
+function ajouterJours_(isoDate, n) {
+  var d = new Date(isoDate + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + n);
+  return Utilities.formatDate(d, 'GMT', 'yyyy-MM-dd');
+}
+
+function factDepuisLigne_(r) {
+  var ht = arrondi_(r.montant_ht), taux = Number(r.taux_tva);
+  if (!isFinite(taux) || String(r.taux_tva) === '') taux = 8.5;
+  var tva = arrondi_(ht * taux / 100);
+  var relances = [];
+  try { relances = JSON.parse(String(r.relances || '[]')) || []; } catch (e) { relances = []; }
+  var date = function (v) { return v ? iso(v) : ''; };
+  return {
+    id: String(r.id), type: String(r.type || ''), numero: String(r.numero || ''), statut: String(r.statut || ''), libelle: String(r.libelle || ''),
+    tranche: String(r.tranche || ''), montantHt: ht, tauxTva: taux, montantTva: tva, montantTtc: arrondi_(ht + tva), devisId: String(r.devis_id || ''),
+    dateDoc: date(r.date_doc), echeance: date(r.echeance), accepteLe: date(r.accepte_le), arsValideLe: date(r.ars_valide_le), payeLe: date(r.paye_le),
+    modePaiement: String(r.mode_paiement || ''), relances: relances, docUrl: String(r.doc_url || ''), notes: String(r.notes || ''),
+    creeLe: String(r.cree_le || ''), majLe: String(r.maj_le || '')
+  };
+}
+
+function donneesFacturation_(projets) {
+  var parProjet = {};
+  projets.forEach(function (p) { parProjet[p.id] = []; });
+  lireOnglet('Facturation').forEach(function (r) {
+    if (parProjet[r.projet_id]) parProjet[r.projet_id].push(factDepuisLigne_(r));
+  });
+  return parProjet;
+}
+
+function ecrireFact_(projetId, id, champs) {
+  assurerOnglet_('Facturation');
+  var conf = { onglet: 'Facturation', cles: ['projet_id', 'id'], champs: CHAMPS_FACT };
+  champs.majLe = new Date().toISOString();
+  ecrireLigne(conf, [projetId, id], champs);
+}
+
+function ligneFact_(projetId, id) {
+  return lireOnglet('Facturation').filter(function (r) { return String(r.projet_id) === projetId && String(r.id) === String(id); })[0] || null;
+}
+
+/** Numéro suivant dans la série (D26-00001 pour les devis, F26-00001 pour les factures), tous clients confondus. */
+function numeroSuivant_(type) {
+  var an = aujourdhui_().slice(2, 4);
+  var prefixe = (type === 'devis' ? 'D' : 'F') + an;
+  var max = 0;
+  lireOnglet('Facturation').forEach(function (r) {
+    var m = String(r.numero || '').match(new RegExp('^' + prefixe + '-?(\\d+)$'));
+    if (m) max = Math.max(max, Number(m[1]));
+  });
+  return prefixe + '-' + ('00000' + (max + 1)).slice(-5);
+}
+
+function remplacementsClient_(p) {
+  var nomClient = String(p.nom || '');
+  var representant = [p.client_nom, p.client_fonction].filter(Boolean).join(', ');
+  return [
+    ['\\[Nom de la structure ou du client\\]', nomClient],
+    ['\\[nom du projet\\]', nomClient],
+    ['\\[commune\\]', String(p.ville || '')],
+    ['\\[dénomination ou nom, prénom\\]', nomClient],
+    ['\\[nom, prénom ou dénomination\\]', nomClient],
+    ['\\[cabinet, société d\'exercice libéral, entreprise individuelle ou société\\]', nomClient],
+    ['\\[courriel du client\\]', String(p.client_email || '')],
+    ['Représentée par : \\[nom, prénom, qualité\\]', 'Représentée par : ' + representant]
+  ];
+}
+
+function motifMontant_(n) {
+  // « 12 500,00 € » : l'espace des milliers peut être insécable dans le modèle.
+  var t = (Math.round(n * 100) / 100).toFixed(2).split('.');
+  return t[0].replace(/\B(?=(\d{3})+(?!\d))/g, '[ \\x{00A0}\\x{202F}]') + ',' + t[1];
+}
+
+/** Crée le devis : copie du devis type de la formule, préremplie, avec l'échéancier. */
+function creerDevis(requete) {
+  var projetId = String(requete.projetId || '');
+  var p = projetLigne_(projetId);
+  var formule = String(p.formule || '');
+  if (!PRIX_FORMULES_[formule]) throw new Error('Formule du projet non reconnue.');
+  var enCours = lireOnglet('Facturation').filter(function (r) {
+    return String(r.projet_id) === projetId && r.type === 'devis' && ['brouillon', 'envoye', 'accepte'].indexOf(String(r.statut)) !== -1;
+  })[0];
+  if (enCours) throw new Error('Un devis est déjà en cours pour ce client (' + enCours.numero + ').');
+  var ht = requete.montantHt !== undefined && requete.montantHt !== '' ? arrondi_(requete.montantHt) : PRIX_FORMULES_[formule];
+  if (!(ht > 0) || ht > 1000000) throw new Error('Montant HT invalide.');
+  var taux = tauxTva_();
+  var numero = numeroSuivant_('devis');
+  var m = MODELES_TYPES['devis_' + formule];
+  var dossier = sousDossierCategorie(dossierDuProjet(projetId), 'Finances');
+  var copie = DriveApp.getFileById(m.id).makeCopy('Devis ' + numero + ' — ' + (p.nom || projetId), dossier);
+  var doc = DocumentApp.openById(copie.getId());
+  var corps = doc.getBody();
+  var jour = aujourdhui_();
+  var reglement = ECHEANCIER_.map(function (t) { return t.part + ' % ' + t.libelle.charAt(0).toLowerCase() + t.libelle.slice(1); }).join(' ; ') + '. Chaque tranche fait l\'objet d\'une facture, payable à réception.';
+  var remplacements = remplacementsClient_(p).concat([
+    ['D26\\[•••••\\]', numero],
+    ['\\[jj/mm/aaaa\\]', dateFr_(jour)],
+    ['\\[30\\]', String(VALIDITE_DEVIS_JOURS)],
+    ['\\[À réception / selon l.échéancier : à préciser\\]', reglement]
+  ]);
+  var standard = PRIX_FORMULES_[formule];
+  if (ht !== standard) {
+    var tvaStd = arrondi_(standard * taux / 100), tvaNew = arrondi_(ht * taux / 100);
+    remplacements.push([motifMontant_(standard + tvaStd), (eurosFr_(ht + tvaNew)).replace('\u00a0€', '')]);
+    remplacements.push([motifMontant_(tvaStd), eurosFr_(tvaNew).replace('\u00a0€', '')]);
+    remplacements.push([motifMontant_(standard), eurosFr_(ht).replace('\u00a0€', '')]);
+  }
+  remplacements.forEach(function (r) { if (r[1]) corps.replaceText(r[0], r[1]); });
+  doc.saveAndClose();
+
+  var id = 'fac' + nouveauJeton().slice(0, 8);
+  ecrireFact_(projetId, id, {
+    type: 'devis', numero: numero, statut: 'brouillon', libelle: 'Formule ' + formule, tranche: '', montantHt: ht, tauxTva: taux,
+    devisId: '', dateDoc: jour, echeance: ajouterJours_(jour, VALIDITE_DEVIS_JOURS), docUrl: copie.getUrl(), creeLe: new Date().toISOString()
+  });
+  return donneesFacturation_([{ id: projetId }])[projetId];
+}
+
+/** Facture d'une tranche de l'échéancier, calculée d'après le devis accepté. */
+function creerFacture(requete) {
+  var projetId = String(requete.projetId || '');
+  var p = projetLigne_(projetId);
+  var ligneDevis = ligneFact_(projetId, requete.devisId);
+  if (!ligneDevis || ligneDevis.type !== 'devis') throw new Error('Devis introuvable.');
+  var devis = factDepuisLigne_(ligneDevis);
+  if (devis.statut !== 'accepte') throw new Error('Le devis doit être accepté avant de facturer.');
+  var tranche = ECHEANCIER_.filter(function (t) { return t.tranche === String(requete.tranche); })[0];
+  if (!tranche) throw new Error('Tranche inconnue.');
+  var factures = lireOnglet('Facturation').filter(function (r) {
+    return String(r.projet_id) === projetId && r.type === 'facture' && String(r.devis_id) === devis.id && String(r.statut) !== 'annulee';
+  }).map(factDepuisLigne_);
+  if (factures.some(function (f) { return f.tranche === tranche.tranche; })) throw new Error('Cette tranche est déjà facturée.');
+  if (tranche.tranche === 'validation_ars' && !devis.arsValideLe) throw new Error("Indiquez d'abord la date de validation du projet de santé par l'ARS.");
+
+  var premiere = ECHEANCIER_[0];
+  var acompteHt = arrondi_(devis.montantHt * premiere.part / 100);
+  var ht = tranche.tranche === premiere.tranche ? acompteHt : arrondi_(devis.montantHt - acompteHt);
+  var jour = aujourdhui_();
+  var numero = numeroSuivant_('facture');
+  var libelle = (tranche.tranche === premiere.tranche ? 'Facture d\'acompte' : 'Facture de solde') + ' — ' + tranche.part + ' %';
+  var fact = { numero: numero, libelle: libelle, tranche: tranche.tranche, montantHt: ht, tauxTva: devis.tauxTva, dateDoc: jour, echeance: jour };
+  var dossier = sousDossierCategorie(dossierDuProjet(projetId), 'Finances');
+  var doc = creerGoogleDoc_('Facture ' + numero + ' — ' + (p.nom || projetId), htmlFacture_(p, emetteurFacture_(), fact, devis, tranche, acompteHt), dossier.getId());
+  var id = 'fac' + nouveauJeton().slice(0, 8);
+  ecrireFact_(projetId, id, {
+    type: 'facture', numero: numero, statut: 'emise', libelle: libelle, tranche: tranche.tranche, montantHt: ht, tauxTva: devis.tauxTva,
+    devisId: devis.id, dateDoc: jour, echeance: jour, docUrl: doc.url, creeLe: new Date().toISOString()
+  });
+  return donneesFacturation_([{ id: projetId }])[projetId];
+}
+
+function dateFact_(v) {
+  var s = String(v || '').trim();
+  if (!s) return '';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) throw new Error('Date non reconnue : ' + s + '.');
+  return s;
+}
+
+/** Met à jour le suivi d'un devis ou d'une facture : état, dates, paiement, relances. Les montants d'une facture ne changent jamais. */
+function enregistrerFacturation(requete) {
+  var projetId = String(requete.projetId || '');
+  projetLigne_(projetId);
+  var d = requete.doc || {};
+  var ligne = ligneFact_(projetId, d.id);
+  if (!ligne) throw new Error('Document introuvable.');
+  var actuel = factDepuisLigne_(ligne);
+  var champs = {};
+  if (d.statut !== undefined && d.statut !== actuel.statut) {
+    var permis = actuel.type === 'devis' ? STATUTS_DEVIS_ : STATUTS_FACTURE_;
+    if (permis.indexOf(String(d.statut)) === -1) throw new Error('État non permis pour ce document.');
+    if (actuel.type === 'facture' && actuel.statut === 'annulee') throw new Error('Une facture annulée ne se rouvre pas.');
+    if (actuel.type === 'devis' && actuel.statut === 'accepte' && d.statut !== 'accepte' && lireOnglet('Facturation').some(function (r) {
+      return String(r.devis_id) === actuel.id && String(r.statut) !== 'annulee'; })) throw new Error('Des factures existent : le devis ne peut plus changer d\'état.');
+    champs.statut = String(d.statut);
+    if (d.statut === 'accepte' && !actuel.accepteLe && d.accepteLe === undefined) champs.accepteLe = aujourdhui_();
+    if (d.statut === 'payee' && !actuel.payeLe && d.payeLe === undefined) champs.payeLe = aujourdhui_();
+  }
+  if (d.accepteLe !== undefined && actuel.type === 'devis') champs.accepteLe = dateFact_(d.accepteLe);
+  if (d.arsValideLe !== undefined && actuel.type === 'devis') champs.arsValideLe = dateFact_(d.arsValideLe);
+  if (d.payeLe !== undefined && actuel.type === 'facture') champs.payeLe = dateFact_(d.payeLe);
+  if (d.echeance !== undefined) champs.echeance = dateFact_(d.echeance);
+  if (d.modePaiement !== undefined) champs.modePaiement = String(d.modePaiement).slice(0, 60);
+  if (d.notes !== undefined) champs.notes = String(d.notes).slice(0, 2000);
+  if (d.relances !== undefined) {
+    champs.relances = JSON.stringify((Array.isArray(d.relances) ? d.relances : []).slice(0, 10).map(function (x) {
+      return { date: dateFact_(x && x.date), niveau: Math.min(3, Math.max(1, Number(x && x.niveau) || 1)) };
+    }));
+  }
+  if (actuel.type === 'facture' && champs.statut === 'payee' && !(champs.payeLe || actuel.payeLe)) throw new Error('Date de paiement obligatoire.');
+  ecrireFact_(projetId, actuel.id, champs);
+  return donneesFacturation_([{ id: projetId }])[projetId];
+}
+
+/** Seuls un devis non accepté ou refusé se supprime ; une facture s'annule. */
+function supprimerFacturation(requete) {
+  var projetId = String(requete.projetId || '');
+  var ligne = ligneFact_(projetId, requete.id);
+  if (!ligne) throw new Error('Document introuvable.');
+  if (ligne.type !== 'devis' || ['brouillon', 'refuse'].indexOf(String(ligne.statut)) === -1) {
+    throw new Error('Seul un devis en brouillon ou refusé se supprime. Une facture s\'annule : la numérotation reste continue.');
+  }
+  var feuille = assurerOnglet_('Facturation');
+  var v = feuille.getDataRange().getValues();
+  var iP = v[0].indexOf('projet_id'), iId = v[0].indexOf('id');
+  for (var l = v.length - 1; l >= 1; l--) {
+    if (String(v[l][iP]) === projetId && String(v[l][iId]) === String(requete.id)) feuille.deleteRow(l + 1);
+  }
+  return donneesFacturation_([{ id: projetId }])[projetId];
+}
+
+function htmlFacture_(p, em, f, devis, tranche, acompteHt) {
+  var e = echapperHtml_;
+  var police = 'font-family:Arial,sans-serif;';
+  var bord = 'border:1pt solid ' + COULEURS_PDS.bordure + ';padding:5pt;';
+  var cel = function (t, larg, tete, droite) {
+    return '<td style="' + police + 'font-size:9.5pt;width:' + larg + ';' + bord + (tete ? 'background-color:' + COULEURS_PDS.entete + ';font-weight:bold;' : '')
+      + (droite ? 'text-align:right;' : '') + '">' + t + '</td>';
+  };
+  var par = function (t) { return '<p style="' + police + 'font-size:9.5pt;line-height:1.35;">' + t + '</p>'; };
+  var tva = arrondi_(f.montantHt * f.tauxTva / 100), ttc = arrondi_(f.montantHt + tva);
+  var adresseClient = [p.adresse, [p.code_postal, p.ville].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+  var representant = [p.client_nom, p.client_fonction].filter(Boolean).join(', ');
+  var aCompleter = function (v) { return v ? e(v) : '[à compléter]'; };
+  var lignes = '';
+  if (tranche.tranche === ECHEANCIER_[0].tranche) {
+    lignes = '<tr>' + cel('Acompte de ' + tranche.part + ' % à la commande — Devis ' + e(devis.numero) + ' (' + e(devis.libelle) + ')<br>Montant total du devis : ' + eurosFr_(devis.montantHt) + ' HT', '70%')
+      + cel(eurosFr_(f.montantHt), '30%', false, true) + '</tr>';
+  } else {
+    lignes = '<tr>' + cel('Solde de ' + tranche.part + ' % — Devis ' + e(devis.numero) + ' (' + e(devis.libelle) + ')<br>Projet de santé validé par l\'ARS le ' + dateFr_(devis.arsValideLe)
+      + '<br>Montant total du devis : ' + eurosFr_(devis.montantHt) + ' HT, dont acompte déjà facturé : ' + eurosFr_(acompteHt) + ' HT', '70%')
+      + cel(eurosFr_(f.montantHt), '30%', false, true) + '</tr>';
+  }
+  var banque = em.iban
+    ? '<br>Titulaire : ' + aCompleter(em.titulaireCompte || em.denomination) + '<br>IBAN : ' + e(em.iban) + (em.bic ? ' — BIC : ' + e(em.bic) : '') + (em.banque ? ' (' + e(em.banque) + ')' : '')
+    : '<br>Coordonnées bancaires : [à compléter dans la fiche Société émettrice]';
+  return '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>'
+    + '<p style="' + police + 'font-size:20pt;font-weight:bold;color:' + COULEURS_PDS.titre + ';">FACTURE</p>'
+    + '<p style="' + police + 'font-size:10.5pt;"><strong>N° ' + e(f.numero) + '</strong> — ' + e(f.libelle) + '<br>Date : ' + dateFr_(f.dateDoc) + ' — Échéance : à réception (' + dateFr_(f.echeance) + ')</p>'
+    + '<table style="border-collapse:collapse;width:100%;"><tr>'
+    + '<td style="' + police + 'font-size:9.5pt;width:50%;vertical-align:top;' + bord + '"><strong>ÉMETTEUR</strong><br><strong>' + e(em.nomCommercial) + '</strong> — ' + e(em.denomination) + '<br>'
+    + e(em.forme) + ', capital ' + e(em.capital) + '<br>' + e(em.adresse) + '<br>' + e(em.codePostal) + ' ' + e(em.ville) + '<br>SIRET ' + e(em.siret) + ' — APE ' + e(em.ape)
+    + '<br>RCS : ' + aCompleter(em.rcs) + '<br>TVA intracommunautaire : ' + aCompleter(em.tvaIntracom) + '<br>' + e(em.telephone) + ' — ' + e(em.courriel) + '</td>'
+    + '<td style="' + police + 'font-size:9.5pt;width:50%;vertical-align:top;' + bord + '"><strong>CLIENT</strong><br><strong>' + e(p.nom || '') + '</strong><br>'
+    + (representant ? 'Représentée par : ' + e(representant) + '<br>' : '') + (adresseClient ? e(adresseClient) + '<br>' : '') + (p.client_email ? e(p.client_email) : '') + '</td></tr></table>'
+    + '<p style="' + police + 'font-size:9.5pt;"> </p>'
+    + '<table style="border-collapse:collapse;width:100%;"><tr>' + cel('Désignation', '70%', true) + cel('Montant HT', '30%', true, true) + '</tr>' + lignes + '</table>'
+    + '<table style="border-collapse:collapse;width:100%;margin-top:6pt;"><tr>' + cel('', '60%') + cel('Total HT', '20%', true) + cel(eurosFr_(f.montantHt), '20%', false, true) + '</tr>'
+    + '<tr>' + cel('', '60%') + cel('TVA ' + String(f.tauxTva).replace('.', ',') + ' %', '20%', true) + cel(eurosFr_(tva), '20%', false, true) + '</tr>'
+    + '<tr>' + cel('', '60%') + cel('<strong>TOTAL TTC</strong>', '20%', true) + cel('<strong>' + eurosFr_(ttc) + '</strong>', '20%', false, true) + '</tr></table>'
+    + par('<strong>Règlement</strong> : par virement bancaire, à réception de la facture.' + banque)
+    + par('<strong>Conditions</strong> : pas d\'escompte pour paiement anticipé. En cas de retard de paiement : intérêts de retard égaux à trois fois le taux d\'intérêt légal en vigueur, '
+      + 'et indemnité forfaitaire pour frais de recouvrement de 40 €.')
+    + '<p style="' + police + 'font-size:8.5pt;color:#5b6b7b;text-align:center;">' + e(em.nomCommercial) + ', nom commercial de ' + e(em.denomination) + ' — ' + e(em.adresse) + ', ' + e(em.codePostal) + ' ' + e(em.ville)
+    + ' — SIRET ' + e(em.siret) + '</p></body></html>';
 }
 
 /* ==========================================================================

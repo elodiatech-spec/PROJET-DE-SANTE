@@ -520,3 +520,13 @@ Onglet de « Documents & signatures », réservé à l'expert. Il suit ce qui es
 - **Préparer l'envoi** : crée dans le Drive du client, sous « 09 — Envois et démarches », un dossier daté contenant une copie numérotée des pièces cochées et la lettre d'accompagnement avec son bordereau (Google Docs). Les copies gardent la trace exacte de ce qui a été transmis.
 - **Rien ne part automatiquement** : le bouton « Courriel » ouvre Gmail avec destinataire, objet et corps prêts ; l'expert joint les fichiers du dossier d'envoi et envoie lui-même, puis consigne l'envoi dans « Suivi ». Aucune autorisation Gmail n'est demandée au script.
 - Données : onglet `Envois` du classeur (créé à la première écriture), lu et écrit par l'expert seul. Tests : `tests/envois.mjs` (serveur) et `tests/envois-logique.mjs` (application).
+
+## Facturation (28 novembre 2026)
+
+Onglet de « Documents & signatures », réservé à l'expert. Règlement commun à toutes les formules : **60 % à la commande** (acceptation du devis), **40 % à la validation du projet de santé par l'ARS** (`ECHEANCIER`, config.js ; `ECHEANCIER_`, script). La formule **F3** est la seule marquée « Recommandée ».
+
+- **Devis** : copie du devis type de la formule (modèles du Drive), préremplie (numéro, date, validité 30 jours, client, règlement). Un montant différent du prix de la formule remplace les trois montants du modèle (HT, TVA, TTC).
+- **Factures** : acompte de 60 % dès que le devis est accepté ; solde de 40 % une fois la date de validation par l'ARS saisie. Le solde est « total moins acompte », sans écart d'arrondi. TVA reprise de la fiche Société émettrice (8,5 %). Mentions : pénalités de retard, indemnité de 40 €, pas d'escompte ; coordonnées bancaires lues dans la fiche Émetteur du classeur (jamais dans le code).
+- **Numérotation** continue par série et par année (D26-00001, F26-00001). Une facture ne se supprime pas : elle s'annule, et sa tranche redevient à émettre.
+- **Paiements et relances** : date et mode de paiement ; relance en trois niveaux (rappel courtois, relance ferme après 15 jours, mise en demeure après 30 jours) avec courriel prêt à envoyer dans Gmail ; l'expert envoie lui-même puis consigne la relance. Notifications : facture échue, acompte ou solde à émettre.
+- Données : onglet `Facturation` (créé à la première écriture), lu et écrit par l'expert seul. Tests : `tests/facturation.mjs` (serveur, 42 contrôles) et `tests/facturation-logique.mjs` (application et cohérence avec le script, 26 contrôles).
