@@ -450,7 +450,7 @@ function carteDocumentsDossier(actif, pros) {
         <div class="card card--flat"><strong class="text-sm">Lettres d'engagement de l'équipe</strong>
           <p class="text-xs text-muted" style="margin:6px 0">Une lettre par professionnel nommé dans les informations du projet (${nommes.length}), à faire signer à l'étape 5.</p>
           ${lettres.length ? `<ul class="text-sm">${lettres.map((d) => `<li><a href="${esc(urlSure(d.url))}" target="_blank" rel="noopener noreferrer">${esc(d.nom)}</a></li>`).join('')}</ul>` : ''}
-          <button class="btn btn--sm ${lettres.length ? '' : 'btn--primary'}" data-action="atelier-lettres" ${actif && nommes.length ? '' : 'disabled'}>
+          <button class="btn btn--sm ${lettres.length ? '' : 'btn--primary'}" data-action="atelier-lettres" ${actif ? '' : 'disabled title="Connectez la source Google Sheets"'}>
             <i class="fa-solid fa-envelope-open-text"></i> ${lettres.length ? 'Générer à nouveau' : 'Générer les lettres'}</button>
         </div>
       </div>
