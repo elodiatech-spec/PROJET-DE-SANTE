@@ -4528,7 +4528,7 @@ function htmlLettreEngagement_(p, x, nom) {
     + titre('Structure concernée') + '<table style="border-collapse:collapse;width:100%;">'
     + cel('Structure', e(p.nom || '')) + cel('Type', type) + cel('Commune', e(p.ville || '')) + cel('Porteur du projet', e(p.client_nom || '')) + '</table>'
     + titre('Le professionnel signataire') + '<table style="border-collapse:collapse;width:100%;">'
-    + cel('Nom, prénom', e(nom)) + cel('Profession', e(x.profession || '')) + cel('N° RPPS / ADELI', '[à compléter]')
+    + cel('Nom, prénom', e(nom)) + cel('Profession', e(x.profession || '')) + cel('N° RPPS / ADELI', e(String(x.rpps || '').trim() || '[à compléter]'))
     + cel('Site d\'exercice', e(x.site || '')) + cel('Statut dans la structure', e(x.statut || '')) + cel('Rôle dans le projet', e(x.role || ''))
     + cel('Courriel', e(x.email || '[à compléter]')) + '</table>'
     + titre('Engagement')
