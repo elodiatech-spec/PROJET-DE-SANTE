@@ -359,6 +359,8 @@ function demoDonnees() {
     redaction: {},
     // Signature interne : signataires et liens personnels, par projet (expert).
     signataires: {},
+    // Nombre de fichiers par dossier de sources (« Commun », « Chapitre 1 »…), par projet.
+    inventaires: {},
     // Actes générés avec Claude : même forme, réservés à l'expert.
     actes: {},
     // Informations fournies par le client (module « Informations du projet »).
@@ -502,7 +504,7 @@ const Store = {
       });
       ['projets', 'documents', 'signatures', 'messages', 'evenements',
        'comptesRendus', 'financements', 'partenaires', 'pieces', 'prestataires',
-       'intervenantsImmo', 'questionnaire', 'redaction', 'actes', 'emetteur', 'signataires'].forEach((cle) => {
+       'intervenantsImmo', 'questionnaire', 'redaction', 'actes', 'emetteur', 'signataires', 'inventaires'].forEach((cle) => {
         if (sauvegarde[cle]) this.state[cle] = sauvegarde[cle];
       });
     }
@@ -553,7 +555,7 @@ const Store = {
       if (this.state.reglages.source === 'sheets') {
         ['projets', 'documents', 'signatures', 'messages', 'evenements',
          'comptesRendus', 'financements', 'partenaires', 'pieces',
-         'experts', 'prestataires', 'questionnaire', 'redaction', 'actes', 'emetteur', 'signataires'].forEach((cle) => {
+         'experts', 'prestataires', 'questionnaire', 'redaction', 'actes', 'emetteur', 'signataires', 'inventaires'].forEach((cle) => {
           delete aEnregistrer[cle];
         });
       }
@@ -935,6 +937,21 @@ const Store = {
       });
     }
 
+    // Prochain chapitre à rédiger : l'expert est prévenu de ce qui manque avant de lancer Claude.
+    if (this.estExpert()) {
+      const etats = this.redactionProjet(projetId);
+      const prochain = CHAPITRES_REDACTION.find((c) => !['valide', 'en_cours'].includes(etats[c.id]?.statut));
+      const m = prochain ? this.manquantsChapitre(prochain.id, projetId) : null;
+      if (m?.bloquants.length) {
+        n.push({
+          ton: 'danger', icone: 'fa-solid fa-pen-ruler',
+          titre: `« ${prochain.titre} » : ${m.bloquants.length} élément${m.bloquants.length > 1 ? 's' : ''} primordia${m.bloquants.length > 1 ? 'ux' : 'l'} manquant${m.bloquants.length > 1 ? 's' : ''}`,
+          texte: m.bloquants.map((x) => x.texte).slice(0, 2).join(' · '),
+          route: 'atelier-redaction',
+        });
+      }
+    }
+
     const sigs = this.signaturesEnAttente(projetId);
     if (sigs.length) {
       n.push({
@@ -954,7 +971,7 @@ const Store = {
           ton: 'warn', icone: 'fa-solid fa-file-arrow-up',
           titre: `${manquantes.length} pièce${manquantes.length > 1 ? 's' : ''} à fournir`,
           texte: manquantes.map((p) => p.nom).slice(0, 3).join(' · '),
-          route: 'financements',
+          route: 'depot',
         });
       }
     }
@@ -2044,6 +2061,46 @@ const Store = {
     const rep = await this._appelExpert('copierModele', { modele: id });
     if (rep.document) this.ajouterDocument({ nom: rep.document.nom, cat: rep.document.categorie, url: rep.document.url, type: 'gdoc' });
     return rep.document;
+  },
+
+  /** Relève les fichiers déposés dans les dossiers de sources du projet (expert). */
+  async inventaireSources() {
+    if (!this.ecritureActive() || !this.estExpert()) return null;
+    const id = this.state.projetActifId;
+    try {
+      const rep = await this._appelExpert('inventaireSources');
+      this.commit((s) => { s.inventaires[id] = rep.inventaire || {}; });
+      return rep.inventaire;
+    } catch (e) { return null; }
+  },
+
+  /**
+   * Éléments primordiaux manquants pour rédiger un chapitre :
+   * { bloquants: [{ texte, route }], conseilles: [{ texte, route }] }.
+   */
+  manquantsChapitre(idChapitre, projetId) {
+    const e = ESSENTIELS_CHAPITRES[idChapitre] || {};
+    const etats = this.redactionProjet(projetId);
+    const inventaire = this.state.inventaires?.[projetId || this.state.projetActifId];
+    const bloquants = [], conseilles = [];
+    (e.rubriques || []).forEach((id) => {
+      const r = QUESTIONNAIRE.find((x) => x.id === id);
+      if (!r) return;
+      const c = this.completudeRubrique(r, projetId);
+      if (c.faits === 0) bloquants.push({ texte: `${r.titre} : non renseigné`, route: 'questionnaire', rub: id });
+      else if (c.pct < 100) conseilles.push({ texte: `${r.titre} : ${c.faits} / ${c.total} renseignés`, route: 'questionnaire', rub: id });
+    });
+    (e.chapitres || []).forEach((id) => {
+      if (etats[id]?.statut === 'valide') return;
+      const c = CHAPITRES_REDACTION.find((x) => x.id === id);
+      bloquants.push({ texte: `${c.titre} : pas encore validé (le fil conducteur en dépend)`, route: 'atelier-redaction' });
+    });
+    const dossiers = (sources, liste) => Object.entries(sources || {}).forEach(([dossier, quoi]) => {
+      if (inventaire && !inventaire[dossier]) liste.push({ texte: `Aucun fichier dans « Sources — ${dossier} » : ${quoi}`, route: 'atelier-collecte' });
+    });
+    dossiers(e.sources, bloquants);
+    dossiers(e.conseilles?.sources, conseilles);
+    return { bloquants, conseilles };
   },
 
   signataires(projetId) {

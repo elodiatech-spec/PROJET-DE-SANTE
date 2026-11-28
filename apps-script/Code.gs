@@ -3025,6 +3025,11 @@ function doPost(e) {
       var d01 = sousDossierCategorie(dossierDuProjet(String(requete.projetId || '')), 'Projet');
       return json({ ok: true, crees: assurerDossiersSources_(d01), url: d01.getUrl() });
     }
+    // Nombre de fichiers par dossier de sources, pour signaler ce qui manque avant la rédaction.
+    if (requete.action === 'inventaireSources') {
+      if (acces.role !== 'expert') throw new Error('Réservé à l\'expert.');
+      return json({ ok: true, inventaire: inventaireSources_(String(requete.projetId || '')) });
+    }
     // Import d'un chapitre rédigé hors de l'application (Google Docs existant).
     if (requete.action === 'importerChapitre') {
       if (acces.role !== 'expert') throw new Error('Réservé à l\'expert.');
@@ -3580,7 +3585,7 @@ var MODELE_MAX_CARACTERES = 60000;
 
 /** Plan général imposé, rappelé à chaque demande pour situer le chapitre. */
 var PLAN_GENERAL_PDS = [
-  'INTRODUCTION', 'PRÉAMBULE', 'SOMMAIRE',
+  'PAGE DE GARDE', 'PRÉAMBULE', 'SOMMAIRE',
   '1. Diagnostic territorial et contexte sanitaire (1.1 Territoire ; 1.2 Population ; 1.3 ZIP / QPV si présence ; 1.4 Offre de soins ; 1.5 Besoins du territoire)',
   "2. Organisation de l'exercice coordonné (2.1 Professionnels impliqués ; 2.2 Pilotage et fonctionnement ; 2.3 Projet de santé : objectifs et valeurs, axes, actions, moyens matériels et financiers ; 2.4 Projet immobilier)",
   "3. Organisation de l'accès aux soins (3.1 Prise en charge des patients : accès et continuité, plan de gestion des crises, permanence des soins ; 3.2 Soins spécialisés et paramédicaux hors les murs ; 3.3 Missions de santé publique ; 3.4 Qualité de la prise en charge)",
@@ -3596,25 +3601,26 @@ var PLAN_GENERAL_PDS = [
  * soumises au client quand le chapitre est validé.
  */
 var CHAPITRES_REDACTION = [
-  { id: 'intro', titre: 'Introduction et préambule', methode: 'cadre', sources: 'Introduction', modele: '', prestations: [],
-    plan: "INTRODUCTION : objet du document, porteur, territoire, nature de la structure (MSP ou centre de santé) et cadre réglementaire.\n"
-        + "PRÉAMBULE : genèse du projet, démarche suivie, professionnels à l'initiative, engagements et calendrier." },
-  { id: 'ch1', titre: '1. Diagnostic territorial et contexte sanitaire', methode: 'diagnostic', sources: 'Chapitre 1', analyse: true,
+  { id: 'intro', titre: 'Préambule', methode: 'cadre', sources: 'Introduction', numero: '',
+    modele: '1a7lFAhAj0uSqbsgB9e0x2ZS0vB9zdDXnbUCaHSaaz-E', prestations: [],
+    plan: "PRÉAMBULE seulement (pas d'introduction : la page de garde est produite à l'assemblage) : titre-accroche sur le territoire, "
+        + "la structure comme réponse coordonnée, les vulnérabilités du territoire, l'organisation pluriprofessionnelle, les axes du projet, l'ambition pour la population." },
+  { id: 'ch1', numero: '1', titre: '1. Diagnostic territorial et contexte sanitaire', methode: 'diagnostic', sources: 'Chapitre 1', analyse: true,
     modele: '13BuJJLZJ4HG37An03KpQahucpkNMJC88L1UvNgLuwAs', prestations: ['P06', 'P07'],
     plan: "1.1. Territoire\n1.2. Population\n1.3. Z.I.P / QPV (uniquement si le territoire compte une zone d'intervention prioritaire ou un quartier prioritaire de la politique de la ville)\n1.4. Offre de soins\n1.5. Besoins du territoire" },
-  { id: 'ch2', titre: "2. Organisation de l'exercice coordonné", methode: 'diagnostic', sources: 'Chapitre 2', analyse: true,
+  { id: 'ch2', numero: '2', titre: "2. Organisation de l'exercice coordonné", methode: 'diagnostic', sources: 'Chapitre 2', analyse: true, pieces: true,
     modele: '1HEtv2V5NTL3sVqlDpLto5wkH2uSSmuOKhaiAZQ_dnbo', prestations: ['P08', 'P09', 'P10'],
     plan: "2.1. Professionnels impliqués dans la démarche (en interne ; en externe : partenaires médicaux, partenaires sociaux — hub, CCAS —, partenaires de prévention)\n2.2. Pilotage et fonctionnement\n2.3. Projet de santé\n2.3.1. Objectifs et valeurs\n2.3.2. Axes du projet de santé\n2.3.3. Actions du projet de santé\n2.3.4. Moyens matériels et financiers\n2.4. Projet immobilier" },
-  { id: 'ch3', titre: "3. Organisation de l'accès aux soins", methode: 'organisation', sources: 'Chapitre 3',
+  { id: 'ch3', numero: '3', titre: "3. Organisation de l'accès aux soins", methode: 'organisation', sources: 'Chapitre 3', pieces: true,
     modele: '1tzEgbmxwHPNyo1UTPeM8ILqVqWooNrY3-DHqcb5W61A', prestations: ['P11', 'P12'],
     plan: "3.1. Organisation de la prise en charge des patients\n3.1.1. Accès aux soins et continuité des soins\n3.1.2. Plan de gestion des crises et des événements majeurs\n3.1.3. Permanence des soins\n3.2. Organisation d'une diversité de services de soins médicaux spécialisés et paramédicaux hors les murs\n3.3. Missions de santé publique\n3.4. La qualité de la prise en charge" },
-  { id: 'ch4', titre: '4. Organisation du travail en équipe', methode: 'organisation', sources: 'Chapitre 4',
+  { id: 'ch4', numero: '4', titre: '4. Organisation du travail en équipe', methode: 'organisation', sources: 'Chapitre 4',
     modele: '1sLh8rVofOsz9k6xFhisRwiNcLHl-W6_kBcSjPY1k1sc', prestations: ['P13', 'P15'],
     plan: "4.1. Coordination de l'exercice pluriprofessionnel\n4.2. Formalisation de coopérations pluriprofessionnelles (conventions, protocoles, partenariats)\n4.3. Développement professionnel continu\n4.4. Suivi, évaluation et amélioration continue\n4.5. Accueil d'étudiants — Recherche" },
-  { id: 'ch5', titre: "5. Partage d'informations", methode: 'cadre', sources: 'Chapitre 5',
+  { id: 'ch5', numero: '5', titre: "5. Partage d'informations", methode: 'cadre', sources: 'Chapitre 5',
     modele: '1fkLrAIIbdAlKt5dHYYU2P2kz2VifdZnnS8d_bhYBA94', prestations: ['P14'],
     plan: "5.1. Entre les professionnels impliqués dans la démarche\n5.2. En direction des professionnels extérieurs (en interne ; en externe : partenaires médicaux, partenaires sociaux — hub, CCAS —, partenaires de prévention)\n5.3. Accès du patient aux informations médicales le concernant\n5.4. Communication externe et visibilité" },
-  { id: 'ch6', titre: '6. Signature du projet de santé et conclusion', methode: 'cadre', sources: 'Chapitre 6',
+  { id: 'ch6', numero: '6', titre: '6. Signature du projet de santé et conclusion', methode: 'cadre', sources: 'Chapitre 6',
     modele: '1I2NxLzcLKdmxDmf4i-yMHW7qY0k_7G1cbsjKaIyBOfA', prestations: [],
     plan: "6. SIGNATURE DU PROJET DE SANTÉ : tableau des signataires (nom, profession, qualité, date, signature) reprenant les professionnels impliqués, engagement collectif.\nCONCLUSION : synthèse des axes, des engagements et de la trajectoire du projet." }
 ];
@@ -3626,14 +3632,13 @@ var REDACTION_COLONNES = ONGLETS['Redaction'];
  * tableaux / schémas, tirés des projets de santé livrés par ElodiaTech.
  */
 var GABARITS_CHAPITRES = {
-  intro: "1 à 2 pages au plus, AUCUN tableau. C'est une synthèse qui donne envie de lire la suite, pas un inventaire. "
-    + "Structure : <h2>INTRODUCTION</h2> en deux ou trois paragraphes (objet du document, porteur, nature MSP ou centre de santé, cadre réglementaire en une phrase), "
-    + "puis <h2>PRÉAMBULE</h2> ouvert par un titre-accroche sur le territoire (exemple de ton : « Le Marigot, un petit territoire aux grandes vulnérabilités »), "
-    + "un paragraphe d'ouverture (la structure comme réponse coordonnée aux enjeux du territoire), "
-    + "<h3>Un territoire … aux besoins de santé renforcés</h3> avec 4 puces de constats chiffrés et sourcés tirés du chapitre 1, "
-    + "<h3>Une organisation pluriprofessionnelle</h3> en deux paragraphes (sites, équipe socle, assistants, réseau de partenaires, partenaire social), "
-    + "<h3>Les axes du projet de santé</h3> avec une puce d'une ligne par axe, "
-    + "et une phrase de conclusion qui exprime l'ambition du projet pour la population.",
+  intro: "Une page et demie au plus, AUCUN tableau, AUCUNE introduction séparée : seulement le PRÉAMBULE (la page de garde est produite à l'assemblage). "
+    + "Structure, calquée sur le préambule modèle : <h1>PRÉAMBULE</h1> ; un titre-accroche sur le territoire en <h2> (exemple de ton : « Le Marigot, un petit territoire aux grandes vulnérabilités ») ; "
+    + "un paragraphe d'ouverture (la structure, sa forme juridique, l'équipe de premier recours, comme réponse coordonnée aux enjeux du territoire) ; "
+    + "<h3>Un territoire … aux besoins de santé renforcés</h3> : une phrase (classement ZIP ou QPV avec sa référence) puis 4 puces « <strong>Thème :</strong> constat chiffré et sourcé » tirées du chapitre 1 ; "
+    + "<h3>Une organisation pluriprofessionnelle …</h3> en deux ou trois paragraphes (sites et distance, équipe socle, assistants, réseau de partenaires, partenaire social) ; "
+    + "<h3>Les axes stratégiques du projet de santé</h3> : une phrase puis une puce par axe « <strong>Axe :</strong> ce que l'équipe fait » ; "
+    + "une phrase de conclusion qui exprime l'ambition du projet pour la population.",
   ch1: "12 à 18 pages. Ouvre par un encadré « Méthodologie et sources » (sources publiques utilisées, échelles de comparaison). "
     + "Chaque sous-partie : 2 à 4 paragraphes d'analyse, au plus un tableau et un graphique, puis l'encadré Observations / Analyse / Conséquences. "
     + "Termine par une synthèse : forces, faiblesses et besoins prioritaires qui fondent les axes.",
@@ -3664,6 +3669,8 @@ var GABARITS_CHAPITRES = {
  */
 var PREFIXE_SOURCES = 'Sources — ';
 var DOSSIER_SOURCES_COMMUN_PDS = PREFIXE_SOURCES + 'Commun';
+/** Pièces opérationnelles du projet (devis, factures, prévisionnel, plans, sécurité) : lues par les chapitres marqués `pieces`. */
+var DOSSIER_PIECES_PROJET = PREFIXE_SOURCES + 'Pièces du projet';
 
 function nomDossierSources_(chapitre) { return PREFIXE_SOURCES + chapitre.sources; }
 
@@ -3693,12 +3700,27 @@ function visuelsDuChapitre_(dossier01, chapitre) {
   return visuels;
 }
 
+/** { 'Commun': n, 'Pièces du projet': n, 'Chapitre 1': n, … } : fichiers déposés par dossier de sources. */
+function inventaireSources_(projetId) {
+  var d01 = sousDossierCategorie(dossierDuProjet(projetId), 'Projet');
+  var res = {};
+  var it = d01.getFolders();
+  while (it.hasNext()) {
+    var d = it.next(), nom = d.getName();
+    if (nom.indexOf(PREFIXE_SOURCES) !== 0) continue;
+    var n = 0, f = d.getFiles();
+    while (f.hasNext() && n < 99) { f.next(); n++; }
+    res[nom.slice(PREFIXE_SOURCES.length)] = n;
+  }
+  return res;
+}
+
 /** Crée les sous-dossiers de sources manquants ; renvoie leur nombre. */
 function assurerDossiersSources_(dossier01) {
   var existants = {};
   var it = dossier01.getFolders();
   while (it.hasNext()) existants[it.next().getName()] = true;
-  var noms = [DOSSIER_SOURCES_COMMUN_PDS].concat(CHAPITRES_REDACTION.map(nomDossierSources_));
+  var noms = [DOSSIER_SOURCES_COMMUN_PDS, DOSSIER_PIECES_PROJET].concat(CHAPITRES_REDACTION.map(nomDossierSources_));
   var crees = 0;
   noms.forEach(function (n) { if (!existants[n]) { dossier01.createFolder(n); crees++; } });
   return crees;
@@ -3873,7 +3895,7 @@ function redigerChapitre(requete) {
     .filter(function (r) { return String(r.projet_id) === projetId && r.doc_id; })
     .map(function (r) { return String(r.doc_id); });
   try { assurerDossiersSources_(dossier); } catch (e) { /* dossier en lecture seule : on lit ce qui existe */ }
-  var sources = sourcesDuDossier_(dossier, dejaRediges, nomDossierSources_(chapitre));
+  var sources = sourcesDuDossier_(dossier, dejaRediges, nomDossierSources_(chapitre), !!chapitre.pieces);
 
   var modele = modeleDuChapitre_(chapitre);
   var contenu = contenuDemande_(projetId, projet, chapitre, consignes, sources);
@@ -3922,17 +3944,20 @@ function consigneSysteme_() {
     "- Du texte rédigé, personnalisé au territoire et à l'équipe, et pas seulement des tableaux : chaque tableau ou graphique est précédé d'une phrase qui l'introduit et suivi d'une analyse. Au plus un tableau par sous-partie. Le document ne doit jamais ressembler à un inventaire généré.",
     "- Ne recopie pas le contenu des autres chapitres : résume-le en une phrase et renvoie au chapitre concerné (« voir chapitre 1, section 1.4 »).",
     "- Respecte la longueur et la structure imposées par le GABARIT DU CHAPITRE.",
+    "- MISE EN PAGE INFOGRAPHIÉE, comme le chapitre modèle : en moyenne un élément visuel par page (graphique, tableau, encadré de lecture, chiffres clés, schéma), jamais deux pages de texte continu. Les sous-parties sont numérotées (1.1, 1.1.1…). Le chiffre important d'un paragraphe est en <strong>.",
     "- Écris en français, avec les noms réels de la structure, de la commune et des professionnels tels qu'ils figurent dans les pièces.",
     "",
     "FORMAT DE SORTIE — respecte-le exactement",
     "1. Le chapitre en HTML simple, entre <chapitre> et </chapitre>. Balises permises : h1 (titre du chapitre, une seule fois), h2, h3, h4, p, ul, ol, li, strong, em, table, thead, tbody, tr, th, td, blockquote, br. Aucun attribut de style, aucune classe.",
     "   - Encadré de synthèse : <blockquote> contenant un <p><strong>Observations</strong> …</p>, etc.",
-    "   - Graphique : <figure data-graphique='{JSON}'></figure> où JSON vaut {\"type\":\"barres|lignes|secteurs|pyramide\",\"titre\":\"…\",\"source\":\"…\",\"categories\":[\"…\"],\"series\":[{\"nom\":\"…\",\"valeurs\":[nombres]}]}. Pour une pyramide des âges : categories = tranches d'âge, deux séries « Hommes » et « Femmes ». Pour des secteurs : une seule série. N'emploie un graphique que si toutes ses valeurs figurent dans les pièces ; sinon écris <p>[Figure à insérer : <type> — <ce qu'elle montre> — source : <…>]</p>.",
+    "   - Encadré de lecture : <aside data-encadre=\"TYPE\" data-titre=\"Titre court\"><p>…</p></aside>, TYPE parmi : consequence (« Conséquence directe pour le projet de santé », après un constat marquant), lecture (une précaution de lecture d'un indicateur), risque (un risque ou point de vigilance), enjeu (un levier ou une opportunité), methode (méthodologie et sources). 2 à 3 phrases, chiffrées.",
+    "   - Chiffres clés : <figure data-chiffres>{\"titre\":\"…\",\"elements\":[{\"valeur\":\"28,3 %\",\"libelle\":\"de 65 ans et plus\",\"source\":\"INSEE, RP2023\"}]}</figure> (2 à 4 éléments), en ouverture d'une sous-partie riche en données.",
+    "   - Graphique : <figure data-graphique='{JSON}'></figure> où JSON vaut {\"type\":\"barres|lignes|secteurs|anneau|pyramide\",\"titre\":\"Sujet — Territoire, année\",\"message\":\"le constat en une ligne, chiffré (ex. : 40,8 % des ménages sont des personnes seules)\",\"source\":\"…\",\"categories\":[\"…\"],\"series\":[{\"nom\":\"…\",\"valeurs\":[nombres]}]}. Pour une pyramide des âges : categories = tranches d'âge, deux séries « Hommes » et « Femmes ». Pour des secteurs : une seule série. N'emploie un graphique que si toutes ses valeurs figurent dans les pièces ; sinon écris <p>[Figure à insérer : <type> — <ce qu'elle montre> — source : <…>]</p>.",
     "   - Logigramme, parcours ou schéma d'organisation : <figure data-schema>{JSON}</figure> (le JSON entre les balises, pas dans un attribut) où JSON vaut {\"titre\":\"…\",\"etapes\":[{\"titre\":\"…\",\"detail\":\"…\",\"acteur\":\"…\"}]} (3 à 8 étapes, dans l'ordre). Il est rendu en schéma graphique. Construis-le toi-même à partir des informations du dossier : n'écris jamais [Schéma à insérer].",
     "   - Protocole pluriprofessionnel : quand le plan en demande et qu'aucun n'est fourni, rédige-le toi-même (objet, patients concernés, professionnels et rôle de chacun, déroulé, outils, indicateur de suivi), à partir des axes et de l'équipe du dossier, et signale-le [protocole à valider par l'équipe].",
     "2. Entre <fil> et </fil>, un objet JSON {\"faits\":[\"…\"]} : 10 à 25 faits établis dans ce chapitre que les chapitres suivants devront reprendre à l'identique (axes retenus, chiffres clés avec leur source, partenaires, horaires, organisation décidée).",
     "3. Entre <a_completer> et </a_completer>, la liste en texte simple, une ligne par élément, des données et validations qui restent à obtenir.",
-    "4. Pour l'introduction seulement : entre <accroche> et </accroche>, une phrase d'accroche de moins de 12 mots pour la page de garde (exemple de ton : « La santé de proximité au cœur du territoire »).",
+    "4. Pour le préambule seulement : entre <accroche> et </accroche>, une phrase d'accroche de moins de 12 mots pour la page de garde (exemple de ton : « La santé de proximité au cœur du territoire »).",
     "Rien d'autre en dehors de ces blocs."
   ].join('\n');
 }
@@ -3967,8 +3992,18 @@ function contenuDemande_(projetId, donnees, chapitre, consignes, sources) {
     }
   }
 
+  var pieces = sources.lus.filter(function (s) { return s.piece; });
+  if (pieces.length) {
+    blocs.push(texteBloc_('<pieces_du_projet>\nPièces opérationnelles déposées par l\'expert (devis, factures, prévisionnel financier, plan des locaux, '
+      + 'vidéoprotection, extincteurs et sécurité incendie, accessibilité, bail…). Exploite-les dans ton raisonnement : '
+      + 'moyens matériels et financiers (montants, équipements, financeurs, échéancier du prévisionnel), projet immobilier (surfaces, pièces, '
+      + 'circulation, accessibilité PMR, conformité ERP), gestion des crises et sécurité des personnes et des biens (vidéoprotection, '
+      + 'extincteurs et moyens de secours, plans d\'évacuation). Cite chaque pièce comme source, par exemple (devis X, date). '
+      + 'N\'en tire que ce qu\'elle contient ; pas de montant ni d\'équipement supposé.\n'
+      + pieces.map(function (s) { return '- ' + s.nom; }).join('\n') + '\n</pieces_du_projet>'));
+  }
   sources.lus.forEach(function (s) {
-    blocs.push(texteBloc_('<source nom="' + s.nom.replace(/"/g, "'") + '">'));
+    blocs.push(texteBloc_('<' + (s.piece ? 'piece_du_projet' : 'source') + ' nom="' + s.nom.replace(/"/g, "'") + '">'));
     blocs.push(s.bloc);
   });
   if (!sources.lus.length) {
@@ -4113,26 +4148,31 @@ function blocsDossier_(projetId, donnees, chapitreExclu) {
  * directs, convertis en blocs lisibles par Claude.
  * @param {Array<string>} exclus chapitres déjà rédigés, qui passent par le fil conducteur.
  */
-function sourcesDuDossier_(dossier, exclus, dossierDuChapitre) {
+function sourcesDuDossier_(dossier, exclus, dossierDuChapitre, avecPieces) {
   var fichiers = [];
-  var collecter = function (d) {
+  var collecter = function (d, piece) {
     var it = d.getFiles();
-    while (it.hasNext()) fichiers.push(it.next());
+    while (it.hasNext()) fichiers.push({ f: it.next(), piece: !!piece });
   };
   collecter(dossier);
   // Les sous-dossiers « Sources — … » des autres chapitres sont écartés ; le
-  // commun et celui du chapitre passent en premier (bornes de nombre et de poids).
-  var retenus = [], autres = [];
+  // commun et celui du chapitre passent en premier (bornes de nombre et de poids),
+  // puis les pièces du projet pour les chapitres qui les exploitent.
+  var retenus = [], pieces = [], autres = [];
   var sous = dossier.getFolders();
   while (sous.hasNext()) {
     var d = sous.next(), nom = d.getName();
     if (nom === DOSSIER_SOURCES_COMMUN_PDS || nom === dossierDuChapitre) retenus.push(d);
+    else if (nom === DOSSIER_PIECES_PROJET) { if (avecPieces) pieces.push(d); }
     else if (nom.indexOf(PREFIXE_SOURCES) !== 0 && nom.indexOf(PREFIXE_VISUELS) !== 0) autres.push(d);
   }
-  retenus.concat(autres).forEach(collecter);
+  retenus.forEach(function (d) { collecter(d); });
+  pieces.forEach(function (d) { collecter(d, true); });
+  autres.forEach(function (d) { collecter(d); });
 
   var lus = [], ignores = [], total = 0;
-  fichiers.forEach(function (f) {
+  fichiers.forEach(function (x) {
+    var f = x.f;
     var nom = f.getName();
     if (exclus.indexOf(f.getId()) !== -1) return;
     if (lus.length >= SOURCES_MAX_FICHIERS) { ignores.push(nom + ' (nombre maximal atteint)'); return; }
@@ -4164,7 +4204,7 @@ function sourcesDuDossier_(dossier, exclus, dossierDuChapitre) {
       }
       if (total + poids > SOURCES_MAX_OCTETS_TOTAL) { ignores.push(nom + ' (volume total atteint)'); return; }
       total += poids;
-      lus.push({ nom: nom, bloc: bloc });
+      lus.push({ nom: nom, bloc: bloc, piece: x.piece });
     } catch (e) {
       ignores.push(nom + ' (lecture impossible)');
     }
@@ -4223,6 +4263,7 @@ function suivreRedaction(requete) {
     var visuelsDoc = {};
     try { visuelsDuChapitre_(dossier, chapitre).forEach(function (v) { visuelsDoc[v.nom] = v; }); } catch (e) { visuelsDoc = {}; }
     var doc = creerGoogleDoc_(titreDoc, mettreEnForme_(html, chapitre, projet, visuelsDoc), dossier.getId());
+    try { enteteDocument_(doc.id, projet); } catch (e) { /* en-tête facultatif */ }
 
     var fil = extraireBloc_(texte, 'fil');
     try { fil = JSON.stringify((JSON.parse(fil).faits || []).slice(0, 40)); } catch (e) { fil = String(fil || '').slice(0, 8000); }
@@ -4258,6 +4299,15 @@ function extraireBloc_(texte, balise) {
 /* ------------------------------------------------ Mise en forme du Doc -- */
 
 var COULEURS_PDS = { titre: '#0b3c5d', accent: '#1e95cb', entete: '#e6f3fa', bordure: '#b9d7e8', encadre: '#f3f8fb' };
+
+/** Encadrés de lecture : fond, filet et titre par défaut (charte des projets livrés). */
+var ENCADRES_PDS = {
+  consequence: { fond: '#fdecea', filet: '#c0392b', titre: 'Conséquence directe pour le projet de santé' },
+  lecture:     { fond: '#eaf4fb', filet: '#1e7fc0', titre: 'Clé de lecture' },
+  risque:      { fond: '#fff4e5', filet: '#e67e22', titre: 'Point de vigilance' },
+  enjeu:       { fond: '#eaf7ef', filet: '#2e9d5b', titre: 'Levier pour le projet' },
+  methode:     { fond: '#eef2f6', filet: '#0b3c5d', titre: 'Méthodologie et sources' }
+};
 var PALETTE_GRAPHIQUES = ['#1e95cb', '#0b3c5d', '#f2a541', '#5bb381', '#c75c5c', '#8a6fb3'];
 
 /** HTML final : balises nettoyées, styles en ligne, graphiques rendus en images. */
@@ -4293,6 +4343,19 @@ function mettreEnForme_(html, chapitre, projet, visuels) {
     return '<p>@@SCHEMA' + (schemas.length - 1) + '@@</p>';
   });
 
+  // Encadrés de lecture et chiffres clés : mis de côté comme les schémas.
+  var encadres = [], chiffres = [];
+  propre = propre.replace(/<aside\b([^>]*)>([\s\S]*?)<\/aside>/gi, function (tout, attrs, contenu) {
+    var type = (attrs.match(/data-encadre\s*=\s*["']?([a-z]+)/i) || [])[1] || 'lecture';
+    var titre = (attrs.match(/data-titre\s*=\s*"([^"]*)"/i) || attrs.match(/data-titre\s*=\s*'([^']*)'/i) || [])[1] || '';
+    encadres.push({ type: String(type).toLowerCase(), titre: titre, contenu: contenu.replace(/<(p|ul|ol|li|strong|em)\s[^>]*>/gi, '<$1>') });
+    return '<p>@@ENCADRE' + (encadres.length - 1) + '@@</p>';
+  });
+  propre = propre.replace(/<figure\s+data-chiffres\s*>([\s\S]*?)<\/figure>/gi, function (tout, json) {
+    chiffres.push(json.replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&amp;/g, '&').trim());
+    return '<p>@@CHIFFRES' + (chiffres.length - 1) + '@@</p>';
+  });
+
   // Attributs retirés (sauf fusion de cellules), puis styles imposés.
   propre = propre.replace(/<(h[1-4]|p|ul|ol|li|table|thead|tbody|tr|blockquote|strong|em)\s[^>]*>/gi, '<$1>');
   propre = propre.replace(/<(th|td)\s([^>]*)>/gi, function (tout, balise, attrs) {
@@ -4314,12 +4377,15 @@ function mettreEnForme_(html, chapitre, projet, visuels) {
     p: police + 'font-size:10.5pt;line-height:1.35;text-align:justify;',
     li: police + 'font-size:10.5pt;line-height:1.3;',
     table: 'border-collapse:collapse;width:100%;margin:6pt 0;',
-    th: police + 'font-size:9.5pt;font-weight:bold;background-color:' + COULEURS_PDS.titre + ';color:#ffffff;border:1pt solid ' + COULEURS_PDS.titre + ';padding:5pt;text-align:left;',
+    th: police + 'font-size:9.5pt;font-weight:bold;background-color:' + COULEURS_PDS.accent + ';color:#ffffff;border:1pt solid ' + COULEURS_PDS.accent + ';padding:5pt;text-align:left;',
     td: police + 'font-size:9.5pt;border:1pt solid ' + COULEURS_PDS.bordure + ';padding:4pt;vertical-align:top;',
     encadre: police + 'background-color:' + COULEURS_PDS.encadre + ';border:1pt solid ' + COULEURS_PDS.bordure
       + ';border-left:4pt solid ' + COULEURS_PDS.accent + ';padding:6pt 10pt;vertical-align:top;'
   };
   propre = propre.replace(/<td data-encadre="1">/g, '<td style="' + styles.encadre + '">');
+  // Première colonne des tableaux de données : libellés en gras, couleur de la charte.
+  propre = propre.replace(/<tr>(\s*)<td>/gi, '<tr>$1<td style="' + police + 'font-size:9.5pt;font-weight:bold;color:' + COULEURS_PDS.accent
+    + ';border:1pt solid ' + COULEURS_PDS.bordure + ';padding:4pt;vertical-align:top;">');
   delete styles.encadre;
   Object.keys(styles).forEach(function (b) {
     propre = propre.replace(new RegExp('<' + b + '(\\s[^>]*)?>', 'gi'), function (tout, attrs) {
@@ -4331,10 +4397,22 @@ function mettreEnForme_(html, chapitre, projet, visuels) {
   // Titres de niveau 1 et 2 en bandeaux de couleur (charte ElodiaTech). Google Docs
   // ignore le fond d'un titre : le titre est posé dans une cellule colorée,
   // et reste un vrai titre (sommaire, plan du document).
+  // Mini-sommaire du chapitre : ses sous-parties de niveau 2, sous le bandeau du titre.
+  var sousParties = [];
+  propre.replace(/<h2 style="[^"]*">([\s\S]*?)<\/h2>/gi, function (t, txt) { sousParties.push(txt.replace(/<[^>]+>/g, '').trim()); return t; });
+  var miniSommaire = sousParties.length >= 3
+    ? '<table style="border-collapse:collapse;width:100%;margin:0 0 12pt 0;"><tr><td style="' + police + 'background-color:' + COULEURS_PDS.entete
+      + ';border:1pt solid ' + COULEURS_PDS.bordure + ';border-left:4pt solid ' + COULEURS_PDS.accent + ';padding:6pt 10pt;">'
+      + '<p style="' + police + 'font-size:9.5pt;font-weight:bold;color:' + COULEURS_PDS.titre + ';margin:0 0 3pt 0;">DANS CE CHAPITRE</p>'
+      + sousParties.slice(0, 12).map(function (x) { return '<p style="' + police + 'font-size:9.5pt;margin:0;">' + x + '</p>'; }).join('')
+      + '</td></tr></table>'
+    : '';
   propre = propre.replace(/<h1 style="[^"]*">([\s\S]*?)<\/h1>/gi, function (t, txt) {
+    var etiquette = chapitre.numero ? 'CHAPITRE ' + chapitre.numero : '';
     return '<table style="border-collapse:collapse;width:100%;margin:0 0 10pt 0;"><tr><td style="background-color:' + COULEURS_PDS.titre
-      + ';border:1pt solid ' + COULEURS_PDS.titre + ';padding:10pt 12pt;"><h1 style="' + police + 'font-size:20pt;color:#ffffff;margin:0;">'
-      + txt + '</h1></td></tr></table>';
+      + ';border:1pt solid ' + COULEURS_PDS.titre + ';padding:14pt 14pt;">'
+      + (etiquette ? '<p style="' + police + 'font-size:11pt;font-weight:bold;color:#9fd3ec;margin:0;letter-spacing:2pt;">' + etiquette + '</p>' : '')
+      + '<h1 style="' + police + 'font-size:20pt;color:#ffffff;margin:0;">' + txt + '</h1></td></tr></table>' + miniSommaire;
   }).replace(/<h2 style="[^"]*">([\s\S]*?)<\/h2>/gi, function (t, txt) {
     return '<p style="' + police + 'font-size:4pt;margin:0;">&nbsp;</p><table style="border-collapse:collapse;width:100%;margin:12pt 0 6pt 0;"><tr><td style="background-color:' + COULEURS_PDS.accent
       + ';border:1pt solid ' + COULEURS_PDS.accent + ';padding:5pt 10pt;"><h2 style="' + police + 'font-size:13pt;color:#ffffff;margin:0;">'
@@ -4342,6 +4420,8 @@ function mettreEnForme_(html, chapitre, projet, visuels) {
   });
 
   propre = propre.replace(/<p[^>]*>@@SCHEMA(\d+)@@<\/p>/g, function (t, i) { return figureSchema_(schemas[Number(i)]); });
+  propre = propre.replace(/<p[^>]*>@@ENCADRE(\d+)@@<\/p>/g, function (t, i) { return figureEncadre_(encadres[Number(i)]); });
+  propre = propre.replace(/<p[^>]*>@@CHIFFRES(\d+)@@<\/p>/g, function (t, i) { return figureChiffres_(chiffres[Number(i)]); });
 
   var bandeau = '<p style="' + police + 'font-size:9pt;color:#5b6b7b;">' + (chapitre.bandeau || 'Projet de santé') + ' — '
     + echapperHtml_(projet.nom || '') + (projet.ville ? ' (' + echapperHtml_(projet.ville) + ')' : '')
@@ -4350,6 +4430,18 @@ function mettreEnForme_(html, chapitre, projet, visuels) {
 
   return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>' + echapperHtml_(chapitre.titre)
     + '</title></head><body>' + bandeau + propre + '</body></html>';
+}
+
+/** En-tête « PROJET DE SANTÉ · structure » sur chaque page, comme les projets livrés. */
+function enteteDocument_(docId, projet) {
+  var d = DocumentApp.openById(docId);
+  var entete = d.getHeader() || d.addHeader();
+  if (entete.getText().trim()) { d.saveAndClose(); return; }
+  var par = entete.getParagraphs()[0] || entete.appendParagraph('');
+  par.setText('PROJET DE SANTÉ  ·  ' + String(projet.nom || '').toUpperCase())
+    .setAlignment(DocumentApp.HorizontalAlignment.RIGHT);
+  par.editAsText().setFontFamily('Arial').setFontSize(8).setBold(true).setForegroundColor(COULEURS_PDS.accent);
+  d.saveAndClose();
 }
 
 /** Schéma ou logigramme : étapes numérotées dans des encadrés reliés par des flèches. */
@@ -4376,18 +4468,57 @@ function figureSchema_(json) {
     + '<table style="border-collapse:collapse;width:100%;margin:4pt 0 10pt 0;">' + lignes.join('') + '</table>';
 }
 
+/** Encadré de lecture coloré (conséquence, clé de lecture, vigilance, levier, méthode). */
+function figureEncadre_(e) {
+  var t = ENCADRES_PDS[e && e.type] || ENCADRES_PDS.lecture;
+  var police = 'font-family:Arial,sans-serif;';
+  var corps = String(e.contenu || '').trim();
+  if (!/^<(p|ul|ol)>/i.test(corps)) corps = '<p>' + corps + '</p>';
+  corps = corps.replace(/<p>/gi, '<p style="' + police + 'font-size:10pt;line-height:1.35;text-align:justify;margin:2pt 0;">')
+               .replace(/<li>/gi, '<li style="' + police + 'font-size:10pt;">');
+  return '<table style="border-collapse:collapse;width:100%;margin:8pt 0 10pt 0;"><tr><td style="' + police + 'background-color:' + t.fond
+    + ';border:none;border-left:4pt solid ' + t.filet + ';padding:7pt 11pt;">'
+    + '<p style="' + police + 'font-size:10.5pt;font-weight:bold;color:' + t.filet + ';margin:0 0 3pt 0;">' + echapperHtml_(e.titre || t.titre) + '</p>'
+    + corps + '</td></tr></table>';
+}
+
+/** Chiffres clés : 2 à 4 cartes, la valeur en grand, son libellé et sa source. */
+function figureChiffres_(json) {
+  var g;
+  try { g = JSON.parse(json); } catch (e) { return ''; }
+  var el = (g.elements || []).filter(function (x) { return x && x.valeur; }).slice(0, 4);
+  if (!el.length) return '';
+  var police = 'font-family:Arial,sans-serif;';
+  var couleurs = [COULEURS_PDS.titre, COULEURS_PDS.accent, '#2e9d5b', '#e67e22'];
+  var largeur = Math.floor(100 / el.length);
+  return (g.titre ? '<p style="' + police + 'font-size:10.5pt;font-weight:bold;color:' + COULEURS_PDS.titre + ';margin:8pt 0 3pt 0;">' + echapperHtml_(String(g.titre)) + '</p>' : '')
+    + '<table style="border-collapse:separate;width:100%;margin:2pt 0 10pt 0;"><tr>'
+    + el.map(function (x, i) {
+      return '<td style="' + police + 'width:' + largeur + '%;background-color:' + couleurs[i] + ';border:2pt solid #ffffff;padding:8pt;text-align:center;vertical-align:top;">'
+        + '<p style="' + police + 'font-size:20pt;font-weight:bold;color:#ffffff;margin:0;text-align:center;">' + echapperHtml_(String(x.valeur)) + '</p>'
+        + '<p style="' + police + 'font-size:9pt;color:#ffffff;margin:2pt 0 0 0;text-align:center;">' + echapperHtml_(String(x.libelle || '')) + '</p>'
+        + (x.source ? '<p style="' + police + 'font-size:7.5pt;color:#dfeef7;margin:2pt 0 0 0;text-align:center;"><em>' + echapperHtml_(String(x.source)) + '</em></p>' : '')
+        + '</td>';
+    }).join('') + '</tr></table>';
+}
+
 /** Rend un graphique décrit en JSON ; à défaut, laisse un emplacement signalé. */
 function figureGraphique_(json) {
   var g;
   try { g = JSON.parse(json); } catch (e) { return '<p>[Figure à insérer : description illisible]</p>'; }
   var titre = String(g.titre || 'Graphique');
-  var legende = '<p style="font-family:Arial,sans-serif;font-size:9pt;color:#5b6b7b;text-align:center;"><em>'
-    + echapperHtml_(titre) + (g.source ? ' — Source : ' + echapperHtml_(String(g.source)) : '') + '</em></p>';
+  var police = 'font-family:Arial,sans-serif;';
+  // Titre et message clé au-dessus, source en dessous, comme dans les projets livrés.
+  var entete = '<p style="' + police + 'font-size:10.5pt;font-weight:bold;color:#1f2d3a;text-align:center;margin:10pt 0 0 0;">' + echapperHtml_(titre) + '</p>'
+    + (g.message ? '<p style="' + police + 'font-size:10pt;font-weight:bold;color:' + COULEURS_PDS.accent + ';text-align:center;margin:0;">' + echapperHtml_(String(g.message)) + '</p>' : '');
+  var legende = '<p style="' + police + 'font-size:8.5pt;color:#5b6b7b;text-align:center;margin:0 0 10pt 0;"><em>'
+    + (g.source ? 'Source : ' + echapperHtml_(String(g.source)) : '') + '</em></p>';
   try {
     var categories = (g.categories || []).map(String);
     var series = (g.series || []).filter(function (s) { return s && (s.valeurs || []).length === categories.length; });
     if (!categories.length || !series.length) throw new Error('données incomplètes');
-    if (g.type === 'secteurs') series = series.slice(0, 1);
+    var circulaire = g.type === 'secteurs' || g.type === 'anneau';
+    if (circulaire) series = series.slice(0, 1);
 
     var table = Charts.newDataTable().addColumn(Charts.ColumnType.STRING, 'Catégorie');
     series.forEach(function (s) { table.addColumn(Charts.ColumnType.NUMBER, String(s.nom || '')); });
@@ -4396,19 +4527,19 @@ function figureGraphique_(json) {
     });
 
     var constructeur = g.type === 'lignes' ? Charts.newLineChart()
-      : g.type === 'secteurs' ? Charts.newPieChart()
+      : circulaire ? Charts.newPieChart()
       : g.type === 'pyramide' ? Charts.newBarChart()
       : Charts.newColumnChart();
-    var graphique = constructeur.setDataTable(table.build()).setTitle(titre)
+    constructeur.setDataTable(table.build())
       .setDimensions(900, g.type === 'pyramide' ? 560 : 460)
-      .setColors(PALETTE_GRAPHIQUES.slice(0, Math.max(series.length, g.type === 'secteurs' ? categories.length : 1)))
-      .setLegendPosition(Charts.Position.BOTTOM)
-      .build();
-    var png = graphique.getAs('image/png').getBytes();
-    return '<p style="text-align:center;"><img width="600" src="data:image/png;base64,'
+      .setColors(PALETTE_GRAPHIQUES.slice(0, Math.max(series.length, circulaire ? categories.length : 1)))
+      .setLegendPosition(circulaire ? Charts.Position.RIGHT : Charts.Position.BOTTOM);
+    if (g.type === 'anneau') constructeur.setOption('pieHole', 0.5);
+    var png = constructeur.build().getAs('image/png').getBytes();
+    return entete + '<p style="text-align:center;margin:0;"><img width="600" src="data:image/png;base64,'
       + Utilities.base64Encode(png) + '"></p>' + legende;
   } catch (e) {
-    return '<p>[Figure à insérer : ' + echapperHtml_(titre) + ']</p>' + legende;
+    return entete + '<p>[Figure à insérer : ' + echapperHtml_(titre) + ']</p>' + legende;
   }
 }
 
@@ -4779,15 +4910,30 @@ function assemblerProjet(requete) {
 
   var version = (Number(lignes[CHAPITRE_FINAL] && lignes[CHAPITRE_FINAL].version) || 0) + 1;
   var dossier = sousDossierCategorie(dossierDuProjet(projetId), 'Projet');
+
+  // Un préambule importé peut porter sa propre page de garde (et un début de
+  // sommaire) : on la reprend telle quelle au lieu d'en produire une seconde.
+  var sources = inclus.map(function (x) { return DocumentApp.openById(x.docId).getBody(); });
+  var preambule = inclus[0] && inclus[0].chapitre.id === 'intro' ? sources[0] : null;
+  var couvertureFournie = !!(preambule && aSaPageDeGarde_(preambule));
+
   var doc = creerGoogleDoc_('PDS — ' + (projet.nom || projetId) + ' — Document final — v' + version,
-    pageDeGarde_(projet, version, manquants, accrocheDuProjet_(lignes.intro)), dossier.getId());
+    couvertureFournie ? '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body><p></p></body></html>'
+      : pageDeGarde_(projet, version, manquants, accrocheDuProjet_(lignes.intro)), dossier.getId());
 
   var document = DocumentApp.openById(doc.id);
   var corps = document.getBody();
-  insererLogoStructure_(projetId, corps);
+  if (couvertureFournie) {
+    copierCorps_(preambule, corps, 'SOMMAIRE');
+    if (manquants.length) {
+      corps.appendParagraph('Document incomplet — à ne pas déposer en l\'état. Chapitres manquants : ' + manquants.join(' ; ') + '.')
+        .editAsText().setFontSize(9).setForegroundColor('#b26a00');
+    }
+  } else {
+    insererLogoStructure_(projetId, corps);
+  }
 
   // Sommaire : titres de niveau 1 et 2 des chapitres assemblés.
-  var sources = inclus.map(function (x) { return DocumentApp.openById(x.docId).getBody(); });
   corps.appendPageBreak();
   corps.appendParagraph('SOMMAIRE').setHeading(DocumentApp.ParagraphHeading.HEADING1);
   sources.forEach(function (src) {
@@ -4803,10 +4949,16 @@ function assemblerProjet(requete) {
     .editAsText().setItalic(true).setFontSize(8).setForegroundColor('#5b6b7b');
 
   sources.forEach(function (src) {
+    if (couvertureFournie && src === preambule) return;
     corps.appendPageBreak();
     copierCorps_(src, corps);
   });
 
+  var entete = document.getHeader() || document.addHeader();
+  if (!entete.getText().trim()) {
+    entete.appendParagraph('PROJET DE SANTÉ  ·  ' + String(projet.nom || '').toUpperCase())
+      .setAlignment(DocumentApp.HorizontalAlignment.RIGHT).editAsText().setFontSize(8).setBold(true).setForegroundColor(COULEURS_PDS.accent);
+  }
   var pied = document.getFooter() || document.addFooter();
   pied.appendParagraph('Projet de santé — ' + (projet.nom || '') + (projet.ville ? ' (' + projet.ville + ')' : '')
     + ' — version ' + version + ' du ' + Utilities.formatDate(new Date(), 'America/Martinique', 'dd/MM/yyyy'))
@@ -4902,11 +5054,23 @@ function titresDuCorps_(src) {
 }
 
 /** Recopie le contenu d'un chapitre, sans son bandeau de document de travail. */
-function copierCorps_(src, cible) {
+/** La première page du chapitre est-elle une page de garde (titre « PROJET DE SANTÉ ») ? */
+function aSaPageDeGarde_(src) {
+  var n = Math.min(src.getNumChildren(), 25);
+  for (var i = 0; i < n; i++) {
+    var el = src.getChild(i);
+    if (el.getType() === DocumentApp.ElementType.PARAGRAPH && /^\s*PROJET DE SANT[ÉE]\s*$/i.test(el.asParagraph().getText())) return true;
+  }
+  return false;
+}
+
+/** Copie le corps d'un document ; `arret` : texte d'un paragraphe où s'arrêter (exclu). */
+function copierCorps_(src, cible, arret) {
   var E = DocumentApp.ElementType;
   for (var i = 0; i < src.getNumChildren(); i++) {
     var el = src.getChild(i);
     var type = el.getType();
+    if (arret && type === E.PARAGRAPH && el.asParagraph().getText().trim().toUpperCase() === arret) break;
     if (type === E.PARAGRAPH) {
       if (/document de travail rédigé le/.test(el.asParagraph().getText())) continue;
       cible.appendParagraph(el.copy().asParagraph());

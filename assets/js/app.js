@@ -317,6 +317,12 @@ const App = {
     }
     const page = Store.resoudreRoute(route);
     const vue = Views[page];
+    // Fichiers déposés dans les dossiers de sources : relevés une fois par projet en ouvrant le projet de santé.
+    if (['atelier-collecte', 'atelier-redaction'].includes(page) && Store.estExpert() && Store.ecritureActive()
+        && !Store.state.inventaires?.[Store.state.projetActifId] && !this._inventaireEnCours) {
+      this._inventaireEnCours = true;
+      Store.inventaireSources().finally(() => { this._inventaireEnCours = false; });
+    }
 
     racine.innerHTML = this.ongletsRubrique(page) + vue(this.filtres);
     const rub = Store.rubriqueDe(page);
@@ -1057,6 +1063,12 @@ const App = {
       });
     },
 
+    /** Ouvre l'endroit où compléter un élément manquant (rubrique du questionnaire, onglet Collecte…). */
+    'aller-manque'(el) {
+      App.aller(el.dataset.route);
+      if (el.dataset.rub) { App.filtres = { rub: el.dataset.rub }; App.renderVue(); }
+    },
+
     'aller-rubrique'(el) {
       const id = el.dataset.rubrique;
       const pages = Store.pagesRubrique(id).map((m) => m.id);
@@ -1267,16 +1279,22 @@ const App = {
         return;
       }
 
+      // Éléments primordiaux manquants : l'expert les voit avant de lancer, et peut passer outre.
+      const manques = Store.manquantsChapitre(id).bloquants;
       Modal.formulaire({
         titre: `Rédiger — ${def.titre}`,
-        soustitre: etat.docUrl
+        soustitre: (manques.length
+          ? `Attention, il manque ${manques.length} élément(s) primordial(aux) : ${manques.map((x) => x.texte).join(' ; ')}. `
+            + 'Claude signalera ces données [à compléter] au lieu de les rédiger. '
+          : '')
+          + (etat.docUrl
           ? 'Une nouvelle version sera créée à côté de la précédente, qui reste dans le dossier.'
-          : 'Claude reprend tout le dossier du projet. Vérifiez que les fichiers sources sont déposés dans « 01 — Projet de santé ».',
+          : 'Claude reprend tout le dossier du projet et les sources déposées à l’étape Collecte.'),
         champs: [
           { id: 'consignes', label: 'Consignes particulières (facultatif)', type: 'textarea', valeur: etat.consignes || '',
             placeholder: 'Exemples : insister sur le diabète et l\'obésité ; retenir trois axes ; le local ouvre en septembre 2027…' },
         ],
-        libelle: 'Lancer la rédaction',
+        libelle: manques.length ? 'Lancer quand même' : 'Lancer la rédaction',
         onSubmit: async (v) => {
           toast('Envoi du dossier à Claude…', 'info');
           try {
@@ -1493,6 +1511,7 @@ const App = {
         }
         el.disabled = false;
         el.innerHTML = libelle;
+        if (ok) Store.inventaireSources();
         if (ok) toast(`${ok} fichier${ok > 1 ? 's' : ''} déposé${ok > 1 ? 's' : ''} dans « ${dossier} ».`
           + (images ? '' : ' Les Google Docs et Sheets se déposent directement dans le Drive.'), 'ok');
       });

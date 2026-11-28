@@ -546,8 +546,8 @@ const CHAPITRES_PDS = [
  * serveur. `prestations` passent « à valider » chez le client à la validation.
  */
 const CHAPITRES_REDACTION = [
-  { id: 'intro', titre: 'Introduction et préambule', prestations: [],
-    resume: "Objet du document, porteur, territoire, cadre réglementaire ; genèse et démarche du projet." },
+  { id: 'intro', titre: 'Préambule', prestations: [],
+    resume: "Le territoire et ses vulnérabilités, l'organisation pluriprofessionnelle, les axes du projet. La page de garde est produite à l'assemblage." },
   { id: 'ch1', titre: '1. Diagnostic territorial et contexte sanitaire', prestations: ['P06', 'P07'],
     resume: "Territoire, population, ZIP / QPV, offre de soins, besoins — comparés au département, à la région et à la France." },
   { id: 'ch2', titre: "2. Organisation de l'exercice coordonné", prestations: ['P08', 'P09', 'P10'],
@@ -560,6 +560,35 @@ const CHAPITRES_REDACTION = [
     resume: "Entre professionnels, vers l'extérieur, accès du patient à ses données, communication externe." },
   { id: 'ch6', titre: '6. Signature du projet de santé et conclusion', prestations: [],
     resume: "Tableau des signataires, engagement collectif, conclusion." },
+];
+
+/**
+ * Éléments primordiaux de chaque chapitre, vérifiés avant la rédaction :
+ * rubriques des informations du projet, chapitres déjà validés, dossiers de
+ * sources (« Sources — … ») où il faut avoir déposé au moins un fichier.
+ * `conseilles` : utiles mais non bloquants.
+ */
+const ESSENTIELS_CHAPITRES = {
+  intro: { rubriques: ['structure', 'axes'], chapitres: ['ch1'] },
+  ch1:   { rubriques: ['structure'], sources: { 'Chapitre 1': 'exports officiels du territoire (INSEE, CartoSanté, ODISSÉ…)' } },
+  ch2:   { rubriques: ['equipe', 'axes', 'locaux', 'moyens'], chapitres: ['ch1'],
+           conseilles: { sources: { 'Pièces du projet': 'devis, factures, prévisionnel financier, plan des locaux' } } },
+  ch3:   { rubriques: ['horaires', 'equipe', 'axes'], chapitres: ['ch2'],
+           conseilles: { sources: { 'Pièces du projet': 'plan des locaux, vidéoprotection, extincteurs et sécurité incendie' } } },
+  ch4:   { rubriques: ['equipe', 'axes'], chapitres: ['ch2', 'ch3'] },
+  ch5:   { rubriques: ['logiciel'], chapitres: ['ch2'] },
+  ch6:   { rubriques: ['equipe'], chapitres: ['ch1', 'ch2', 'ch3', 'ch4', 'ch5'] },
+};
+
+/** Pièces opérationnelles du projet, déposées dans « Sources — Pièces du projet » et exploitées par les chapitres 2 et 3. */
+const PIECES_PROJET = [
+  { nom: 'Devis', usage: 'moyens matériels, travaux, équipements' },
+  { nom: 'Factures', usage: 'équipements acquis, dépenses engagées' },
+  { nom: 'Prévisionnel financier', usage: 'moyens financiers, plan de financement' },
+  { nom: 'Plan des locaux', usage: 'projet immobilier, circulation, accessibilité PMR' },
+  { nom: 'Vidéoprotection', usage: 'sécurité des personnes et des biens' },
+  { nom: 'Extincteurs et sécurité incendie', usage: 'plan de gestion des crises, conformité ERP' },
+  { nom: 'Bail, acte ou attestation d’accessibilité', usage: 'occupation des locaux, conformité' },
 ];
 
 /**

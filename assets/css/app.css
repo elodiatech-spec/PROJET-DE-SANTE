@@ -1261,3 +1261,9 @@ select { cursor: pointer; }
 .lot-pli > summary::-webkit-details-marker { display: none; }
 .lot-pli:not([open]) > summary { opacity: .85; }
 .lot-pli[open] > summary { margin-bottom: var(--sp-3); }
+
+/* Éléments primordiaux manquants avant la rédaction d'un chapitre */
+.redac-manques { margin-top: 8px; padding: 8px 10px; border-radius: var(--r-sm); background: var(--surface-2); border-left: 3px solid var(--warn-500); }
+.redac-manques.is-bloquant { border-left-color: var(--danger-500); }
+.redac-manques.is-bloquant > p:first-child { color: var(--danger-500); }
+.redac-manques ul { margin: 4px 0 0 16px; }
