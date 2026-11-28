@@ -326,7 +326,6 @@ function cartePrestation(p, index) {
       <div class="presta__num">${esc(String(index).padStart(2, '0'))}</div>
       <div class="presta__body">
         <h4 class="presta__title">${p.jalon ? '<span class="badge badge--warn" style="margin-right:6px"><i class="fa-solid fa-flag"></i> Jalon</span>' : ''}${esc(p.titre)}</h4>
-        <p class="presta__desc">${esc(p.desc)}</p>
         <div class="presta__meta">
           <span><i class="fa-solid fa-file-lines"></i> ${esc(p.livrable)}</span>
           <span><i class="fa-solid fa-user"></i> ${esc(acteur)}</span>
@@ -337,16 +336,20 @@ function cartePrestation(p, index) {
           ${p.etat.dateRealisation ? `<span class="text-ok"><i class="fa-solid fa-calendar-check"></i> Réalisée le ${esc(Dates.format(p.etat.dateRealisation))}</span>` : ''}
           ${p.etat.note ? `<span><i class="fa-solid fa-note-sticky"></i> ${esc(p.etat.note)}</span>` : ''}
         </div>
-        ${repereQuestionnaire(p)}
         ${manquants.length ? `<p class="presta__prerequis text-xs">
             <i class="fa-solid fa-lock"></i> En attente du jalon : ${manquants.map((m) => `<strong>${esc(m.titre)}</strong>`).join(', ')}.
             Cette étape ne peut être soumise ni validée avant.</p>` : ''}
+        <details class="presta__pli">
+          <summary>Description, liens et justificatifs</summary>
+          <p class="presta__desc">${esc(p.desc)}</p>
+          ${repereQuestionnaire(p)}
         ${portail ? `<div class="row-tight presta__portail">
             ${portail.liens.map((l) => `<a class="btn btn--sm ${l.primaire ? '' : 'btn--ghost'}" href="${esc(urlSure(l.url))}" target="_blank" rel="noopener noreferrer">
                 <i class="fa-solid fa-arrow-up-right-from-square"></i> ${esc(l.label)}</a>`).join('')}
             <span class="text-xs text-muted">${esc(portail.nom)}</span>
           </div>` : ''}
         ${annexesPrestation(p)}
+        </details>
       </div>
       <div class="presta__actions">
         ${controle}
@@ -424,6 +427,114 @@ function categorieDePrestation(p) {
   return p.categorieDoc || CATEGORIE_PAR_LOT[p.lot] || 'Projet';
 }
 
+/** Pièces réclamées par l'ARS, l'Assurance maladie et les financeurs : fournies ou attendues. */
+function cartePieces() {
+  const expert = Store.estExpert();
+  const projet = Store.projet();
+  const pieces = Store.pieces();
+  const fournies = pieces.filter((p) => p.document).length;
+  const manquantesClient = pieces.filter((p) => !p.document && p.par === 'client');
+  const depotDirect = Store.ecritureActive();
+  return `
+      <!-- Les pièces à réunir -->
+      <div class="card">
+        <div class="card__head">
+          <div>
+            <h3 class="card__title"><i class="fa-solid fa-folder-tree"></i> Pièces du dossier</h3>
+            <p class="card__subtitle">
+              ${expert
+                ? "Ce que réclament les financeurs. Les pièces marquées « à fournir » sont attendues du client."
+                : "Ces documents nous sont demandés par les financeurs. Déposez ceux qui relèvent de votre structure."}
+            </p>
+          </div>
+          <div class="row-tight">
+            <span class="badge badge--${fournies === pieces.length ? 'ok' : 'warn'}">
+              ${fournies} / ${pieces.length} réunies
+            </span>
+            ${expert ? `
+              <button class="btn btn--primary btn--sm" data-action="fiche-piece">
+                <i class="fa-solid fa-plus"></i> Demander une pièce
+              </button>` : ''}
+          </div>
+        </div>
+
+        ${!expert && manquantesClient.length ? `
+          <div class="card card--flat" style="margin-bottom:var(--sp-4);border-left:3px solid var(--warn-500)">
+            <p class="text-sm text-soft">
+              <i class="fa-solid fa-circle-info text-warn"></i>
+              <strong>${manquantesClient.length} document${manquantesClient.length > 1 ? 's' : ''} à nous transmettre.</strong>
+              ${depotDirect
+                ? `Le bouton « Téléverser » ouvre l'explorateur de votre ordinateur : le fichier part
+                   directement dans le bon sous-dossier de votre Drive, rien à ranger vous-même.`
+                : `Déposez le fichier dans votre dossier Drive, puis rattachez-le à la ligne correspondante
+                   avec le bouton « Référencer ».`}
+            </p>
+          </div>` : ''}
+
+        <div class="stack-xs">
+          ${pieces.map((p) => {
+            const fournie = !!p.document;
+            const aMoi = p.par === 'client' ? !expert : expert;
+            const lien = fournie ? urlSure(p.document.url) : '';
+
+            return `
+            <div class="file-row" style="border-left:3px solid ${fournie ? 'var(--ok-500)' : (p.par === 'client' ? 'var(--warn-500)' : 'var(--border-strong)')}">
+              <div class="file-icon" style="color:${fournie ? 'var(--ok-500)' : 'var(--text-muted)'}">
+                <i class="fa-solid ${fournie ? 'fa-circle-check' : 'fa-file-circle-question'}"></i>
+              </div>
+
+              <div class="grow" style="min-width:0">
+                <div class="text-sm fw-800">${esc(p.nom)}</div>
+                <div class="text-xs text-muted">${esc(p.aide)}</div>
+                <div class="row-tight" style="margin-top:6px">
+                  ${p.pour.map((d) => badge(DOSSIERS_AIDE[d]?.label || d, DOSSIERS_AIDE[d]?.couleur || 'neutre')).join('')}
+                  ${p.sur_mesure && expert ? badge('Demande de ce dossier', 'brand', 'fa-solid fa-user-pen') : ''}
+                  ${fournie
+                    ? `<span class="text-xs text-muted">${esc(p.document.nom)} · ${esc(Dates.format(p.document.date))}</span>`
+                    : badge(p.par === 'client' ? 'À fournir par le client' : 'Produit par ElodiaTech',
+                            p.par === 'client' ? 'warn' : 'neutre')}
+                </div>
+              </div>
+
+              ${fournie && lien
+                ? `${boutonApercu(lien, p.nom, 'Voir')}
+                   ${boutonTelechargement(lien, 'btn btn--ghost btn--sm', '')}`
+                : ''}
+              ${fournie && expert
+                ? `<button class="btn btn--ghost btn--sm" data-action="detacher-piece" data-piece="${esc(p.id)}" title="Détacher ce document"><i class="fa-solid fa-link-slash"></i></button>`
+                : ''}
+              ${!fournie && aMoi ? `
+                ${depotDirect ? `
+                  <button class="btn btn--primary btn--sm" data-action="televerser-piece" data-piece="${esc(p.id)}">
+                    <i class="fa-solid fa-cloud-arrow-up"></i> Téléverser
+                  </button>` : ''}
+                <button class="btn btn--sm" data-action="deposer-piece" data-piece="${esc(p.id)}">
+                  <i class="fa-solid fa-link"></i> Référencer
+                </button>` : ''}
+              ${!fournie && !aMoi ? badge('En attente', 'neutre') : ''}
+              ${expert && p.sur_mesure ? `
+                <button class="btn btn--ghost btn--sm" data-action="fiche-piece" data-piece="${esc(p.id)}" title="Modifier la demande">
+                  <i class="fa-solid fa-pen"></i>
+                </button>
+                <button class="btn btn--ghost btn--sm" data-action="supprimer-piece" data-piece="${esc(p.id)}" title="Retirer la demande">
+                  <i class="fa-solid fa-trash"></i>
+                </button>` : ''}
+            </div>`;
+          }).join('')}
+        </div>
+
+        ${urlSure(projet.driveUrl) ? `
+          <div class="row-tight" style="margin-top:var(--sp-4)">
+            <a class="btn btn--sm" href="${esc(urlSure(projet.driveUrl))}" target="_blank" rel="noopener noreferrer">
+              <i class="fa-brands fa-google-drive"></i> Ouvrir le Drive du projet
+            </a>
+            <span class="text-xs text-muted">Déposez-y vos fichiers avant de les rattacher ci-dessus.</span>
+          </div>` : ''}
+      </div>
+
+`;
+}
+
 /* ====================== ATELIER : ÉTAPES 4 À 6 ====================== */
 
 /** 4. Documents du dossier : modèles ElodiaTech, lettres d'engagement, actes générés. */
@@ -434,7 +545,7 @@ function carteDocumentsDossier(actif, pros) {
   const lettres = docs.filter((d) => String(d.nom || '').startsWith("Lettre d'engagement"));
   return `<div class="card">
       <div class="card__head"><div>
-        <h3 class="card__title"><i class="fa-solid fa-file-signature"></i> 4. Documents du dossier</h3>
+        <h3 class="card__title"><i class="fa-solid fa-file-pen"></i> Documents à produire</h3>
         <p class="card__subtitle">Copiés dans le dossier Drive du client, préremplis avec sa fiche, puis rangés dans Documents. À relire avant signature.</p>
       </div></div>
       <div class="grid grid-2">
@@ -448,7 +559,7 @@ function carteDocumentsDossier(actif, pros) {
             }).join('')}
           </div></div>
         <div class="card card--flat"><strong class="text-sm">Lettres d'engagement de l'équipe</strong>
-          <p class="text-xs text-muted" style="margin:6px 0">Une lettre par professionnel nommé dans les informations du projet (${nommes.length}), à faire signer à l'étape 5.</p>
+          <p class="text-xs text-muted" style="margin:6px 0">Une lettre par professionnel nommé dans les informations du projet (${nommes.length}), à faire signer dans l’onglet Signatures.</p>
           ${lettres.length ? `<ul class="text-sm">${lettres.map((d) => `<li><a href="${esc(urlSure(d.url))}" target="_blank" rel="noopener noreferrer">${esc(d.nom)}</a></li>`).join('')}</ul>` : ''}
           <button class="btn btn--sm ${lettres.length ? '' : 'btn--primary'}" data-action="atelier-lettres" ${actif ? '' : 'disabled title="Connectez la source Google Sheets"'}>
             <i class="fa-solid fa-envelope-open-text"></i> ${lettres.length ? 'Générer à nouveau' : 'Générer les lettres'}</button>
@@ -467,7 +578,7 @@ function carteSignaturesInternes(actif) {
     `Bonjour ${x.nom},\n\nMerci de lire et signer le document « ${x.docTitre} » à l'adresse suivante (lien personnel, à ne pas transférer) :\n${x.lien}\n\nBien cordialement,\nElodiaTech`)}`;
   return `<div class="card">
       <div class="card__head"><div>
-        <h3 class="card__title"><i class="fa-solid fa-pen-nib"></i> 5. Signatures</h3>
+        <h3 class="card__title"><i class="fa-solid fa-pen-nib"></i> Signature interne</h3>
         <p class="card__subtitle">Signature interne (gratuite) pour les lettres d'engagement, chartes et le projet de santé : chaque signataire reçoit un lien
           personnel, lit le PDF, tape son nom et approuve ; un certificat est créé quand tous ont signé. Les statuts et actes juridiques passent par
           DocuSeal ou WM Goodflag (Validation & signatures).</p>
@@ -491,31 +602,31 @@ function carteSignaturesInternes(actif) {
     </div>`;
 }
 
-/** 6. Dépôt : pièces des dossiers ARS et ACI, fournies ou non. */
+/** Dépôt : où en est chaque dossier (pièces réunies) et où le déposer. La liste détaillée suit. */
 function carteDepot(ars) {
-  const pieces = Store.pieces().filter((p) => (p.pour || []).some((x) => DOSSIERS_DEPOT.includes(x)));
-  const fournies = pieces.filter((p) => p.document).length;
+  const pieces = Store.pieces();
+  // Le contrat conventionnel dépend du type de structure : ACI pour une MSP, accord national pour un centre de santé.
+  const horsType = Store.projet()?.type === 'CDS' ? 'ACI' : 'ANCS';
+  const dossiers = [...new Set(pieces.flatMap((p) => p.pour || []))].filter((d) => d !== horsType);
+  const decl = DECLARATIONS_CONVENTIONNELLES[Store.projet()?.type];
   return `<div class="card">
       <div class="card__head"><div>
-        <h3 class="card__title"><i class="fa-solid fa-box-archive"></i> 6. Dépôt ARS / ACI</h3>
-        <p class="card__subtitle">${fournies} pièce${fournies > 1 ? 's' : ''} fournie${fournies > 1 ? 's' : ''} sur ${pieces.length}. Une pièce est fournie quand un document lui est rattaché dans Documents.</p>
+        <h3 class="card__title"><i class="fa-solid fa-box-archive"></i> Dépôt des dossiers</h3>
+        <p class="card__subtitle">Pièces réunies par dossier. Une pièce est réunie dès qu'un document lui est rattaché.</p>
       </div>
-        ${ars ? `<a class="btn btn--sm" href="${esc(ars)}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-arrow-up-right-from-square"></i> Site de l'ARS</a>` : ''}
+        <div class="row-tight">
+          ${ars ? `<a class="btn btn--sm" href="${esc(ars)}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-arrow-up-right-from-square"></i> Site de l'ARS</a>` : ''}
+          ${decl ? `<a class="btn btn--sm" href="${esc(decl.url)}" target="_blank" rel="noopener noreferrer" title="${esc(decl.libelle)}"><i class="fa-solid fa-file-invoice"></i> Déclaration des indicateurs</a>` : ''}
+        </div>
       </div>
-      <div class="stack-xs">${pieces.map((p) => `<div class="row-between text-sm">
-          <span>${p.document ? '<i class="fa-solid fa-circle-check text-ok"></i>' : '<i class="fa-regular fa-circle text-muted"></i>'} ${esc(p.nom)}
-            <span class="text-xs text-muted">· ${esc((p.pour || []).filter((x) => DOSSIERS_DEPOT.includes(x)).join(', '))} · ${p.par === 'client' ? 'client' : 'ElodiaTech'}</span></span>
-          ${p.document ? `<a class="text-xs" href="${esc(urlSure(p.document.url))}" target="_blank" rel="noopener noreferrer">${esc(p.document.nom)}</a>` : ''}
-        </div>`).join('')}</div>
-      ${(() => {
-        const decl = DECLARATIONS_CONVENTIONNELLES[Store.projet()?.type];
-        return decl ? `<div class="card card--flat" style="margin-top:var(--sp-3)">
-          <strong class="text-sm"><i class="fa-solid fa-file-invoice"></i> Après l'adhésion : déclaration annuelle des indicateurs</strong>
-          <p class="text-xs" style="margin:6px 0"><a href="${esc(decl.url)}" target="_blank" rel="noopener noreferrer">${esc(decl.libelle)} <i class="fa-solid fa-arrow-up-right-from-square"></i></a></p>
-          ${decl.aCompleter ? `<p class="text-xs text-warn">${esc(decl.aCompleter)}</p>` : ''}
-        </div>` : '';
-      })()}
-      <p class="text-xs text-muted" style="margin-top:8px"><a href="#" data-action="aller" data-route="documents">Rattacher une pièce dans Documents</a></p>
+      <div class="grid grid-4">${dossiers.map((d) => {
+        const liste = pieces.filter((p) => (p.pour || []).includes(d));
+        const ok = liste.filter((p) => p.document).length;
+        return `<div class="card card--flat"><div class="text-xs text-muted">${esc(DOSSIERS_AIDE[d]?.label || d)}</div>
+          <strong>${ok} / ${liste.length}</strong> <span class="text-xs text-muted">pièces réunies</span>
+          <div style="margin-top:6px">${progressBar(liste.length ? Math.round(ok / liste.length * 100) : 0, 'sm')}</div></div>`;
+      }).join('')}</div>
+      ${decl?.aCompleter ? `<p class="text-xs text-warn" style="margin-top:8px">${esc(decl.aCompleter)}</p>` : ''}
     </div>`;
 }
 
@@ -623,7 +734,7 @@ function carteRedaction() {
           ${doc ? `<a class="btn btn--sm" href="${esc(doc)}" target="_blank" rel="noopener noreferrer">
               <i class="fa-solid fa-file-word"></i> Ouvrir le Google Docs</a>` : ''}
           ${doc && e.statut === 'pret' ? `<button class="btn btn--sm btn--primary" data-action="redac-valider" data-chapitre="${esc(c.id)}">
-              <i class="fa-solid fa-check"></i> Valider et transmettre au client</button>` : ''}
+              <i class="fa-solid fa-check"></i> Valider (visible par le client)</button>` : ''}
         </div>
       </div>`;
   };
@@ -693,7 +804,7 @@ function blocDocumentFinal(etats, nbValides, actif) {
         ${doc ? `<a class="btn btn--sm" href="${esc(doc)}" target="_blank" rel="noopener noreferrer">
             <i class="fa-solid fa-file-word"></i> Ouvrir le Google Docs</a>` : ''}
         ${doc && e.statut === 'pret' ? `<button class="btn btn--sm btn--primary" data-action="redac-valider" data-chapitre="${DOCUMENT_FINAL.id}">
-            <i class="fa-solid fa-check"></i> Valider et transmettre au client</button>` : ''}
+            <i class="fa-solid fa-check"></i> Valider (visible par le client)</button>` : ''}
       </div>
       ${!nbValides ? '<p class="text-xs text-muted" style="margin-top:6px">Disponible dès qu\'un chapitre est validé.</p>' : ''}
     </div>`;
@@ -745,7 +856,7 @@ function carteActes() {
           ${doc ? `<a class="btn btn--sm" href="${esc(doc)}" target="_blank" rel="noopener noreferrer">
               <i class="fa-solid fa-file-word"></i> Ouvrir le Google Docs</a>` : ''}
           ${doc && e.statut === 'pret' ? `<button class="btn btn--sm btn--primary" data-action="acte-valider" data-acte="${esc(a.id)}">
-              <i class="fa-solid fa-check"></i> ${a.signature === 'aucune' ? 'Valider et transmettre' : 'Valider et mettre à la signature'}</button>` : ''}
+              <i class="fa-solid fa-check"></i> ${a.signature === 'aucune' ? 'Valider (visible par le client)' : 'Valider et mettre à la signature'}</button>` : ''}
         </div>
       </div>`;
   };
@@ -1046,6 +1157,49 @@ function champQuestionnaire(rub, champ, valeurs) {
   return '';
 }
 
+/** Lien vers les prestations d'un lot, gérées dans la seule Feuille de route. */
+function lienPrestationsLot(lot) {
+  const prestas = Store.prestationsApplicables().filter((p) => p.lot === lot);
+  if (!prestas.length) return '';
+  const faites = prestas.filter((p) => p.etat.statut === 'valide').length;
+  const retard = prestas.filter((p) => p.etat.statut !== 'valide' && (Dates.daysUntil(p.etat.echeance) ?? 1) < 0).length;
+  return `<div class="card card--flat row-between">
+      <span class="text-sm"><i class="fa-solid fa-list-check text-brand"></i>
+        <strong>${prestas.length} prestation${prestas.length > 1 ? 's' : ''}</strong> dans ce lot · ${faites} validée${faites > 1 ? 's' : ''}
+        ${retard ? ` · <span class="text-danger">${retard} en retard</span>` : ''}</span>
+      <button class="btn btn--sm" data-action="voir-lot" data-lot="${esc(lot)}">Suivre dans la feuille de route <i class="fa-solid fa-arrow-right"></i></button>
+    </div>`;
+}
+
+/* ====================== PROJET DE SANTÉ : état commun aux onglets ====================== */
+function etatAtelier() {
+  const p = Store.projet();
+  const etats = Store.redactionProjet();
+  const pros = (Store.reponsesRubrique('equipe').pros || []);
+  return {
+    p, etats, pros,
+    actif: Store.ecritureActive(),
+    q: Store.completudeQuestionnaire(),
+    nbValides: CHAPITRES_REDACTION.filter((c) => etats[c.id]?.statut === 'valide').length,
+    final: etats[DOCUMENT_FINAL.id] || {},
+    commune: p?.ville || '',
+    sansCourriel: pros.filter((x) => x.nom && !String(x.email || '').includes('@')).length,
+    ars: ARS_SITES[String(p?.departement || '').trim()],
+  };
+}
+
+/** État de chaque onglet du projet de santé, affiché sous son libellé. */
+function statutsOnglets(idRubrique) {
+  if (idRubrique !== 'projet') return {};
+  const { q, sansCourriel, nbValides, final } = etatAtelier();
+  return {
+    'atelier-collecte': `Informations ${q.pct} %${sansCourriel ? ` · ${sansCourriel} sans courriel` : ''}`,
+    'atelier-redaction': `${nbValides} / ${CHAPITRES_REDACTION.length} validés`,
+    'atelier-final': final.docUrl ? `Version ${final.version || 1}${final.statut === 'valide' ? ' validée' : ' à valider'}` : 'Pas encore assemblé',
+  };
+}
+
+
 const Views = {
 
   /* ====================== VUE D'ENSEMBLE ====================== */
@@ -1084,13 +1238,19 @@ const Views = {
             <span class="hero__stat-value">${pct} %</span>
             <span class="text-xs" style="opacity:.8">${validees} / ${prestations.length} prestations validées</span>
           </div>
-          <button class="btn btn--accent" data-action="aller" data-route="feuille-route">
-            Feuille de route <i class="fa-solid fa-arrow-right"></i>
-          </button>
         </div>
       </div>
 
-      ${expert ? selecteurOffre(projet) : ''}
+      ${(() => {
+        const e = Store.prochaineEtape();
+        return `<button class="card card--interactive row" data-action="aller" data-route="${esc(e.route)}"
+            style="width:100%;text-align:left;border-left:4px solid var(--accent-500)">
+          <i class="fa-solid fa-circle-arrow-right text-brand" style="font-size:1.6rem"></i>
+          <span class="grow"><span class="text-xs text-muted fw-800">PROCHAINE ÉTAPE</span><br>
+            <strong>${esc(e.titre)}</strong><br><span class="text-sm text-muted">${esc(e.texte)}</span></span>
+          <span class="btn btn--accent">Y aller <i class="fa-solid fa-arrow-right"></i></span>
+        </button>`;
+      })()}
 
       <div class="grid grid-4">
         <div class="card card--interactive" data-action="aller" data-route="feuille-route">
@@ -1296,9 +1456,11 @@ const Views = {
       ${Object.keys(groupes).length ? Object.keys(groupes).map((idLot) => {
         const lot = LOTS[idLot];
         const info = lots.find((l) => l.id === idLot) || { pct: 0, total: 0, valides: 0 };
+        // Un lot terminé se replie ; il se rouvre au clic ou quand un filtre est actif.
+        const ouvert = info.pct < 100 || filtres.lot || filtres.statut || filtres.q;
         return `
-        <div>
-          <div class="lot-header">
+        <details class="lot-pli" ${ouvert ? 'open' : ''}>
+          <summary class="lot-header">
             <div class="lot-header__icon" style="background:${tint(lot.couleur, 18)};color:${esc(lot.couleur)}">
               <i class="${esc(lot.icone)}"></i>
             </div>
@@ -1307,11 +1469,11 @@ const Views = {
               <div class="lot-header__meta">${info.valides} / ${info.total} prestations validées · ${info.pct} %</div>
             </div>
             <div style="width:120px">${progressBar(info.pct)}</div>
-          </div>
+          </summary>
           <div class="stack-sm">
             ${groupes[idLot].map((p) => cartePrestation(p, ++compteur)).join('')}
           </div>
-        </div>`;
+        </details>`;
       }).join('') : empty('Aucune prestation', 'Aucune prestation ne correspond aux filtres sélectionnés.', 'fa-solid fa-filter')}
 
       ${(filtres.lot || filtres.statut || filtres.q) ? '' : carteApresPerimetre(projet, formule, expert)}
@@ -1371,10 +1533,6 @@ const Views = {
         </div>
       </div>
 
-      ${expert ? `<div class="card card--flat" style="border-left:3px solid var(--accent-500)">
-          <p class="text-sm"><i class="fa-solid fa-pen-ruler text-brand"></i>
-            La collecte des sources, la rédaction avec Claude et le document final se font dans
-            l'<a href="#" data-action="aller" data-route="atelier"><strong>Atelier projet de santé</strong></a>.</p></div>` : ''}
       <div class="card">
         <div class="card__head"><div>
           <h3 class="card__title"><i class="fa-solid fa-layer-group"></i> Chapitres du projet de santé</h3>
@@ -1441,12 +1599,7 @@ const Views = {
         </div>
       </div>
 
-      <div class="card">
-        <div class="card__head">
-          <h3 class="card__title"><i class="fa-solid fa-list-check"></i> Prestations du lot juridique & ARS</h3>
-        </div>
-        <div class="stack-sm">${prestas.map((p) => cartePrestation(p, ++n)).join('')}</div>
-      </div>
+      ${lienPrestationsLot('LB')}
     </section>`;
   },
 
@@ -1483,7 +1636,7 @@ const Views = {
             <h2 class="card__title"><i class="fa-solid fa-sack-dollar"></i> Financements & aides</h2>
             <p class="card__subtitle">
               ${expert
-                ? "Guichets de dépôt, demandes en cours et pièces du dossier, réunis sur un seul écran."
+                ? "Guichets de dépôt et demandes en cours. Les pièces à réunir sont dans Documents & signatures › Dépôt."
                 : "Les aides sollicitées pour votre projet, et les pièces qu'il nous faut pour les obtenir."}
             </p>
             ${bandeauFormule('LC')}
@@ -1582,106 +1735,7 @@ const Views = {
                         'fa-solid fa-sack-dollar')}
       </div>
 
-      <!-- Les pièces à réunir -->
-      <div class="card">
-        <div class="card__head">
-          <div>
-            <h3 class="card__title"><i class="fa-solid fa-folder-tree"></i> Pièces du dossier</h3>
-            <p class="card__subtitle">
-              ${expert
-                ? "Ce que réclament les financeurs. Les pièces marquées « à fournir » sont attendues du client."
-                : "Ces documents nous sont demandés par les financeurs. Déposez ceux qui relèvent de votre structure."}
-            </p>
-          </div>
-          <div class="row-tight">
-            <span class="badge badge--${fournies === pieces.length ? 'ok' : 'warn'}">
-              ${fournies} / ${pieces.length} réunies
-            </span>
-            ${expert ? `
-              <button class="btn btn--primary btn--sm" data-action="fiche-piece">
-                <i class="fa-solid fa-plus"></i> Demander une pièce
-              </button>` : ''}
-          </div>
-        </div>
-
-        ${!expert && manquantesClient.length ? `
-          <div class="card card--flat" style="margin-bottom:var(--sp-4);border-left:3px solid var(--warn-500)">
-            <p class="text-sm text-soft">
-              <i class="fa-solid fa-circle-info text-warn"></i>
-              <strong>${manquantesClient.length} document${manquantesClient.length > 1 ? 's' : ''} à nous transmettre.</strong>
-              ${depotDirect
-                ? `Le bouton « Téléverser » ouvre l'explorateur de votre ordinateur : le fichier part
-                   directement dans le bon sous-dossier de votre Drive, rien à ranger vous-même.`
-                : `Déposez le fichier dans votre dossier Drive, puis rattachez-le à la ligne correspondante
-                   avec le bouton « Référencer ».`}
-            </p>
-          </div>` : ''}
-
-        <div class="stack-xs">
-          ${pieces.map((p) => {
-            const fournie = !!p.document;
-            const aMoi = p.par === 'client' ? !expert : expert;
-            const lien = fournie ? urlSure(p.document.url) : '';
-
-            return `
-            <div class="file-row" style="border-left:3px solid ${fournie ? 'var(--ok-500)' : (p.par === 'client' ? 'var(--warn-500)' : 'var(--border-strong)')}">
-              <div class="file-icon" style="color:${fournie ? 'var(--ok-500)' : 'var(--text-muted)'}">
-                <i class="fa-solid ${fournie ? 'fa-circle-check' : 'fa-file-circle-question'}"></i>
-              </div>
-
-              <div class="grow" style="min-width:0">
-                <div class="text-sm fw-800">${esc(p.nom)}</div>
-                <div class="text-xs text-muted">${esc(p.aide)}</div>
-                <div class="row-tight" style="margin-top:6px">
-                  ${p.pour.map((d) => badge(DOSSIERS_AIDE[d]?.label || d, DOSSIERS_AIDE[d]?.couleur || 'neutre')).join('')}
-                  ${p.sur_mesure && expert ? badge('Demande de ce dossier', 'brand', 'fa-solid fa-user-pen') : ''}
-                  ${fournie
-                    ? `<span class="text-xs text-muted">${esc(p.document.nom)} · ${esc(Dates.format(p.document.date))}</span>`
-                    : badge(p.par === 'client' ? 'À fournir par le client' : 'Produit par ElodiaTech',
-                            p.par === 'client' ? 'warn' : 'neutre')}
-                </div>
-              </div>
-
-              ${fournie && lien
-                ? `${boutonApercu(lien, p.nom, 'Voir')}
-                   ${boutonTelechargement(lien, 'btn btn--ghost btn--sm', '')}`
-                : ''}
-              ${fournie && expert
-                ? `<button class="btn btn--ghost btn--sm" data-action="detacher-piece" data-piece="${esc(p.id)}" title="Détacher ce document"><i class="fa-solid fa-link-slash"></i></button>`
-                : ''}
-              ${!fournie && aMoi ? `
-                ${depotDirect ? `
-                  <button class="btn btn--primary btn--sm" data-action="televerser-piece" data-piece="${esc(p.id)}">
-                    <i class="fa-solid fa-cloud-arrow-up"></i> Téléverser
-                  </button>` : ''}
-                <button class="btn btn--sm" data-action="deposer-piece" data-piece="${esc(p.id)}">
-                  <i class="fa-solid fa-link"></i> Référencer
-                </button>` : ''}
-              ${!fournie && !aMoi ? badge('En attente', 'neutre') : ''}
-              ${expert && p.sur_mesure ? `
-                <button class="btn btn--ghost btn--sm" data-action="fiche-piece" data-piece="${esc(p.id)}" title="Modifier la demande">
-                  <i class="fa-solid fa-pen"></i>
-                </button>
-                <button class="btn btn--ghost btn--sm" data-action="supprimer-piece" data-piece="${esc(p.id)}" title="Retirer la demande">
-                  <i class="fa-solid fa-trash"></i>
-                </button>` : ''}
-            </div>`;
-          }).join('')}
-        </div>
-
-        ${urlSure(projet.driveUrl) ? `
-          <div class="row-tight" style="margin-top:var(--sp-4)">
-            <a class="btn btn--sm" href="${esc(urlSure(projet.driveUrl))}" target="_blank" rel="noopener noreferrer">
-              <i class="fa-brands fa-google-drive"></i> Ouvrir le Drive du projet
-            </a>
-            <span class="text-xs text-muted">Déposez-y vos fichiers avant de les rattacher ci-dessus.</span>
-          </div>` : ''}
-      </div>
-
-      <div class="card">
-        <div class="card__head"><h3 class="card__title"><i class="fa-solid fa-list-check"></i> Prestations du lot financements</h3></div>
-        <div class="stack-sm">${prestas.map((p) => cartePrestation(p, ++n)).join('')}</div>
-      </div>
+      ${lienPrestationsLot('LC')}
     </section>`;
   },
   /* ====================== CONVENTIONS & PARTENARIATS ====================== */
@@ -1758,19 +1812,22 @@ const Views = {
         </div>` : empty('Aucun partenaire', 'Les conventions apparaîtront ici au fil de leur signature.', 'fa-solid fa-handshake')}
       </div>
 
-      <div class="card">
-        <div class="card__head"><h3 class="card__title"><i class="fa-solid fa-list-check"></i> Prestations du lot partenariats</h3></div>
-        <div class="stack-sm">${prestas.map((p) => cartePrestation(p, ++n)).join('')}</div>
-      </div>
+      ${lienPrestationsLot('LD')}
     </section>`;
   },
 
   /* ====================== INFORMATIONS DU PROJET ====================== */
-  questionnaire() {
+  questionnaire(filtres = {}) {
     const expert = Store.estExpert();
     const projet = Store.projet();
     const global = Store.completudeQuestionnaire();
     const q = Store.questionnaire();
+    // Une rubrique à la fois : celle choisie, sinon la première incomplète.
+    const courante = QUESTIONNAIRE.find((r) => r.id === filtres.rub)
+      || QUESTIONNAIRE.find((r) => Store.completudeRubrique(r).pct < 100) || QUESTIONNAIRE[0];
+    const rang = QUESTIONNAIRE.indexOf(courante);
+    const precedente = QUESTIONNAIRE[rang - 1];
+    const suivante = QUESTIONNAIRE[rang + 1];
 
     return `
     <section class="view stack">
@@ -1792,13 +1849,14 @@ const Views = {
           ${QUESTIONNAIRE.map((r) => {
             const c = Store.completudeRubrique(r);
             const ton = c.pct >= 100 ? 'ok' : (q[r.id] ? 'warn' : 'muted');
-            return `<a class="q-puce q-puce--${ton}" href="#q-${esc(r.id)}"><i class="${esc(r.icone)}"></i> ${esc(r.titre)}
-              <span>${c.pct >= 100 ? '<i class="fa-solid fa-check"></i>' : `${c.faits}/${c.total}`}</span></a>`;
+            return `<button class="q-puce q-puce--${ton} ${r.id === courante.id ? 'is-active' : ''}" data-action="q-rubrique" data-rub="${esc(r.id)}"
+              ${r.id === courante.id ? 'aria-current="step"' : ''}><i class="${esc(r.icone)}"></i> ${esc(r.titre)}
+              <span>${c.pct >= 100 ? '<i class="fa-solid fa-check"></i>' : `${c.faits}/${c.total}`}</span></button>`;
           }).join('')}
         </div>
       </div>
 
-      ${QUESTIONNAIRE.map((r) => {
+      ${[courante].map((r) => {
         const entree = q[r.id];
         const valeurs = entree?.donnees || {};
         const c = Store.completudeRubrique(r);
@@ -1815,10 +1873,15 @@ const Views = {
           </div>
           <div class="grid grid-2">${r.champs.map((ch) => champQuestionnaire(r, ch, valeurs)).join('')}</div>
           <div class="row-between" style="margin-top:14px">
-            <span class="text-xs text-muted"><i class="fa-regular fa-clock"></i> ${maj}</span>
-            <button class="btn btn--primary btn--sm" data-action="q-enregistrer" data-rub="${esc(r.id)}">
-              <i class="fa-solid fa-floppy-disk"></i> Enregistrer
-            </button>
+            <span class="text-xs text-muted"><i class="fa-regular fa-clock"></i> ${maj} · rubrique ${rang + 1} / ${QUESTIONNAIRE.length}</span>
+            <span class="row-tight">
+              ${precedente ? `<button class="btn btn--sm" data-action="q-enregistrer" data-rub="${esc(r.id)}" data-aller="${esc(precedente.id)}">
+                <i class="fa-solid fa-arrow-left"></i> ${esc(precedente.titre)}</button>` : ''}
+              <button class="btn btn--sm ${suivante ? '' : 'btn--primary'}" data-action="q-enregistrer" data-rub="${esc(r.id)}">
+                <i class="fa-solid fa-floppy-disk"></i> Enregistrer</button>
+              ${suivante ? `<button class="btn btn--primary btn--sm" data-action="q-enregistrer" data-rub="${esc(r.id)}" data-aller="${esc(suivante.id)}">
+                Enregistrer et continuer <i class="fa-solid fa-arrow-right"></i></button>` : ''}
+            </span>
           </div>
         </div>`;
       }).join('')}
@@ -1891,10 +1954,7 @@ const Views = {
                   'fa-solid fa-screwdriver-wrench')}
       </div>
 
-      <div class="card">
-        <div class="card__head"><h3 class="card__title"><i class="fa-solid fa-list-check"></i> Prestations du lot prestataires</h3></div>
-        <div class="stack-sm">${prestas.map((p) => cartePrestation(p, ++n)).join('')}</div>
-      </div>
+      ${lienPrestationsLot('LE')}
     </section>`;
   },
 
@@ -2000,19 +2060,7 @@ const Views = {
         </div>
       </div>
 
-      <div class="card">
-        <div class="card__head">
-          <div>
-            <h3 class="card__title"><i class="fa-solid fa-swatchbook"></i> Livrables graphiques</h3>
-            <p class="card__subtitle">
-              ${expert
-                ? "Faites évoluer le statut, puis déposez ou remplacez le lien du fichier depuis « Détail »."
-                : "Le lien du livrable est accessible depuis « Détail » dès sa mise à disposition."}
-            </p>
-          </div>
-        </div>
-        <div class="stack-sm">${prestas.map((p) => cartePrestation(p, ++n)).join('')}</div>
-      </div>
+      ${lienPrestationsLot('LF')}
     </section>`;
   },
 
@@ -2046,10 +2094,7 @@ const Views = {
           </div>` : empty('Aucun jalon de déploiement', 'Les formations et jalons apparaîtront ici.', 'fa-solid fa-rocket')}
       </div>
 
-      <div class="card">
-        <div class="card__head"><h3 class="card__title"><i class="fa-solid fa-list-check"></i> Prestations du lot déploiement</h3></div>
-        <div class="stack-sm">${prestas.map((p) => cartePrestation(p, ++n)).join('')}</div>
-      </div>
+      ${lienPrestationsLot('LG')}
     </section>`;
   },
 
@@ -2141,7 +2186,8 @@ const Views = {
   /* ====================== SIGNATURES ====================== */
   signatures() {
     const expert = Store.estExpert();
-    const liste = Store.liste('signatures');
+    // La signature interne a sa propre carte (expert) : on ne la répète pas dans la liste du parapheur.
+    const liste = Store.liste('signatures').filter((x) => !(expert && /^Signature interne/.test(x.desc || '')));
     const enAttente = liste.filter((s) => s.statut === 'a_signer');
     const signes = liste.filter((s) => s.statut === 'signe');
 
@@ -2185,6 +2231,7 @@ const Views = {
 
     return `
     <section class="view stack">
+      ${expert ? carteSignaturesInternes(Store.ecritureActive()) : ''}
       <div class="card">
         <div class="card__head">
           <div>
@@ -2868,33 +2915,14 @@ const Views = {
   },
 
   /* ====================== ATELIER PROJET DE SANTÉ (expert) ====================== */
-  atelier() {
-    const p = Store.projet();
-    const etats = Store.redactionProjet();
-    const actif = Store.ecritureActive();
-    const q = Store.completudeQuestionnaire();
-    const nbValides = CHAPITRES_REDACTION.filter((c) => etats[c.id]?.statut === 'valide').length;
-    const final = etats[DOCUMENT_FINAL.id] || {};
-    const commune = p?.ville || '';
-    const pros = (Store.reponsesRubrique('equipe').pros || []);
-    const sansCourriel = pros.filter((x) => x.nom && !String(x.email || '').includes('@')).length;
-    const ars = ARS_SITES[String(p?.departement || '').trim()];
-
-    const etape = (num, titre, etat, couleur) => `<div class="card card--flat" style="border-top:3px solid var(--${couleur}-500)">
-        <div class="text-xs text-muted">Étape ${num}</div><strong>${esc(titre)}</strong>
-        <div class="text-sm" style="margin-top:4px">${etat}</div></div>`;
-
+  /* ====================== PROJET DE SANTÉ (expert) : onglets de l'atelier ====================== */
+  'atelier-collecte'() {
+    const a = etatAtelier();
+    const { actif, q, commune, sansCourriel, ars } = a;
     const lienPlateforme = (pl) => `<li><a href="${esc(pl.url.replace('{commune}', encodeURIComponent(commune)))}" target="_blank" rel="noopener noreferrer">
         <i class="fa-solid fa-arrow-up-right-from-square"></i> ${esc(pl.nom)}</a> <span class="text-xs text-muted">— ${esc(pl.quoi)}</span></li>`;
-
     return `
     <section class="view stack">
-      <div class="grid grid-3">
-        ${etape(1, 'Collecte', `Informations : ${q.pct} %${sansCourriel ? ` · ${sansCourriel} professionnel(s) sans courriel` : ''}`, q.pct >= 80 && !sansCourriel ? 'ok' : 'warn')}
-        ${etape(2, 'Rédaction', `${nbValides} / ${CHAPITRES_REDACTION.length} chapitres validés`, nbValides === CHAPITRES_REDACTION.length ? 'ok' : 'warn')}
-        ${etape(3, 'Document final', final.docUrl ? `Version ${esc(final.version || 1)}${final.statut === 'valide' ? ' — validée' : ' — à valider'}` : 'Pas encore assemblé', final.statut === 'valide' ? 'ok' : 'warn')}
-      </div>
-
       <div class="card">
         <div class="card__head"><div>
           <h3 class="card__title"><i class="fa-solid fa-magnifying-glass-chart"></i> 1. Collecte</h3>
@@ -2934,8 +2962,18 @@ const Views = {
         </div>
       </div>
 
-      ${carteRedaction()}
+    </section>`;
+  },
 
+  'atelier-redaction'() {
+    return `<section class="view stack">${carteRedaction()}</section>`;
+  },
+
+  'atelier-final'() {
+    const a = etatAtelier();
+    const { etats, nbValides, actif } = a;
+    return `
+    <section class="view stack">
       <div class="card">
         <div class="card__head"><div>
           <h3 class="card__title"><i class="fa-solid fa-book"></i> 3. Document final</h3>
@@ -2943,10 +2981,17 @@ const Views = {
         ${blocDocumentFinal(etats, nbValides, actif)}
       </div>
 
-      ${carteDocumentsDossier(actif, pros)}
-      ${carteSignaturesInternes(actif)}
-      ${carteDepot(ars)}
     </section>`;
+  },
+
+  /* ====================== DOCUMENTS & SIGNATURES : À produire, Dépôt ====================== */
+  'a-produire'() {
+    const a = etatAtelier();
+    return `<section class="view stack">${carteDocumentsDossier(a.actif, a.pros)}</section>`;
+  },
+
+  depot() {
+    return `<section class="view stack">${carteDepot(etatAtelier().ars)}${cartePieces()}</section>`;
   },
 
   /* ====================== CONSOLE : ÉQUIPE ====================== */

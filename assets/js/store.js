@@ -732,8 +732,41 @@ const Store = {
   },
 
   moduleAccessible(idModule, projetId) {
-    idModule = ALIAS_MODULES[idModule] || idModule;
+    idModule = this.resoudreRoute(idModule, projetId);
     return this.modulesVisibles(projetId).some((m) => m.id === idModule);
+  },
+
+  /**
+   * Adresse effective d'une page : anciennes adresses redirigées, et page
+   * équivalente pour l'autre rôle (l'atelier de l'expert / la lecture du client).
+   */
+  resoudreRoute(route, projetId) {
+    route = ALIAS_MODULES[route] || route;
+    const visibles = this.modulesVisibles(projetId).map((m) => m.id);
+    if (visibles.includes(route)) return route;
+    const equivalents = {
+      'projet-sante': 'atelier-final', 'atelier-collecte': 'projet-sante', 'atelier-redaction': 'projet-sante',
+      'atelier-final': 'projet-sante', 'a-produire': 'documents',
+    };
+    return equivalents[route] && visibles.includes(equivalents[route]) ? equivalents[route] : route;
+  },
+
+  /** Rubrique du menu qui contient une page. */
+  rubriqueDe(route) {
+    return RUBRIQUES.find((r) => r.pages.includes(route)) || null;
+  },
+
+  /** Pages visibles d'une rubrique, dans l'ordre des onglets. */
+  pagesRubrique(idRubrique, projetId) {
+    const r = RUBRIQUES.find((x) => x.id === idRubrique);
+    if (!r) return [];
+    const visibles = this.modulesVisibles(projetId);
+    return r.pages.map((id) => visibles.find((m) => m.id === id)).filter(Boolean);
+  },
+
+  /** Rubriques ayant au moins une page visible. */
+  rubriquesVisibles(projetId) {
+    return RUBRIQUES.filter((r) => this.pagesRubrique(r.id, projetId).length);
   },
 
   /** Documents, signatures, etc. du projet courant. */
@@ -1140,7 +1173,7 @@ const Store = {
   },
 
   setRoute(route) {
-    route = ALIAS_MODULES[route] || route;
+    route = this.resoudreRoute(route);
     if (!this.moduleAccessible(route)) return;
     this.commit((s) => { s.route = route; });
   },
@@ -1518,6 +1551,39 @@ const Store = {
     const requis = this.champsRequis(rubrique, projetId);
     const faits = requis.filter((c) => this.champRempli(rubrique, c, projetId)).length;
     return { faits, total: requis.length, pct: requis.length ? Math.round((100 * faits) / requis.length) : 100 };
+  },
+
+  /**
+   * La prochaine chose à faire sur le dossier, pour le bouton « Prochaine étape »
+   * du tableau de bord : { titre, texte, route }.
+   */
+  prochaineEtape() {
+    const expert = this.estExpert();
+    const retard = this.enRetard();
+    const q = this.completudeQuestionnaire();
+    const sigs = this.signaturesEnAttente();
+    const piecesManquantes = this.pieces().filter((p) => !p.document && (expert || p.par === 'client'));
+    if (!expert) {
+      const aValider = this.actionsClient();
+      if (aValider.length) return { titre: `Valider : ${aValider[0].titre}`, texte: `${aValider.length} élément(s) attendent votre validation`, route: 'feuille-route' };
+      if (q.pct < 100) return { titre: 'Compléter les informations du projet', texte: `${q.pct} % renseigné`, route: 'questionnaire' };
+      if (piecesManquantes.length) return { titre: 'Transmettre vos pièces', texte: `${piecesManquantes.length} document(s) à déposer`, route: 'depot' };
+      if (sigs.length) return { titre: `Signer : ${sigs[0].titre}`, texte: `${sigs.length} signature(s) en attente`, route: 'signatures' };
+      return { titre: 'Suivre la feuille de route', texte: 'Rien ne vous attend pour le moment', route: 'feuille-route' };
+    }
+    if (retard.length) return { titre: `Traiter ${retard.length} prestation(s) en retard`, texte: retard[0].titre, route: 'feuille-route' };
+    if (q.pct < 80) return { titre: 'Compléter les informations du projet', texte: `${q.pct} % renseigné, nécessaire à la rédaction`, route: 'questionnaire' };
+    const etats = this.redactionProjet();
+    const enCours = CHAPITRES_REDACTION.find((c) => etats[c.id]?.statut === 'en_cours');
+    if (enCours) return { titre: `Suivre la rédaction : ${enCours.titre}`, texte: 'Claude rédige ce chapitre', route: 'atelier-redaction' };
+    const pret = CHAPITRES_REDACTION.find((c) => etats[c.id]?.statut === 'pret');
+    if (pret) return { titre: `Relire et valider : ${pret.titre}`, texte: 'Brouillon prêt dans Google Docs', route: 'atelier-redaction' };
+    const aRediger = CHAPITRES_REDACTION.find((c) => etats[c.id]?.statut !== 'valide');
+    if (aRediger) return { titre: `Rédiger : ${aRediger.titre}`, texte: 'Chapitre suivant du projet de santé', route: 'atelier-redaction' };
+    if (etats[DOCUMENT_FINAL.id]?.statut !== 'valide') return { titre: 'Assembler le document final', texte: 'Les chapitres sont tous validés', route: 'atelier-final' };
+    if (piecesManquantes.length) return { titre: 'Réunir les pièces du dépôt', texte: `${piecesManquantes.length} pièce(s) manquante(s)`, route: 'depot' };
+    if (sigs.length) return { titre: `Faire signer : ${sigs[0].titre}`, texte: `${sigs.length} signature(s) en attente`, route: 'signatures' };
+    return { titre: 'Suivre la feuille de route', texte: 'Le dossier est à jour', route: 'feuille-route' };
   },
 
   completudeQuestionnaire(projetId) {
@@ -2197,7 +2263,7 @@ const STATUTS_FINANCEMENT = {
 
 /** Statuts des conventions de partenariat. */
 const STATUTS_PARTENAIRE = {
-  a_faire:  { label: 'À initier',   couleur: 'neutre' },
+  a_faire:  { label: 'À faire',     couleur: 'neutre' },
   en_cours: { label: 'En cours',    couleur: 'info' },
   a_signer: { label: 'À signer',    couleur: 'warn' },
   signe:    { label: 'Signée',      couleur: 'ok' },

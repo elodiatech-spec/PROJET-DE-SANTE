@@ -188,10 +188,12 @@ const App = {
 
     // Badge de rôle
     const badgeRole = document.getElementById('role-badge');
+    // Bascule d'affichage : l'expert voit la plateforme comme son client, puis revient.
+    badgeRole.hidden = Store.estClientReel();
     badgeRole.innerHTML = expert
-      ? '<i class="fa-solid fa-user-gear"></i><span class="hide-sm">Espace expert</span>'
-      : '<i class="fa-solid fa-user"></i><span class="hide-sm">Espace client</span>';
-    badgeRole.className = 'btn btn--sm ' + (expert ? 'btn--accent' : '');
+      ? '<i class="fa-solid fa-eye"></i><span class="hide-sm">Voir comme le client</span>'
+      : '<i class="fa-solid fa-user-gear"></i><span class="hide-sm">Revenir en expert</span>';
+    badgeRole.className = 'btn btn--sm ' + (expert ? '' : 'btn--accent');
 
     // Avancement global
     const pct = Store.avancement();
@@ -215,27 +217,28 @@ const App = {
   },
 
   renderSidebar() {
-    const modules = Store.modulesVisibles();
+    const route = Store.resoudreRoute(Store.state.route);
+    const active = Store.rubriqueDe(route)?.id;
     const projet = Store.projet();
-    const route = Store.state.route;
 
     const compteurs = {
-      'feuille-route': Store.actionsClient().length,
-      signatures: Store.signaturesEnAttente().length,
+      feuille: Store.actionsClient().length,
+      dossier: Store.signaturesEnAttente().length,
     };
 
-    const html = POLES.map((pole) => {
-      const items = modules.filter((m) => m.pole === pole.id);
+    const rubriques = Store.rubriquesVisibles().filter((r) => r.groupe !== 'console');
+    const html = GROUPES_MENU.map((g) => {
+      const items = rubriques.filter((r) => r.groupe === g.id);
       if (!items.length) return '';
       return `
       <div class="nav-group">
-        <div class="nav-group__title"><i class="${esc(pole.icone)}"></i> ${esc(pole.titre)}</div>
-        ${items.map((m) => {
-          const n = compteurs[m.id] || 0;
-          return `<button class="nav-item ${m.id === route ? 'is-active' : ''} ${pole.id === 'console' ? 'nav-item--admin' : ''}"
-                    data-action="aller" data-route="${esc(m.id)}" ${m.id === route ? 'aria-current="page"' : ''}>
-              <i class="${esc(m.icone)}"></i>
-              <span>${esc(m.label)}</span>
+        <div class="nav-group__title"><i class="${esc(g.icone)}"></i> ${esc(g.titre)}</div>
+        ${items.map((r) => {
+          const n = compteurs[r.id] || 0;
+          return `<button class="nav-item ${r.id === active ? 'is-active' : ''}"
+                    data-action="aller-rubrique" data-rubrique="${esc(r.id)}" ${r.id === active ? 'aria-current="page"' : ''}>
+              <i class="${esc(r.icone)}"></i>
+              <span>${esc(r.label)}</span>
               ${n ? `<span class="nav-item__count">${n}</span>` : ''}
             </button>`;
         }).join('')}
@@ -266,20 +269,38 @@ const App = {
   },
 
   renderBreadcrumb() {
-    const route = Store.state.route;
+    const route = Store.resoudreRoute(Store.state.route);
     const mod = MODULES.find((m) => m.id === route);
-    const pole = POLES.find((p) => p.id === mod?.pole);
+    const rub = Store.rubriqueDe(route);
     const projet = Store.projet();
+    const onglets = rub ? Store.pagesRubrique(rub.id) : [];
 
     document.getElementById('breadcrumb').innerHTML = `
       <span><i class="fa-solid fa-house"></i> ${Store.estExpert() ? 'Espace expert' : 'Espace client'}</span>
       <span class="sep">/</span>
       <span class="hide-sm">${esc(projet.nom)}</span>
-      <span class="sep hide-sm">/</span>
-      <span>${esc(pole?.titre || '')}</span>
       <span class="sep">/</span>
-      <strong>${esc(mod?.label || '')}</strong>`;
+      <strong>${esc(rub?.label || mod?.label || '')}</strong>
+      ${onglets.length > 1 ? `<span class="sep">/</span><span>${esc(mod?.onglet || mod?.label || '')}</span>` : ''}`;
   },
+
+  /** Onglets d'une rubrique qui regroupe plusieurs pages. */
+  ongletsRubrique(page) {
+    const rub = Store.rubriqueDe(page);
+    const pages = rub ? Store.pagesRubrique(rub.id) : [];
+    if (pages.length < 2) return '';
+    this.derniersOnglets[rub.id] = page;
+    const statuts = statutsOnglets(rub.id);
+    return `<nav class="onglets" role="tablist" aria-label="${esc(rub.label)}">
+        ${pages.map((m) => `<button role="tab" class="onglets__item ${m.id === page ? 'is-active' : ''}"
+            aria-selected="${m.id === page}" data-action="aller" data-route="${esc(m.id)}">
+            <i class="${esc(m.icone)}"></i> <span>${esc(m.onglet || m.label)}${statuts[m.id]
+              ? `<small class="onglets__statut">${esc(statuts[m.id])}</small>` : ''}</span></button>`).join('')}
+      </nav>`;
+  },
+
+  /** Dernier onglet ouvert dans chaque rubrique, pour y revenir. */
+  derniersOnglets: {},
 
   renderVue() {
     const route = Store.state.route;
@@ -287,17 +308,19 @@ const App = {
 
     // Garde-fou : le rendu ne doit jamais afficher un module hors périmètre
     // (formule non souscrite) ou réservé à l'expert.
-    if (!Store.moduleAccessible(route) || !Views[ALIAS_MODULES[route] || route]) {
+    if (!Store.moduleAccessible(route) || !Views[Store.resoudreRoute(route)]) {
       racine.innerHTML = empty(
         'Module indisponible',
         "Ce module n'est pas accessible avec la formule souscrite ou avec votre profil.",
         'fa-solid fa-lock');
       return;
     }
-    const vue = Views[ALIAS_MODULES[route] || route];
+    const page = Store.resoudreRoute(route);
+    const vue = Views[page];
 
-    racine.innerHTML = vue(this.filtres);
-    document.title = `${MODULES.find((m) => m.id === route)?.label || ''} · ${APP.nom} ${APP.produit}`;
+    racine.innerHTML = this.ongletsRubrique(page) + vue(this.filtres);
+    const rub = Store.rubriqueDe(page);
+    document.title = `${rub?.label || MODULES.find((m) => m.id === page)?.label || ''} · ${APP.nom} ${APP.produit}`;
 
     // Post-traitements dépendant du DOM fraîchement injecté
     this.detruireCharts();
@@ -419,7 +442,7 @@ const App = {
      NAVIGATION
      ====================================================================== */
   aller(route) {
-    route = ALIAS_MODULES[route] || route;
+    route = Store.resoudreRoute(route);
     if (!Store.moduleAccessible(route)) {
       toast("Ce module n'est pas accessible avec la formule souscrite.", 'warn');
       return;
@@ -869,16 +892,31 @@ const App = {
     /* --- Informations du projet (questionnaire) --- */
     'q-enregistrer'(el) {
       const rub = el.dataset.rub;
+      App.filtres = { ...App.filtres, rub: el.dataset.aller || rub };
       Store.enregistrerRubrique(rub, App.lireRubrique(rub));
-      App.revenirA(`q-${rub}`);
+      if (el.dataset.aller) App.renderVue();
+      else App.revenirA(`q-${rub}`);
       const r = QUESTIONNAIRE.find((x) => x.id === rub);
       toast(Store.ecritureActive()
         ? `« ${r ? r.titre : rub} » enregistré.`
         : `« ${r ? r.titre : rub} » enregistré dans ce navigateur (démonstration).`, 'ok');
     },
 
+    /** Change de rubrique ; ce qui a été saisi dans la rubrique ouverte est enregistré d'abord. */
+    'q-rubrique'(el) {
+      const ouverte = document.querySelector('[data-action="q-enregistrer"]')?.dataset.rub;
+      if (ouverte && ouverte !== el.dataset.rub) {
+        const saisie = App.lireRubrique(ouverte);
+        const avant = Store.reponsesRubrique(ouverte);
+        if (JSON.stringify(saisie) !== JSON.stringify(avant)) Store.enregistrerRubrique(ouverte, saisie);
+      }
+      App.filtres = { ...App.filtres, rub: el.dataset.rub };
+      App.renderVue();
+    },
+
     'q-ajouter-ligne'(el) {
       const { rub, champ } = el.dataset;
+      App.filtres = { ...App.filtres, rub };
       const donnees = App.lireRubrique(rub, { garderVides: true });
       donnees[champ] = (Array.isArray(donnees[champ]) ? donnees[champ] : []).concat([{}]);
       // Saisie gardée localement : l'envoi au serveur se fait à l'enregistrement.
@@ -888,6 +926,7 @@ const App = {
 
     'q-retirer-ligne'(el) {
       const { rub, champ } = el.dataset;
+      App.filtres = { ...App.filtres, rub };
       const donnees = App.lireRubrique(rub, { garderVides: true });
       const lignes = Array.isArray(donnees[champ]) ? donnees[champ] : [];
       const i = Number(el.dataset.ligne);
@@ -910,6 +949,7 @@ const App = {
 
     'q-deposer'(el) {
       const { rub, champ } = el.dataset;
+      App.filtres = { ...App.filtres, rub };
       const r = QUESTIONNAIRE.find((x) => x.id === rub);
       const c = r && r.champs.find((x) => x.id === champ);
       if (!c) return;
@@ -1016,6 +1056,44 @@ const App = {
                   </button>`,
       });
     },
+
+    'aller-rubrique'(el) {
+      const id = el.dataset.rubrique;
+      const pages = Store.pagesRubrique(id).map((m) => m.id);
+      const memo = App.derniersOnglets[id];
+      App.aller(pages.includes(memo) ? memo : pages[0]);
+      Modal.close(true);
+    },
+
+    'basculer-vue'() {
+      App.filtres = {};
+      Store.setRole(Store.estExpert() ? 'client' : 'expert');
+      toast(Store.estExpert() ? 'Retour à l’espace expert.' : 'Affichage tel que le client le voit.', 'ok');
+    },
+
+    'menu-profil'() {
+      if (!Store.estExpert() || Store.estClientReel()) { App.actions['changer-role'](); return; }
+      const e = Store.emetteur();
+      const ligne = (action, icone, titre, texte, attrs = '') => `
+        <button class="file-row" style="width:100%;text-align:left" data-action="${action}" ${attrs}>
+          <div class="file-icon"><i class="${icone}"></i></div>
+          <div class="grow"><div class="text-sm fw-800">${esc(titre)}</div><div class="text-xs text-muted">${esc(texte)}</div></div>
+          <i class="fa-solid fa-chevron-right text-muted"></i>
+        </button>`;
+      Modal.open({
+        titre: e.representant || 'Mon espace',
+        soustitre: `${e.qualite || ''} — ${e.nomCommercial || 'ElodiaTech'}`,
+        corps: `<div class="stack-xs">
+            ${ligne('aller-rubrique', 'fa-solid fa-address-card', 'Clients', 'Portefeuille, création d’un client, dossiers Drive', 'data-rubrique="clients"')}
+            ${ligne('aller-rubrique', 'fa-solid fa-sliders', 'Réglages', 'Offres · Société & équipe · Données', 'data-rubrique="reglages"')}
+            ${ligne('basculer-vue', 'fa-solid fa-eye', 'Voir comme le client', 'Affiche la plateforme telle que la voit le client suivi')}
+          </div>`,
+        actions: `<button class="btn btn--danger" data-action="se-deconnecter">
+                    <i class="fa-solid fa-arrow-right-from-bracket"></i> Se déconnecter</button>`,
+      });
+    },
+
+    aide() { App.aller('faq'); },
 
     'definir-role'(el) {
       Modal.close();
@@ -1144,6 +1222,12 @@ const App = {
       App.renderVue();
     },
 
+    'voir-lot'(el) {
+      App.aller('feuille-route');
+      App.filtres = { lot: el.dataset.lot };
+      App.renderVue();
+    },
+
     'reset-filtres'() { App.filtres = {}; App.renderVue(); },
 
     'planifier-echeances'() {
@@ -1260,7 +1344,7 @@ const App = {
         texte: 'Le document rejoindra les documents du client'
           + (signe ? `, et entrera dans ses actes à signer (${SIGNATURES_ACTE[def.signature].label.toLowerCase()}) : il vous restera à coller le lien de signature dans « Validation & signatures ».` : '.')
           + ' Vérifiez auparavant que toutes les mentions [à compléter] sont traitées.',
-        libelle: signe ? 'Valider et mettre à la signature' : 'Valider et transmettre',
+        libelle: signe ? 'Valider et mettre à la signature' : 'Valider (visible par le client)',
         onConfirm: () => {
           Store.validerActe(def.id);
           toast(`${def.titre} : transmis au client${signe ? ' et mis à la signature' : ''}.`, 'ok');
@@ -1294,7 +1378,7 @@ const App = {
           : 'Le chapitre rejoindra les documents du client')
           + (def.prestations.length ? ', et les étapes correspondantes de sa feuille de route lui seront soumises pour validation.' : '.')
           + ' Relisez-le et complétez les mentions [à compléter] avant de valider.',
-        libelle: 'Valider et transmettre',
+        libelle: 'Valider (visible par le client)',
         onConfirm: () => {
           Store.validerChapitre(id);
           toast(`${def.titre} : transmis au client.`, 'ok');
@@ -1350,7 +1434,7 @@ const App = {
 
     'atelier-signer'() {
       const docs = Store.liste('documents').filter((d) => /docs\.google\.com\/document\//.test(String(d.url || '')));
-      if (!docs.length) { toast('Aucun Google Docs dans Documents : préparez d\'abord le document (étape 4).', 'warn'); return; }
+      if (!docs.length) { toast('Aucun Google Docs dans Documents : préparez d\'abord le document (onglet À produire).', 'warn'); return; }
       const p = Store.projet();
       const pros = (Store.reponsesRubrique('equipe').pros || []).filter((x) => x.nom && !/^\[/.test(String(x.nom)));
       const candidats = [
@@ -1360,7 +1444,7 @@ const App = {
       ].filter((c, i, t) => c.nom && t.findIndex((y) => y.nom.toLowerCase() === c.nom.toLowerCase()) === i);
       Modal.formulaire({
         titre: 'Faire signer un document',
-        soustitre: 'Signature interne : un lien personnel par signataire. Envoyez-le ensuite par courriel depuis l\'Atelier.',
+        soustitre: 'Signature interne : un lien personnel par signataire. Envoyez-le ensuite par courriel depuis l\'onglet Signatures.',
         champs: [
           { id: 'doc', label: 'Document', type: 'select', requis: true, options: docs.map((d) => ({ v: d.id, l: d.nom })) },
           ...candidats.map((c, i) => ({ id: `s${i}`, label: `${c.nom}${c.qualite ? ` — ${c.qualite}` : ''}${c.email ? '' : ' (sans courriel)'}`, type: 'checkbox' })),
@@ -1372,7 +1456,7 @@ const App = {
           if (!signataires.length) { toast('Cochez au moins un signataire.', 'warn'); return; }
           try {
             await Store.preparerSignature({ titre: d.nom, docUrl: d.url, signataires });
-            toast(`${signataires.length} lien(s) de signature créé(s). Envoyez-les depuis l\'étape 5.`, 'ok');
+            toast(`${signataires.length} lien(s) de signature créé(s). Envoyez-les depuis l\'onglet Signatures.`, 'ok');
           } catch (err) { toast(`Impossible : ${err.message}`, 'danger'); }
         },
       });

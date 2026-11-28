@@ -128,7 +128,11 @@
         </span>
       </div>
 
-      <button class="btn btn--sm" id="role-badge" data-action="changer-role" aria-label="Changer d'espace"></button>
+      <button class="btn btn--sm" id="role-badge" data-action="basculer-vue" aria-label="Changer l'affichage"></button>
+
+      <button class="icon-btn" data-action="aide" aria-label="Aide : FAQ réglementaire" title="Aide : FAQ réglementaire">
+        <i class="fa-solid fa-circle-question"></i>
+      </button>
 
       <button class="icon-btn" id="btn-theme" data-action="toggle-theme" aria-label="Changer de thème">
         <i class="fa-solid fa-sun"></i>
@@ -139,7 +143,7 @@
         <span class="icon-btn__badge" id="notif-count" hidden>0</span>
       </button>
 
-      <button class="user-chip" data-action="changer-role">
+      <button class="user-chip" data-action="menu-profil" aria-label="Mon espace : clients, réglages">
         <span class="avatar" id="user-avatar">?</span>
         <span class="hide-md" id="user-name">—</span>
         <i class="fa-solid fa-chevron-down text-xs text-muted" aria-hidden="true"></i>
