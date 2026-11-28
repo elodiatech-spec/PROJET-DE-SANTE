@@ -1480,6 +1480,50 @@ const App = {
       });
     },
 
+    'envoi-nouveau'(el) { formulaireEnvoi({ dest: el.dataset.dest, objet: el.dataset.objet }); },
+
+    'envoi-modifier'(el) {
+      const e = Store.envois().find((x) => x.id === el.dataset.id);
+      if (e) formulaireEnvoi({ envoi: e });
+    },
+
+    'envoi-suivi'(el) {
+      const e = Store.envois().find((x) => x.id === el.dataset.id);
+      if (e) formulaireSuiviEnvoi(e);
+    },
+
+    async 'envoi-preparer'(el) {
+      const e = Store.envois().find((x) => x.id === el.dataset.id);
+      if (!e) return;
+      if (!e.pieces.length) { toast("Aucune pièce cochée : modifiez l'envoi pour en choisir.", 'warn'); return; }
+      const libelle = el.innerHTML;
+      el.disabled = true;
+      el.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Préparation…';
+      try {
+        const r = await Store.preparerEnvoi(e.id);
+        toast(`Dossier d'envoi prêt : ${r.copiees} pièce(s) copiée(s), lettre et bordereau créés.`
+          + (r.nonCopiees.length ? ` À joindre vous-même : ${r.nonCopiees.join(' ; ')}.` : ''), r.nonCopiees.length ? 'warn' : 'ok');
+      } catch (err) {
+        toast(`Préparation impossible : ${err.message}`, 'danger');
+        el.disabled = false;
+        el.innerHTML = libelle;
+      }
+    },
+
+    'envoi-supprimer'(el) {
+      const e = Store.envois().find((x) => x.id === el.dataset.id);
+      if (!e) return;
+      Modal.confirmer({
+        titre: "Supprimer l'envoi",
+        texte: `« ${e.objet} » (${e.destinataire}) sera retiré du suivi. Le dossier d'envoi déjà créé reste dans votre Drive.`,
+        libelle: 'Supprimer', danger: true,
+        onConfirm: async () => {
+          try { await Store.supprimerEnvoi(e.id); toast('Envoi supprimé.', 'ok'); }
+          catch (err) { toast(`Impossible : ${err.message}`, 'danger'); }
+        },
+      });
+    },
+
     async 'atelier-annuler-signataire'(el) {
       try { await Store.annulerSignataire(el.dataset.id); toast('Signataire retiré.', 'ok'); }
       catch (err) { toast(`Impossible : ${err.message}`, 'danger'); }
@@ -3140,6 +3184,75 @@ const Modal = {
     form.addEventListener('submit', (e) => { e.preventDefault(); valider(); });
   },
 };
+
+/**
+ * Fenêtre de création ou de modification d'un envoi (expert). Les documents du dossier
+ * sont proposés avec une présélection d'après le destinataire ; l'expert coche ce qu'il transmet.
+ */
+function formulaireEnvoi({ dest, objet, envoi } = {}) {
+  const type = Store.projet()?.type || 'MSP';
+  const dests = DESTINATAIRES_ENVOIS.filter((d) => d.types.includes(type));
+  const courant = envoi ? (defDestinataire(envoi.destinataire) || null) : (dests.find((d) => d.id === dest) || dests[0]);
+  const docs = Store.liste('documents');
+  const suggeres = new Set(envoi ? [] : Store.documentsSuggeres(courant?.id));
+  const deja = new Set((envoi?.pieces || []).map((x) => x.nom));
+  const champs = [
+    { id: 'destinataire', label: 'Destinataire', type: 'select', requis: true,
+      valeur: envoi ? (courant?.label || envoi.destinataire) : courant?.label,
+      options: [...dests.map((d) => ({ v: d.label, l: `${d.label} — ${d.long}` })),
+                ...(envoi && !courant ? [{ v: envoi.destinataire, l: envoi.destinataire }] : [])] },
+    { id: 'objet', label: 'Objet', requis: true, valeur: envoi?.objet || objet || '', placeholder: 'Ex. : Transmission du projet de santé' },
+    { id: 'canal', label: 'Canal', type: 'select', valeur: envoi?.canal || courant?.canal || 'courriel',
+      options: Object.entries(CANAUX_ENVOI).map(([v, c]) => ({ v, l: c.label })) },
+    { id: 'courrielDest', label: 'Courriel du destinataire', type: 'email', valeur: envoi?.courrielDest || '', placeholder: 'À renseigner pour le courriel prêt à envoyer' },
+    { id: 'reference', label: 'Référence ou numéro de dossier', valeur: envoi?.reference || '' },
+    ...docs.map((d, i) => ({
+      id: `d${i}`, type: 'checkbox', valeur: envoi ? deja.has(d.nom) : suggeres.has(d.id),
+      label: `${d.nom}${d.cat ? ` (${d.cat})` : ''}${/^https:\/\//.test(String(d.url || '')) ? '' : ' — sans lien Drive : à joindre vous-même'}`,
+    })),
+  ];
+  Modal.formulaire({
+    titre: envoi ? "Modifier l'envoi" : 'Nouvel envoi',
+    soustitre: docs.length ? 'Cochez les pièces transmises. Elles seront copiées dans un dossier d\'envoi daté de votre Drive.' : 'Aucun document dans le dossier : ajoutez-en depuis l\'onglet Documents.',
+    champs, libelle: envoi ? 'Enregistrer' : "Créer l'envoi",
+    onSubmit: async (v) => {
+      const pieces = docs.filter((d, i) => v[`d${i}`] === 'on' || v[`d${i}`] === true)
+        .map((d) => ({ nom: d.nom, url: /^https:\/\//.test(String(d.url || '')) ? d.url : '' }));
+      try {
+        const e = await Store.enregistrerEnvoi({
+          ...(envoi || {}), destinataire: v.destinataire, objet: v.objet.trim(), canal: v.canal,
+          courrielDest: v.courrielDest || '', reference: v.reference || '', pieces,
+        });
+        toast(envoi ? 'Envoi mis à jour.' : `Envoi créé${e ? '' : ''}. Cliquez sur « Préparer l'envoi » pour constituer le dossier.`, 'ok');
+      } catch (err) { toast(`Impossible : ${err.message}`, 'danger'); }
+    },
+  });
+}
+
+/** Fenêtre de suivi : état, dates, référence, réponse. */
+function formulaireSuiviEnvoi(e) {
+  Modal.formulaire({
+    titre: `Suivi — ${e.objet}`,
+    soustitre: `${e.destinataire}. Consignez ici l'envoi, l'accusé de réception, les compléments demandés et la réponse.`,
+    champs: [
+      { id: 'statut', label: 'État', type: 'select', valeur: e.statut, options: Object.entries(STATUTS_ENVOI).map(([v, c]) => ({ v, l: c.label })) },
+      { id: 'envoyeLe', label: 'Envoyé le', type: 'date', valeur: e.envoyeLe },
+      { id: 'arLe', label: "Accusé de réception le", type: 'date', valeur: e.arLe },
+      { id: 'relanceLe', label: 'Relancer le', type: 'date', valeur: e.relanceLe || (e.envoyeLe ? Dates.addDays(e.envoyeLe, DELAI_RELANCE_JOURS) : '') },
+      { id: 'reference', label: 'Référence ou numéro de dossier', valeur: e.reference },
+      { id: 'reponse', label: 'Réponse, compléments demandés', type: 'textarea', valeur: e.reponse },
+      { id: 'notes', label: 'Notes internes', type: 'textarea', valeur: e.notes },
+    ],
+    libelle: 'Enregistrer le suivi',
+    onSubmit: async (v) => {
+      try {
+        await Store.enregistrerEnvoi({ ...e, statut: v.statut, envoyeLe: v.envoyeLe || '', arLe: v.arLe || '', relanceLe: v.relanceLe || '',
+          reference: v.reference || '', reponse: v.reponse || '', notes: v.notes || '' });
+        toast('Suivi enregistré.', 'ok');
+      } catch (err) { toast(`Impossible : ${err.message}`, 'danger'); }
+    },
+  });
+}
 
 /* ==========================================================================
    Notifications éphémères

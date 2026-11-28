@@ -476,6 +476,9 @@ body.non-connecte > .connexion { display: grid; }
 .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.grid-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.envoi-demarche { padding: 8px 0; border-top: 1px solid var(--border); }
+.envoi-demarche:first-child { border-top: 0; }
 .grid-sidebar { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); }
 
 /* --------------------------------------------------------------------------
@@ -638,6 +641,8 @@ body.non-connecte > .connexion { display: grid; }
    11. Formulaires
    -------------------------------------------------------------------------- */
 .field { display: flex; flex-direction: column; gap: 5px; }
+.field--check { flex-direction: row; align-items: flex-start; justify-content: flex-start; text-align: left; gap: 10px; }
+.field--check input { margin-top: 3px; flex: none; }
 .field__label { font-size: .74rem; font-weight: 700; color: var(--text-soft); }
 .field__hint { font-size: .7rem; color: var(--text-muted); }
 
@@ -1135,7 +1140,7 @@ select { cursor: pointer; }
    20. Responsive
    -------------------------------------------------------------------------- */
 @media (max-width: 1200px) {
-  .grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid-4, .grid-5 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .grid-sidebar { grid-template-columns: minmax(0, 1fr); }
 }
 
@@ -1159,7 +1164,7 @@ select { cursor: pointer; }
   h1 { font-size: 1.35rem; }
   .hero { padding: var(--sp-5); }
   .hero h1 { font-size: 1.2rem; }
-  .grid-2, .grid-3, .grid-4 { grid-template-columns: minmax(0, 1fr); }
+  .grid-2, .grid-3, .grid-4, .grid-5 { grid-template-columns: minmax(0, 1fr); }
   .topbar { padding: 0 var(--sp-3); gap: var(--sp-2); }
   .topbar__search { display: none; }
   .hide-md { display: none !important; }

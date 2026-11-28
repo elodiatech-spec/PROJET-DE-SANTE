@@ -359,6 +359,16 @@ function demoDonnees() {
     redaction: {},
     // Signature interne : signataires et liens personnels, par projet (expert).
     signataires: {},
+    // Envois aux administrations et organismes, par projet (expert). Quelques exemples en démonstration.
+    envois: {
+      'msp-fort-de-france': [
+        { id: 'envdemo1', destinataire: 'ARS', objet: 'Transmission du projet de santé', canal: 'courriel', statut: 'envoye',
+          courrielDest: 'ars-martinique-dossiers@exemple.invalid', reference: '', pieces: [{ nom: 'Projet de santé', url: '' }, { nom: 'Statuts de la SISA', url: '' }],
+          dossierUrl: '', lettreUrl: '', envoyeLe: Dates.addDays(Dates.today(), -21), arLe: '', relanceLe: '', reponse: '', notes: '' },
+        { id: 'envdemo2', destinataire: 'Assurance Maladie', objet: "Adhésion à l'accord conventionnel interprofessionnel (ACI)", canal: 'teleservice', statut: 'a_preparer',
+          courrielDest: '', reference: '', pieces: [], dossierUrl: '', lettreUrl: '', envoyeLe: '', arLe: '', relanceLe: '', reponse: '', notes: '' },
+      ],
+    },
     // Nombre de fichiers par dossier de sources (« Commun », « Chapitre 1 »…), par projet.
     inventaires: {},
     // Actes générés avec Claude : même forme, réservés à l'expert.
@@ -504,7 +514,7 @@ const Store = {
       });
       ['projets', 'documents', 'signatures', 'messages', 'evenements',
        'comptesRendus', 'financements', 'partenaires', 'pieces', 'prestataires',
-       'intervenantsImmo', 'questionnaire', 'redaction', 'actes', 'emetteur', 'signataires', 'inventaires'].forEach((cle) => {
+       'intervenantsImmo', 'questionnaire', 'redaction', 'actes', 'emetteur', 'signataires', 'inventaires', 'envois'].forEach((cle) => {
         if (sauvegarde[cle]) this.state[cle] = sauvegarde[cle];
       });
     }
@@ -555,7 +565,7 @@ const Store = {
       if (this.state.reglages.source === 'sheets') {
         ['projets', 'documents', 'signatures', 'messages', 'evenements',
          'comptesRendus', 'financements', 'partenaires', 'pieces',
-         'experts', 'prestataires', 'questionnaire', 'redaction', 'actes', 'emetteur', 'signataires', 'inventaires'].forEach((cle) => {
+         'experts', 'prestataires', 'questionnaire', 'redaction', 'actes', 'emetteur', 'signataires', 'inventaires', 'envois'].forEach((cle) => {
           delete aEnregistrer[cle];
         });
       }
@@ -960,6 +970,19 @@ const Store = {
         texte: sigs.map((s) => s.titre).join(' · '),
         route: 'signatures',
       });
+    }
+
+    // Envois sans réponse depuis trop longtemps : à relancer (expert).
+    if (this.estExpert()) {
+      const relances = this.envoisARelancer(projetId);
+      if (relances.length) {
+        n.push({
+          ton: 'warn', icone: 'fa-solid fa-paper-plane',
+          titre: `${relances.length} envoi${relances.length > 1 ? 's' : ''} à relancer`,
+          texte: relances.map((e) => `${e.destinataire} : ${e.objet}`).slice(0, 2).join(' · '),
+          route: 'envois',
+        });
+      }
     }
 
     // Pièces à fournir : seulement si le projet a des financements en jeu.
@@ -2124,6 +2147,55 @@ const Store = {
   async annulerSignataire(id) {
     const rep = await this._appelExpert('annulerSignature', { id });
     this.commit((s) => { s.signataires[s.projetActifId] = rep.signataires || []; });
+  },
+
+  /* ---- Envois et démarches (expert) ---- */
+
+  envois(projetId) {
+    return this.state.envois?.[projetId || this.state.projetActifId] || [];
+  },
+
+  /** Un envoi est à relancer s'il attend une réponse et que la date de relance (ou le délai usuel) est passée. */
+  envoiARelancer(e) {
+    if (!e || !['envoye', 'accuse'].includes(e.statut) || !e.envoyeLe) return false;
+    if (e.relanceLe) return Dates.daysUntil(e.relanceLe) <= 0;
+    return Dates.daysUntil(e.envoyeLe) <= -DELAI_RELANCE_JOURS;
+  },
+
+  envoisARelancer(projetId) {
+    return this.envois(projetId).filter((e) => this.envoiARelancer(e));
+  },
+
+  /** Documents proposés d'office pour un envoi : pièces du dépôt du dossier visé, puis documents dont le nom correspond. */
+  documentsSuggeres(destId) {
+    const dest = DESTINATAIRES_ENVOIS.find((d) => d.id === destId);
+    if (!dest) return [];
+    const docs = this.liste('documents');
+    const ids = new Set();
+    this.pieces().forEach((pi) => {
+      if (pi.document && (pi.pour || []).some((d) => dest.dossiers.includes(d))) ids.add(pi.document.id);
+    });
+    if (dest.motif) docs.forEach((d) => { if (dest.motif.test(`${d.nom} ${d.cat || ''}`)) ids.add(d.id); });
+    return [...ids];
+  },
+
+  async enregistrerEnvoi(envoi) {
+    const id = envoi.id || idUnique('env');
+    const rep = await this._appelExpert('enregistrerEnvoi', { envoi: { ...envoi, id } });
+    this.commit((s) => { s.envois[s.projetActifId] = rep.envois || []; });
+    return (rep.envois || []).find((e) => e.id === id);
+  },
+
+  async supprimerEnvoi(id) {
+    const rep = await this._appelExpert('supprimerEnvoi', { id });
+    this.commit((s) => { s.envois[s.projetActifId] = rep.envois || []; });
+  },
+
+  /** Dossier daté dans le Drive : copies des pièces, lettre d'accompagnement, bordereau. */
+  async preparerEnvoi(id) {
+    const rep = await this._appelExpert('preparerEnvoi', { id });
+    this.commit((s) => { s.envois[s.projetActifId] = rep.envois || []; });
+    return { copiees: rep.copiees || 0, nonCopiees: rep.nonCopiees || [] };
   },
 
   /** Rattache un Google Docs existant au chapitre (rédigé hors application). */
