@@ -1480,6 +1480,149 @@ const App = {
       });
     },
 
+    'fact-devis'() {
+      const f = FORMULES[Store.projet()?.formule];
+      if (!f) { toast('Formule du projet non reconnue.', 'warn'); return; }
+      Modal.formulaire({
+        titre: `Devis — Formule ${f.code}`,
+        soustitre: `Copie de votre devis type « ${f.nom} », préremplie avec la fiche du client et l'échéancier ${ECHEANCIER[0].part} % / ${ECHEANCIER[1].part} %.`,
+        champs: [{ id: 'montant', label: `Montant HT (prix de la formule : ${euros(f.prixHT)})`, type: 'number', requis: true, valeur: String(f.prixHT) }],
+        libelle: 'Préparer le devis',
+        onSubmit: async (v) => {
+          try {
+            const m = Number(v.montant);
+            await Store.creerDevis(m === f.prixHT ? '' : m);
+            toast('Devis préparé dans « 04 — Finances ». Relisez-le, puis marquez-le envoyé après l\'avoir transmis.', 'ok');
+          } catch (err) { toast(`Impossible : ${err.message}`, 'danger'); }
+        },
+      });
+    },
+
+    async 'fact-statut'(el) {
+      const statut = el.dataset.statut;
+      const go = async () => {
+        try { await Store.majFacturation({ id: el.dataset.id, statut }); toast(statut === 'accepte' ? 'Devis accepté : l\'acompte peut être facturé.' : 'État mis à jour.', 'ok'); }
+        catch (err) { toast(`Impossible : ${err.message}`, 'danger'); }
+      };
+      if (statut === 'refuse') {
+        Modal.confirmer({ titre: 'Devis refusé', texte: 'Le devis sera marqué refusé. Vous pourrez en préparer un nouveau.', libelle: 'Marquer refusé', danger: true, onConfirm: go });
+      } else await go();
+    },
+
+    'fact-ars'(el) {
+      const d = Store.facturation().find((x) => x.id === el.dataset.id);
+      if (!d) return;
+      Modal.formulaire({
+        titre: "Validation du projet de santé par l'ARS",
+        soustitre: `Cette date déclenche la facture de solde (${ECHEANCIER[1].part} %). Reprenez-la du courrier ou du courriel de l'ARS.`,
+        champs: [{ id: 'date', label: 'Date de validation', type: 'date', requis: true, valeur: d.arsValideLe || Dates.today() }],
+        libelle: 'Enregistrer',
+        onSubmit: async (v) => {
+          try { await Store.majFacturation({ id: d.id, arsValideLe: v.date }); toast('Validation enregistrée : la facture de solde peut être émise.', 'ok'); }
+          catch (err) { toast(`Impossible : ${err.message}`, 'danger'); }
+        },
+      });
+    },
+
+    'fact-facturer'(el) {
+      const devis = Store.facturation().find((x) => x.id === el.dataset.devis);
+      const tr = Store.echeancier(devis).find((x) => x.tranche === el.dataset.tranche);
+      if (!devis || !tr) return;
+      Modal.confirmer({
+        titre: `Émettre la facture — ${tr.libelle}`,
+        texte: `${tr.part} % du devis ${devis.numero} : ${eurosCts(tr.montantHt)} HT, ${eurosCts(tr.montantTtc)} TTC. La facture reçoit le prochain numéro de la série et ne pourra plus être supprimée, seulement annulée.`,
+        libelle: 'Émettre',
+        onConfirm: async () => {
+          try { await Store.creerFacture(devis.id, tr.tranche); toast('Facture créée dans « 04 — Finances ». Envoyez-la au client, avec vos coordonnées bancaires à jour.', 'ok'); }
+          catch (err) { toast(`Impossible : ${err.message}`, 'danger'); }
+        },
+      });
+    },
+
+    'fact-payer'(el) {
+      const f = Store.facturation().find((x) => x.id === el.dataset.id);
+      if (!f) return;
+      Modal.formulaire({
+        titre: `Paiement reçu — facture ${f.numero}`,
+        soustitre: `${eurosCts(f.montantTtc)} TTC.`,
+        champs: [
+          { id: 'date', label: 'Date de réception du paiement', type: 'date', requis: true, valeur: Dates.today() },
+          { id: 'mode', label: 'Mode de règlement', type: 'select', valeur: 'Virement', options: ['Virement', 'Chèque', 'Espèces', 'Autre'].map((v) => ({ v, l: v })) },
+        ],
+        libelle: 'Enregistrer le paiement',
+        onSubmit: async (v) => {
+          try { await Store.majFacturation({ id: f.id, statut: 'payee', payeLe: v.date, modePaiement: v.mode }); toast('Paiement enregistré.', 'ok'); }
+          catch (err) { toast(`Impossible : ${err.message}`, 'danger'); }
+        },
+      });
+    },
+
+    'fact-relance'(el) {
+      const f = Store.facturation().find((x) => x.id === el.dataset.id);
+      if (!f) return;
+      Modal.formulaire({
+        titre: `Relance envoyée — facture ${f.numero}`,
+        soustitre: "À consigner une fois le courriel envoyé : la date et le niveau servent à choisir la relance suivante.",
+        champs: [
+          { id: 'niveau', label: 'Niveau', type: 'select', valeur: String(Store.niveauRelanceConseille(f) || 1), options: Object.entries(NIVEAUX_RELANCE).map(([v, n]) => ({ v, l: n.label })) },
+          { id: 'date', label: "Date d'envoi", type: 'date', requis: true, valeur: Dates.today() },
+        ],
+        libelle: 'Consigner la relance',
+        onSubmit: async (v) => {
+          try {
+            await Store.majFacturation({ id: f.id, relances: [...(f.relances || []), { date: v.date, niveau: Number(v.niveau) }] });
+            toast('Relance consignée.', 'ok');
+          } catch (err) { toast(`Impossible : ${err.message}`, 'danger'); }
+        },
+      });
+    },
+
+    'fact-modifier'(el) {
+      const f = Store.facturation().find((x) => x.id === el.dataset.id);
+      if (!f) return;
+      Modal.formulaire({
+        titre: `Facture ${f.numero}`,
+        soustitre: "Les montants d'une facture ne se modifient pas : annulez-la et émettez-en une nouvelle si nécessaire.",
+        champs: [
+          { id: 'echeance', label: 'Échéance', type: 'date', valeur: f.echeance },
+          { id: 'notes', label: 'Notes', type: 'textarea', valeur: f.notes },
+        ],
+        libelle: 'Enregistrer',
+        onSubmit: async (v) => {
+          try { await Store.majFacturation({ id: f.id, echeance: v.echeance || '', notes: v.notes || '' }); toast('Facture mise à jour.', 'ok'); }
+          catch (err) { toast(`Impossible : ${err.message}`, 'danger'); }
+        },
+      });
+    },
+
+    'fact-annuler'(el) {
+      const f = Store.facturation().find((x) => x.id === el.dataset.id);
+      if (!f) return;
+      Modal.confirmer({
+        titre: `Annuler la facture ${f.numero}`,
+        texte: `La facture reste dans la numérotation, marquée annulée, et la tranche redevient à émettre. Si elle a été envoyée au client, informez-le.`,
+        libelle: 'Annuler la facture', danger: true,
+        onConfirm: async () => {
+          try { await Store.majFacturation({ id: f.id, statut: 'annulee' }); toast('Facture annulée.', 'ok'); }
+          catch (err) { toast(`Impossible : ${err.message}`, 'danger'); }
+        },
+      });
+    },
+
+    'fact-supprimer'(el) {
+      const d = Store.facturation().find((x) => x.id === el.dataset.id);
+      if (!d) return;
+      Modal.confirmer({
+        titre: `Supprimer le devis ${d.numero}`,
+        texte: 'Le devis est retiré du suivi. Le document déjà créé reste dans le Drive du client.',
+        libelle: 'Supprimer', danger: true,
+        onConfirm: async () => {
+          try { await Store.supprimerFacturation(d.id); toast('Devis supprimé.', 'ok'); }
+          catch (err) { toast(`Impossible : ${err.message}`, 'danger'); }
+        },
+      });
+    },
+
     'envoi-nouveau'(el) { formulaireEnvoi({ dest: el.dataset.dest, objet: el.dataset.objet }); },
 
     'envoi-modifier'(el) {

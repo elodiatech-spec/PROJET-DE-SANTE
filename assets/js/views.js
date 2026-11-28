@@ -34,6 +34,17 @@ function euros(n) {
   return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n || 0);
 }
 
+/** Montant avec centimes, pour les devis et les factures. */
+function eurosCts(n) {
+  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(n || 0);
+}
+
+/** Courriel prêt à envoyer dans Gmail ; l'expert relit, joint les fichiers et envoie lui-même. */
+function lienGmail(to, sujet, corps) {
+  return 'https://mail.google.com/mail/?view=cm&fs=1&tf=1'
+    + `&to=${encodeURIComponent(to || '')}&su=${encodeURIComponent(sujet || '')}&body=${encodeURIComponent(corps || '')}`;
+}
+
 function badge(label, couleur, icone) {
   return `<span class="badge badge--${esc(couleur || 'neutre')}">${icone ? `<i class="${esc(icone)}"></i>` : ''}${esc(label)}</span>`;
 }
@@ -552,11 +563,13 @@ function carteDocumentsDossier(actif, pros) {
         <div class="card card--flat"><strong class="text-sm">Contrat ElodiaTech</strong>
           <div class="stack-xs" style="margin-top:8px">
             ${MODELES_TYPES.map((m) => {
-              const existant = deja(m.id === 'devis' ? 'Devis' : m.titre);
+              const existant = deja(m.titre);
               return `<div class="row-between"><span class="text-sm">${esc(m.titre)}</span>
                 ${existant ? `<a class="btn btn--sm btn--ghost" href="${esc(urlSure(existant.url))}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-file-word"></i> Ouvrir</a>`
                   : `<button class="btn btn--sm" data-action="atelier-modele" data-modele="${esc(m.id)}" ${actif ? '' : 'disabled'}><i class="fa-solid fa-copy"></i> Préparer</button>`}</div>`;
             }).join('')}
+            <div class="row-between"><span class="text-sm">Devis et factures</span>
+              <button class="btn btn--sm btn--ghost" data-action="aller" data-route="facturation"><i class="fa-solid fa-file-invoice-dollar"></i> Facturation</button></div>
           </div></div>
         <div class="card card--flat"><strong class="text-sm">Lettres d'engagement de l'équipe</strong>
           <p class="text-xs text-muted" style="margin:6px 0">Une lettre par professionnel nommé dans les informations du projet (${nommes.length}), à faire signer dans l’onglet Signatures.</p>
@@ -628,6 +641,126 @@ function carteDepot(ars) {
       }).join('')}</div>
       ${decl?.aCompleter ? `<p class="text-xs text-warn" style="margin-top:8px">${esc(decl.aCompleter)}</p>` : ''}
     </div>`;
+}
+
+/* ====================== FACTURATION (expert) ====================== */
+
+/** Texte de la relance selon le niveau : rappel courtois, relance ferme, mise en demeure. */
+function courrielRelance(f, niveau) {
+  const p = Store.projet();
+  const em = Store.emetteur();
+  const retard = f.echeance ? Math.max(0, -Dates.daysUntil(f.echeance)) : 0;
+  const ref = `facture n° ${f.numero} du ${Dates.format(f.dateDoc)}, d'un montant de ${eurosCts(f.montantTtc)} TTC, échue le ${Dates.format(f.echeance)}`;
+  const precedente = (f.relances || []).slice(-1)[0];
+  const intro = {
+    1: `Sauf erreur de notre part, la ${ref}, n'a pas été réglée à ce jour.\n\nNous vous remercions de bien vouloir procéder au règlement par virement bancaire. Si le paiement a déjà été effectué, merci de ne pas tenir compte de ce message.`,
+    2: `Malgré notre précédent rappel${precedente ? ` du ${Dates.format(precedente.date)}` : ''}, la ${ref}, demeure impayée (${retard} jours de retard).\n\nNous vous demandons de la régler sous 8 jours. Rappelons que des pénalités de retard égales à trois fois le taux d'intérêt légal et l'indemnité forfaitaire de recouvrement de 40 € sont dues de plein droit à compter de l'échéance.`,
+    3: `Mise en demeure de payer.\n\nLa ${ref}, reste impayée malgré nos relances (${retard} jours de retard).\n\nNous vous mettons en demeure de régler la somme de ${eurosCts(f.montantTtc)} TTC sous 8 jours à compter de la réception du présent courriel, faute de quoi nous engagerons les démarches de recouvrement, sans nouvel avis. Les pénalités de retard et l'indemnité forfaitaire de 40 € sont dues.`,
+  }[niveau] || '';
+  const corps = `Madame, Monsieur,\n\n${intro}\n\nLa facture est jointe à ce message pour mémoire.\n\nCordialement,\n${em.representant || ''}\n${em.nomCommercial || em.denomination || ''}`;
+  return lienGmail(p?.client?.email, `${p?.nom || ''} — ${niveau === 3 ? 'Mise en demeure' : 'Relance'} facture ${f.numero}`, corps);
+}
+
+function ligneDocFacturation(f) {
+  const st = STATUTS_FACTURATION[f.statut] || STATUTS_FACTURATION.brouillon;
+  const retard = Store.factureEnRetard(f);
+  const lien = urlSure(f.docUrl);
+  const niveau = Store.niveauRelanceConseille(f);
+  const dates = [
+    f.type === 'devis' && f.dateDoc ? `émis le ${Dates.format(f.dateDoc)}` : '',
+    f.type === 'devis' && f.echeance && ['brouillon', 'envoye'].includes(f.statut) ? `valable jusqu'au ${Dates.format(f.echeance)}` : '',
+    f.accepteLe ? `accepté le ${Dates.format(f.accepteLe)}` : '',
+    f.arsValideLe ? `projet de santé validé par l'ARS le ${Dates.format(f.arsValideLe)}` : '',
+    f.type === 'facture' && f.dateDoc ? `émise le ${Dates.format(f.dateDoc)}` : '',
+    f.type === 'facture' && f.echeance && f.statut === 'emise' ? `échéance le ${Dates.format(f.echeance)}` : '',
+    f.payeLe ? `payée le ${Dates.format(f.payeLe)}${f.modePaiement ? ` (${f.modePaiement})` : ''}` : '',
+  ].filter(Boolean).join(' · ');
+  const couleur = retard ? 'var(--danger-500)' : (['payee', 'accepte'].includes(f.statut) ? 'var(--ok-500)' : 'var(--border-strong)');
+  const relances = (f.relances || []).map((r) => `${NIVEAUX_RELANCE[r.niveau]?.label || 'Relance'} le ${Dates.format(r.date)}`).join(' · ');
+  const aDesFactures = f.type === 'devis' && Store.facturation().some((x) => x.devisId === f.id && x.statut !== 'annulee');
+
+  return `<div class="file-row" style="border-left:3px solid ${couleur};align-items:flex-start">
+      <div class="file-icon"><i class="fa-solid ${f.type === 'devis' ? 'fa-file-signature' : 'fa-file-invoice'}"></i></div>
+      <div class="grow" style="min-width:0">
+        <div class="text-sm fw-800">${esc(f.type === 'devis' ? 'Devis' : 'Facture')} ${esc(f.numero)} — ${esc(f.libelle)}</div>
+        <div class="text-xs text-muted">${esc(eurosCts(f.montantHt))} HT · TVA ${esc(String(f.tauxTva).replace('.', ','))} % ${esc(eurosCts(f.montantTva))} · <strong>${esc(eurosCts(f.montantTtc))} TTC</strong></div>
+        <div class="row-tight" style="margin-top:6px">
+          ${badge(st.label, st.couleur, st.icone)}
+          ${retard ? badge(`Échue depuis ${-Dates.daysUntil(f.echeance)} j`, 'danger', 'fa-solid fa-clock') : ''}
+          ${dates ? `<span class="text-xs text-muted">${esc(dates)}</span>` : ''}
+        </div>
+        ${relances ? `<p class="text-xs text-soft" style="margin-top:6px"><i class="fa-solid fa-bell"></i> ${esc(relances)}</p>` : ''}
+        ${f.notes ? `<p class="text-xs text-soft" style="margin-top:4px">${esc(f.notes)}</p>` : ''}
+      </div>
+      <div class="row-tight" style="flex-wrap:wrap;justify-content:flex-end">
+        ${lien ? `<a class="btn btn--sm btn--ghost" href="${esc(lien)}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-file-lines"></i> Ouvrir</a>` : ''}
+        ${f.type === 'devis' && f.statut === 'brouillon' ? `<button class="btn btn--sm" data-action="fact-statut" data-id="${esc(f.id)}" data-statut="envoye"><i class="fa-solid fa-paper-plane"></i> Marquer envoyé</button>` : ''}
+        ${f.type === 'devis' && ['brouillon', 'envoye'].includes(f.statut) ? `
+          <button class="btn btn--sm btn--primary" data-action="fact-statut" data-id="${esc(f.id)}" data-statut="accepte"><i class="fa-solid fa-circle-check"></i> Accepté</button>
+          <button class="btn btn--sm btn--ghost" data-action="fact-statut" data-id="${esc(f.id)}" data-statut="refuse">Refusé</button>` : ''}
+        ${f.type === 'devis' && ['brouillon', 'refuse'].includes(f.statut) && !aDesFactures ? `<button class="btn btn--sm btn--ghost" data-action="fact-supprimer" data-id="${esc(f.id)}" title="Supprimer" aria-label="Supprimer"><i class="fa-solid fa-trash"></i></button>` : ''}
+        ${f.type === 'facture' && f.statut === 'emise' ? `
+          <button class="btn btn--sm btn--primary" data-action="fact-payer" data-id="${esc(f.id)}"><i class="fa-solid fa-circle-check"></i> Payée</button>
+          ${retard ? `<a class="btn btn--sm" href="${esc(courrielRelance(f, niveau))}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-envelope"></i> Relance : ${esc(NIVEAUX_RELANCE[niveau].label.toLowerCase())}</a>
+            <button class="btn btn--sm btn--ghost" data-action="fact-relance" data-id="${esc(f.id)}" title="Consigner la relance envoyée"><i class="fa-solid fa-bell"></i> Relance envoyée</button>` : ''}
+          <button class="btn btn--sm btn--ghost" data-action="fact-modifier" data-id="${esc(f.id)}" title="Échéance, notes" aria-label="Modifier"><i class="fa-solid fa-pen"></i></button>
+          <button class="btn btn--sm btn--ghost" data-action="fact-annuler" data-id="${esc(f.id)}" title="Annuler la facture" aria-label="Annuler"><i class="fa-solid fa-ban"></i></button>` : ''}
+      </div>
+    </div>`;
+}
+
+function carteFacturation() {
+  const projet = Store.projet();
+  const devis = Store.devisActif();
+  const docs = Store.facturation();
+  const t = Store.totauxFacturation();
+  const kpi = [
+    { l: 'Facturé TTC', v: t.facture, c: '' }, { l: 'Encaissé', v: t.encaisse, c: 'ok' },
+    { l: 'Reste à encaisser', v: t.reste, c: 'warn' }, { l: 'Dont échu', v: t.enRetard, c: 'danger' },
+  ];
+  const formule = FORMULES[projet?.formule];
+  const tranches = Store.echeancier(devis);
+
+  return `<div class="card">
+      <div class="card__head"><div>
+        <h3 class="card__title"><i class="fa-solid fa-file-invoice-dollar"></i> Devis, factures et règlements</h3>
+        <p class="card__subtitle">Règlement de toutes les formules : <strong>${ECHEANCIER[0].part} % ${esc(ECHEANCIER[0].court)}</strong>, <strong>${ECHEANCIER[1].part} % ${esc(ECHEANCIER[1].court)}</strong>.
+          Les documents sont créés dans le Drive du client (« 04 — Finances ») ; vous les envoyez vous-même.</p>
+      </div>
+        ${devis ? '' : `<button class="btn btn--primary btn--sm" data-action="fact-devis"><i class="fa-solid fa-plus"></i> Préparer le devis</button>`}
+      </div>
+      <div class="grid grid-4" style="margin-bottom:var(--sp-4)">${kpi.map((k) => `
+        <div class="card card--flat"><div class="text-xs text-muted">${esc(k.l)}</div>
+          <strong class="${k.v && k.c ? `text-${k.c}` : ''}" style="font-size:1.3rem">${esc(eurosCts(k.v))}</strong></div>`).join('')}</div>
+      ${devis ? `
+        <div class="stack-xs">${docs.filter((d) => d.type === 'devis').map(ligneDocFacturation).join('')}</div>
+        <h4 class="text-sm fw-800" style="margin:var(--sp-4) 0 var(--sp-2)">Échéancier du contrat</h4>
+        <div class="table-wrap"><table class="table">
+          <thead><tr><th>Tranche</th><th>Part</th><th>HT</th><th>TTC</th><th>État</th><th></th></tr></thead>
+          <tbody>${tranches.map((tr) => {
+            const f = tr.facture;
+            const st = f ? (STATUTS_FACTURATION[f.statut] || {}) : null;
+            return `<tr>
+              <td class="table__strong">${esc(tr.libelle)}</td>
+              <td>${tr.part} %</td><td class="mono">${esc(eurosCts(tr.montantHt))}</td><td class="mono">${esc(eurosCts(tr.montantTtc))}</td>
+              <td>${f ? `${badge(st.label, st.couleur, st.icone)} <span class="text-xs text-muted">${esc(f.numero)}</span>`
+                : (tr.aEmettre ? badge('À émettre', 'warn', 'fa-solid fa-bell')
+                  : badge(devis.statut === 'accepte' ? "En attente de la validation par l'ARS" : "En attente de l'acceptation du devis", 'neutre', 'fa-solid fa-hourglass-half'))}</td>
+              <td class="text-right">
+                ${tr.aEmettre ? `<button class="btn btn--sm btn--primary" data-action="fact-facturer" data-devis="${esc(devis.id)}" data-tranche="${esc(tr.tranche)}"><i class="fa-solid fa-file-invoice"></i> Émettre la facture</button>` : ''}
+                ${tr.tranche === 'validation_ars' && devis.statut === 'accepte' && !f ? `<button class="btn btn--sm" data-action="fact-ars" data-id="${esc(devis.id)}"><i class="fa-solid fa-landmark"></i> ${devis.arsValideLe ? 'Modifier la date' : "L'ARS a validé"}</button>` : ''}
+              </td></tr>`;
+          }).join('')}</tbody></table></div>` : empty('Aucun devis pour ce client',
+            `Le devis reprend votre devis type de la formule ${formule ? `${formule.code} — ${formule.nom} (${euros(formule.prixHT)} HT)` : ''}, avec l'échéancier ${ECHEANCIER[0].part} % / ${ECHEANCIER[1].part} %.`, 'fa-solid fa-file-signature')}
+    </div>
+    ${docs.some((d) => d.type === 'facture') ? `<div class="card">
+      <div class="card__head"><div>
+        <h3 class="card__title"><i class="fa-solid fa-file-invoice"></i> Factures</h3>
+        <p class="card__subtitle">Une facture ne se supprime pas : elle s'annule, la numérotation reste continue. Une relance est proposée une fois la facture échue ;
+          pour une mise en demeure, doublez le courriel d'un courrier recommandé.</p>
+      </div></div>
+      <div class="stack-xs">${docs.filter((d) => d.type === 'facture').map(ligneDocFacturation).join('')}</div>
+    </div>` : ''}`;
 }
 
 /* ====================== ENVOIS & DÉMARCHES (expert) ====================== */
@@ -3027,6 +3160,7 @@ const Views = {
               </div>
               <div class="offre__price">${esc(euros(f.prixHT))}<small>${esc(f.prixLabel)}</small></div>
               <p class="offre__pitch">${esc(f.pitch)}</p>
+              <p class="text-xs text-soft"><i class="fa-solid fa-coins"></i> Règlement : ${ECHEANCIER.map((t) => `${t.part} % ${esc(t.court)}`).join(' · ')}</p>
               <div class="row-tight">
                 ${badge(`${f.lots.length} lots`, 'brand', 'fa-solid fa-layer-group')}
                 ${badge(`${actives.length} prestations`, 'neutre', 'fa-solid fa-list-check')}
@@ -3170,6 +3304,10 @@ const Views = {
 
   depot() {
     return `<section class="view stack">${carteDepot(etatAtelier().ars)}${cartePieces()}</section>`;
+  },
+
+  facturation() {
+    return `<section class="view stack">${carteFacturation()}</section>`;
   },
 
   envois() {

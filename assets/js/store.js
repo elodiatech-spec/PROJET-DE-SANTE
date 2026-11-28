@@ -359,6 +359,15 @@ function demoDonnees() {
     redaction: {},
     // Signature interne : signataires et liens personnels, par projet (expert).
     signataires: {},
+    // Devis et factures, par projet (expert). Quelques exemples en démonstration.
+    facturation: {
+      'msp-fort-de-france': [
+        { id: 'facdemo1', type: 'devis', numero: 'D26-00001', statut: 'accepte', libelle: 'Formule F2', tranche: '', montantHt: 8900, tauxTva: 8.5, montantTva: 756.5, montantTtc: 9656.5,
+          devisId: '', dateDoc: Dates.addDays(Dates.today(), -50), echeance: Dates.addDays(Dates.today(), -20), accepteLe: Dates.addDays(Dates.today(), -45), arsValideLe: '', payeLe: '', modePaiement: '', relances: [], docUrl: '', notes: '' },
+        { id: 'facdemo2', type: 'facture', numero: 'F26-00001', statut: 'emise', libelle: "Facture d'acompte — 60 %", tranche: 'commande', montantHt: 5340, tauxTva: 8.5, montantTva: 453.9, montantTtc: 5793.9,
+          devisId: 'facdemo1', dateDoc: Dates.addDays(Dates.today(), -44), echeance: Dates.addDays(Dates.today(), -44), accepteLe: '', arsValideLe: '', payeLe: '', modePaiement: '', relances: [{ date: Dates.addDays(Dates.today(), -28), niveau: 1 }], docUrl: '', notes: '' },
+      ],
+    },
     // Envois aux administrations et organismes, par projet (expert). Quelques exemples en démonstration.
     envois: {
       'msp-fort-de-france': [
@@ -514,7 +523,7 @@ const Store = {
       });
       ['projets', 'documents', 'signatures', 'messages', 'evenements',
        'comptesRendus', 'financements', 'partenaires', 'pieces', 'prestataires',
-       'intervenantsImmo', 'questionnaire', 'redaction', 'actes', 'emetteur', 'signataires', 'inventaires', 'envois'].forEach((cle) => {
+       'intervenantsImmo', 'questionnaire', 'redaction', 'actes', 'emetteur', 'signataires', 'inventaires', 'envois', 'facturation'].forEach((cle) => {
         if (sauvegarde[cle]) this.state[cle] = sauvegarde[cle];
       });
     }
@@ -565,7 +574,7 @@ const Store = {
       if (this.state.reglages.source === 'sheets') {
         ['projets', 'documents', 'signatures', 'messages', 'evenements',
          'comptesRendus', 'financements', 'partenaires', 'pieces',
-         'experts', 'prestataires', 'questionnaire', 'redaction', 'actes', 'emetteur', 'signataires', 'inventaires', 'envois'].forEach((cle) => {
+         'experts', 'prestataires', 'questionnaire', 'redaction', 'actes', 'emetteur', 'signataires', 'inventaires', 'envois', 'facturation'].forEach((cle) => {
           delete aEnregistrer[cle];
         });
       }
@@ -970,6 +979,22 @@ const Store = {
         texte: sigs.map((s) => s.titre).join(' · '),
         route: 'signatures',
       });
+    }
+
+    // Facturation : factures échues, acompte ou solde à émettre (expert).
+    if (this.estExpert()) {
+      const dues = this.facturesEnRetard(projetId);
+      if (dues.length) {
+        n.push({
+          ton: 'danger', icone: 'fa-solid fa-file-invoice',
+          titre: `${dues.length} facture${dues.length > 1 ? 's' : ''} impayée${dues.length > 1 ? 's' : ''} échue${dues.length > 1 ? 's' : ''}`,
+          texte: dues.map((f) => `${f.numero} · ${f.montantTtc.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}`).slice(0, 3).join(' · '),
+          route: 'facturation',
+        });
+      }
+      this.facturesAEmettre(projetId).forEach((a) => n.push({
+        ton: 'warn', icone: 'fa-solid fa-file-invoice-dollar', titre: a.titre, texte: a.texte, route: 'facturation',
+      }));
     }
 
     // Envois sans réponse depuis trop longtemps : à relancer (expert).
@@ -2148,6 +2173,84 @@ const Store = {
     const rep = await this._appelExpert('annulerSignature', { id });
     this.commit((s) => { s.signataires[s.projetActifId] = rep.signataires || []; });
   },
+
+  /* ---- Facturation (expert) ---- */
+
+  facturation(projetId) {
+    return this.state.facturation?.[projetId || this.state.projetActifId] || [];
+  },
+
+  /** Devis en cours ou accepté du client (le plus récent non refusé). */
+  devisActif(projetId) {
+    return this.facturation(projetId).filter((d) => d.type === 'devis' && d.statut !== 'refuse').slice(-1)[0] || null;
+  },
+
+  /** Une facture émise et non payée dont l'échéance est passée. */
+  factureEnRetard(f) {
+    return !!f && f.type === 'facture' && f.statut === 'emise' && !!f.echeance && Dates.daysUntil(f.echeance) < 0;
+  },
+
+  facturesEnRetard(projetId) {
+    return this.facturation(projetId).filter((f) => this.factureEnRetard(f));
+  },
+
+  /** Niveau de relance conseillé selon le retard et les relances déjà consignées (0 = pas encore échue). */
+  niveauRelanceConseille(f) {
+    if (!this.factureEnRetard(f)) return 0;
+    const retard = -Dates.daysUntil(f.echeance);
+    const faites = (f.relances || []).length;
+    const voulu = retard >= NIVEAUX_RELANCE[3].apresJours ? 3 : (retard >= NIVEAUX_RELANCE[2].apresJours ? 2 : 1);
+    return Math.min(3, Math.max(voulu, faites + 1));
+  },
+
+  /** Tranches de l'échéancier : état de chacune pour le devis donné. */
+  echeancier(devis) {
+    if (!devis) return [];
+    const factures = this.facturation().filter((f) => f.type === 'facture' && f.devisId === devis.id && f.statut !== 'annulee');
+    const acompte = Math.round(devis.montantHt * ECHEANCIER[0].part) / 100;
+    return ECHEANCIER.map((t, i) => {
+      const f = factures.find((x) => x.tranche === t.tranche) || null;
+      const ht = i === 0 ? acompte : Math.round((devis.montantHt - acompte) * 100) / 100;
+      const prete = devis.statut === 'accepte' && (i === 0 || !!devis.arsValideLe);
+      return { ...t, montantHt: ht, montantTtc: Math.round(ht * (100 + devis.tauxTva)) / 100, facture: f, aEmettre: !f && prete,
+               enAttente: !f && !prete };
+    });
+  },
+
+  /** Factures à émettre : acompte d'un devis accepté, solde une fois le projet de santé validé par l'ARS. */
+  facturesAEmettre(projetId) {
+    const devis = this.devisActif(projetId);
+    if (!devis || devis.statut !== 'accepte') return [];
+    const factures = this.facturation(projetId).filter((f) => f.type === 'facture' && f.devisId === devis.id && f.statut !== 'annulee');
+    const sorties = [];
+    if (!factures.some((f) => f.tranche === 'commande')) {
+      sorties.push({ titre: "Facture d'acompte à émettre", texte: `Devis ${devis.numero} accepté : ${ECHEANCIER[0].part} % à la commande` });
+    }
+    if (devis.arsValideLe && !factures.some((f) => f.tranche === 'validation_ars')) {
+      sorties.push({ titre: 'Facture de solde à émettre', texte: `Projet de santé validé par l'ARS le ${Dates.format(devis.arsValideLe)} : ${ECHEANCIER[1].part} %` });
+    }
+    return sorties;
+  },
+
+  /** Totaux du dossier : facturé, encaissé, reste dû, en retard (TTC, hors factures annulées). */
+  totauxFacturation(projetId) {
+    const factures = this.facturation(projetId).filter((f) => f.type === 'facture' && f.statut !== 'annulee');
+    const somme = (l) => Math.round(l.reduce((t, f) => t + f.montantTtc, 0) * 100) / 100;
+    return {
+      facture: somme(factures), encaisse: somme(factures.filter((f) => f.statut === 'payee')),
+      reste: somme(factures.filter((f) => f.statut === 'emise')), enRetard: somme(factures.filter((f) => this.factureEnRetard(f))),
+    };
+  },
+
+  async _majFacturation(action, champs) {
+    const rep = await this._appelExpert(action, champs);
+    this.commit((s) => { s.facturation[s.projetActifId] = rep.facturation || []; });
+    return rep.facturation || [];
+  },
+  creerDevis(montantHt) { return this._majFacturation('creerDevis', montantHt ? { montantHt } : {}); },
+  creerFacture(devisId, tranche) { return this._majFacturation('creerFacture', { devisId, tranche }); },
+  majFacturation(doc) { return this._majFacturation('enregistrerFacturation', { doc }); },
+  supprimerFacturation(id) { return this._majFacturation('supprimerFacturation', { id }); },
 
   /* ---- Envois et démarches (expert) ---- */
 
