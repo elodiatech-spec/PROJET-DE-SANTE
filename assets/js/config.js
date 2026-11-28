@@ -1081,6 +1081,7 @@ const QUESTIONNAIRE = [
           { id: 'nom', label: 'Nom' }, { id: 'prenom', label: 'Prénom' },
           { id: 'email', label: 'Courriel' }, { id: 'tel', label: 'Téléphone' },
           { id: 'profession', label: 'Profession', options: ['Médecin généraliste', 'Médecin spécialiste', 'Infirmier(ère)', 'IPA', 'Pharmacien(ne)', 'Masseur-kinésithérapeute', 'Sage-femme', 'Chirurgien-dentiste', 'Orthophoniste', 'Podologue', 'Diététicien(ne)', 'Psychologue', 'Orthoptiste', 'Secrétaire médical(e)', 'Coordinateur(trice)', 'Autre'] },
+          { id: 'rpps', label: 'N° RPPS / ADELI' },
           { id: 'site', label: 'Site' },
           { id: 'statut', label: 'Statut', options: ['Associé', 'Salarié', 'Collaborateur', 'Partenaire externe', 'En cours de recrutement'] },
           { id: 'etp', label: 'Temps (ETP)' },
