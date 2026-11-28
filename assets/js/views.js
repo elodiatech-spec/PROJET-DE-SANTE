@@ -1375,81 +1375,19 @@ const Views = {
           <p class="text-sm"><i class="fa-solid fa-pen-ruler text-brand"></i>
             La collecte des sources, la rédaction avec Claude et le document final se font dans
             l'<a href="#" data-action="aller" data-route="atelier"><strong>Atelier projet de santé</strong></a>.</p></div>` : ''}
-      ${expert ? carteActes() : ''}
-
       <div class="card">
-        <div class="card__head">
-          <div>
-            <h3 class="card__title"><i class="fa-solid fa-layer-group"></i> Les 5 chapitres structurants</h3>
-            <p class="card__subtitle">
-              Chaque chapitre est alimenté par les prestations correspondantes de la feuille de route.
-              ${expert ? "Renseignez le lien de son document pour que le client puisse le lire ici." : ''}
-            </p>
-          </div>
-        </div>
-        <div class="grid grid-3">
-          ${CHAPITRES_PDS.map((c) => {
-            const liees = prestas.filter((p) => c.prestations.includes(p.id));
-            const somme = liees.reduce((s, p) => s + (STATUTS[p.etat.statut]?.poids ?? 0), 0);
-            const pctC = liees.length ? Math.round((somme / liees.length) * 100) : 0;
-            const doc = documentDeChapitre(c.num);
-            const lien = doc ? urlSure(doc.url) : '';
-            // La ligne du chapitre porte sa date de livraison dans son champ date.
-            const livraison = doc?.date || '';
-
-            return `<div class="card card--flat">
-                <div class="row-tight" style="justify-content:space-between">
-                  <span class="text-xs fw-800 text-brand">CHAPITRE ${esc(c.num)}</span>
-                  <span class="badge badge--${pctC >= 100 ? 'ok' : pctC > 0 ? 'warn' : 'neutre'}">${pctC} %</span>
-                </div>
-                <h4 style="margin:6px 0 4px">${esc(c.titre)}</h4>
-                <p class="text-xs text-muted">${esc(c.desc)}</p>
-                <div style="margin-top:10px">${progressBar(pctC, 'sm')}</div>
-
-                ${expert ? `
-                  <div class="field" style="margin-top:12px">
-                    <label class="field__label" for="chap-${esc(c.num)}">Lien du document</label>
-                    <input type="url" id="chap-${esc(c.num)}" class="input input--mono"
-                           data-chapitre-url="${esc(c.num)}" value="${esc(lien)}"
-                           placeholder="https://docs.google.com/…">
-                  </div>
-                  <div class="field" style="margin-top:8px">
-                    <label class="field__label" for="chap-date-${esc(c.num)}">Date de livraison</label>
-                    <div class="input-group">
-                      <input type="date" id="chap-date-${esc(c.num)}"
-                             data-chapitre-date="${esc(c.num)}" value="${esc(livraison)}">
-                      <button class="btn btn--sm" data-action="enregistrer-chapitre" data-num="${esc(c.num)}"
-                              title="Enregistrer le lien et la date">
-                        <i class="fa-solid fa-floppy-disk"></i>
-                      </button>
-                    </div>
-                  </div>` : ''}
-
-                ${!expert && livraison ? `
-                  <p class="text-xs text-muted" style="margin-top:10px">
-                    <i class="fa-solid fa-calendar-day"></i> Livraison prévue le ${esc(Dates.format(livraison))}
-                  </p>` : ''}
-
-                ${expert && livraison ? `
-                  <p class="text-xs text-muted" style="margin-top:8px">
-                    <i class="fa-solid fa-calendar-day"></i> Annoncée au client : ${esc(Dates.format(livraison))}
-                  </p>` : ''}
-
-                <div class="row-tight" style="margin-top:${expert ? '8' : '12'}px">
-                  ${lien
-                    ? `${boutonApercu(lien, `Chapitre ${c.num} — ${c.titre}`, 'Lire le chapitre')}
-                       <a class="btn btn--ghost btn--sm" href="${esc(lien)}" target="_blank" rel="noopener noreferrer"
-                          aria-label="Ouvrir le chapitre ${esc(c.num)} dans un nouvel onglet" title="Nouvel onglet">
-                         <i class="fa-solid fa-arrow-up-right-from-square"></i>
-                       </a>`
-                    : `<span class="text-xs text-muted">
-                         <i class="fa-solid fa-link-slash"></i>
-                         ${expert ? 'Aucun lien enregistré' : 'Chapitre en cours de rédaction'}
-                       </span>`}
-                </div>
-              </div>`;
-          }).join('')}
-        </div>
+        <div class="card__head"><div>
+          <h3 class="card__title"><i class="fa-solid fa-layer-group"></i> Chapitres du projet de santé</h3>
+          <p class="card__subtitle">${expert ? 'Les chapitres validés dans l’Atelier sont visibles ici par le client.' : 'Chapitres validés par ElodiaTech, à relire.'}</p>
+        </div></div>
+        <div class="stack-xs">${CHAPITRES_REDACTION.map((c) => {
+          const etat = Store.redactionProjet()[c.id] || {};
+          const lien = etat.statut === 'valide' ? urlSure(etat.docUrl) : '';
+          return `<div class="row-between text-sm">
+              <span>${lien ? '<i class="fa-solid fa-circle-check text-ok"></i>' : '<i class="fa-regular fa-circle text-muted"></i>'} ${esc(c.titre)}</span>
+              ${lien ? boutonApercu(lien, c.titre, 'Lire') : '<span class="text-xs text-muted">En cours de rédaction</span>'}
+            </div>`;
+        }).join('')}</div>
       </div>
     </section>`;
   },
